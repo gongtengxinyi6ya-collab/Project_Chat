@@ -1,7 +1,8 @@
 #include "TcpConnection.h"
-
-TcpConnection::TcpConnection(EventLoop* loop,int fd)
-:loop_(loop),fd_(fd),connection_(true){
+#include "TcpServer.h"
+#include "ThreadPool.h"
+TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server)
+:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true){
     channel_=new Channel(loop_,fd_);
     //绑定回调
     channel_->setReadCallback([this](){handleRead();});
@@ -30,9 +31,14 @@ void TcpConnection::handleRead(){
 
         ssize_t n=read(fd_,buffer,BUFFERSIZE);
         if(n>0){//读取成功
-            inputBuffer_.append(buffer,n);
-            if(messageCallback_)
-                messageCallback_(fd_,inputBuffer_);
+            std::string data(buffer,n);
+            if(messageCallback_)//调用消息回调，交给服务器处理
+                {
+                    //将消息处理交给线程池，避免在IO线程中执行耗时操作
+                    threadPool_->submit([this,data](){
+                        messageCallback_(fd_,data);
+                    });
+                }
         }
         else if(n==0){//客户端关闭连接
             handleClose();

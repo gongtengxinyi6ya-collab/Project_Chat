@@ -3,6 +3,7 @@
 TcpServer::TcpServer(EventLoop* loop,int port)
 :loop_(loop),acceptor_(loop_,port){
     acceptor_.setNewConnectionCallback(std::bind(&TcpServer::newConnection,this,std::placeholders::_1));
+    threadPool_ = std::make_unique<ThreadPool>();
 }
 
 TcpServer::~TcpServer(){
@@ -21,7 +22,7 @@ void TcpServer::newConnection(int fd){
         return;
     }
 
-    auto newconnection = std::make_unique<TcpConnection>(loop_,fd);
+    auto newconnection = std::make_unique<TcpConnection>(loop_,fd,threadPool_.get(),this);
     std::cout<<"new connection fd:"<<fd<<std::endl;
 
     // 先设置回调再把 unique_ptr 放入容器，避免悬空引用

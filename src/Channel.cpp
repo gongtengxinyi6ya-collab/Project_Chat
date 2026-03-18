@@ -1,5 +1,5 @@
 #include "Channel.h"
-
+#include "EventLoop.h"
 Channel::Channel(EventLoop* loop,int fd):loop_(loop),fd_(fd),events_(0),revents_(0),inEpoll_(false)
 {
 
@@ -44,14 +44,17 @@ void Channel::setRevents(int revent){
 }
 void Channel::enableReading(){
     events_|=EPOLLIN;
+    loop_->updateChannel(this);
 }
 
 void Channel::enableWriting(){
     events_|=EPOLLOUT;
+    loop_->updateChannel(this);
 }
 
 void Channel::disableWritng(){
     events_&=~EPOLLOUT;
+    loop_->updateChannel(this);
 }
 
 void Channel::disableAll(){
