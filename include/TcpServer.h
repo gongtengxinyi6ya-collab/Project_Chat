@@ -1,3 +1,4 @@
+#pragma once
 #include "Acceptor.h"
 #include "EventLoop.h"
 #include "TcpConnection.h"

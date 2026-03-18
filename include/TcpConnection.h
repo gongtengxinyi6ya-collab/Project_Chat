@@ -1,3 +1,4 @@
+#pragma once
 #include <string>
 #include "EventLoop.h"
 #include "Channel.h"

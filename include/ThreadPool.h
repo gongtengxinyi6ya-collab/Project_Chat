@@ -22,8 +22,8 @@ public:
     using Task=std::function<void()>;
     ThreadPool();
     ~ThreadPool();
-    template<typename FunctionType>
-    void submit(FunctionType func);
+   
+    void submit(Task func);
 
 private:
     ThreadSafeQueue<Task> taskQueue_;//任务队列

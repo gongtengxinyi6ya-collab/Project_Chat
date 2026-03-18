@@ -26,9 +26,9 @@ ThreadPool::~ThreadPool(){
     stop_=true;
 }
 
-template<typename FunctionType>
-void ThreadPool::submit(FunctionType func){
-    taskQueue_.push(Task(func));
+
+void ThreadPool::submit(Task func){
+    taskQueue_.push(func);
 }
 
 void ThreadPool::workerThread(){
