@@ -2,12 +2,20 @@
 #include "until.h"
 
 
-EventLoop:: EventLoop():looping(false),quit_(false),epollfd_(-1),activeEvents_(EPOLL_MAX_EVENTS)
+EventLoop:: EventLoop():looping(false),quit_(false),epollfd_(-1),activeEvents_(EPOLL_MAX_EVENTS),wakeupFd_(-1),threadId_(std::this_thread::get_id())
 {
     epollfd_=epoll_create(EPOLL_MAX_EVENTS);
     if(epollfd_==-1){
         throw std::runtime_error("epoll_create failed");    
     }
+    wakeupFd_=eventfd(0,EFD_NONBLOCK|EFD_CLOEXEC);
+    if(wakeupFd_==-1){
+        throw std::runtime_error("eventfd failed");
+    }
+    wakeupChannel_=std::make_unique<Channel>(this,wakeupFd_);
+    wakeupChannel_->setReadCallback(std::bind(&EventLoop::handleWakeup,this));
+    wakeupChannel_->enableReading();
+    this->addChannel(wakeupChannel_.get());
 
 }
 EventLoop:: ~EventLoop(){
@@ -47,6 +55,8 @@ void EventLoop:: loop(){
                     
 
     }
+        doPendingFunctors();
+    
 }
     
 }
@@ -114,4 +124,53 @@ void EventLoop::updateChannel(Channel* channel)
         channel->setInEpoll(true);
         channels_[fd]=channel;
     }
+}
+
+bool EventLoop::isInLoopThread() const{
+    return threadId_==std::this_thread::get_id();
+}
+void EventLoop::runInLoop(std::function<void()> func){
+    if(isInLoopThread()){
+        func();
+    }
+    else{
+        queueInLoop(std::move(func));
+        wakeup();
+    }
+}
+void EventLoop::queueInLoop(std::function<void()> func){
+    {
+        std::lock_guard lk(mutex_);
+        pendingFunctors_.push_back(std::move(func));
+    }
+    if(!isInLoopThread()){
+        wakeup();
+    }
+}
+
+void EventLoop::wakeup(){
+    uint64_t one=1;
+    ssize_t n=write(wakeupFd_,&one,sizeof(one));
+    if(n!=sizeof(one)){
+        std::cerr<<"EventLoop::wakeup() writes "<<n<<" bytes instead of 8"<<std::endl;
+    }
+}
+
+void EventLoop::handleWakeup(){
+    uint64_t one=1;
+    ssize_t n=read(wakeupFd_,&one,sizeof(one));
+    if(n!=sizeof(one)){
+        std::cerr<<"EventLoop::handleWakeup() reads "<<n<<" bytes instead of 8"<<std::endl;
+    }
+}
+void EventLoop::doPendingFunctors(){
+    std::vector<std::function<void()>> functors;
+    {
+        std::lock_guard lk(mutex_);
+        functors.swap(pendingFunctors_);
+    }
+    for(const auto& func:functors){
+        func();
+    }
+
 }
