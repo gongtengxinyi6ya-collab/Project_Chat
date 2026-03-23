@@ -15,8 +15,8 @@ void EventLoopThreadPool::start(){
 
     for(int i=0;i<numThreads_;i++){
         auto thread=std::make_unique<EventLoopThread>();
-        loops_.push_back(threads_.back()->startLoop());
         threads_.push_back(std::move(thread));
+        loops_.push_back(threads_.back()->startLoop());
     }
 }
 EventLoop* EventLoopThreadPool:: getNextLoop(){

@@ -28,7 +28,7 @@ void EventLoop:: loop(){
     looping=true;
 
     while(!quit_){
-        int event_cnt=epoll_wait(epollfd_,activeEvents_.data(),EPOLL_MAX_EVENTS,-1);
+        int event_cnt=epoll_wait(epollfd_,activeEvents_.data(),EPOLL_MAX_EVENTS,1000);
         if(event_cnt<0)
         {
             if(errno==EINTR)//信号中断
