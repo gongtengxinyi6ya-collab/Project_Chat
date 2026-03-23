@@ -3,16 +3,7 @@
 #include "ThreadPool.h"
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server)
 :loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true){
-    channel_=new Channel(loop_,fd_);
-    //绑定回调
-    channel_->setReadCallback([this](){handleRead();});
-    channel_->setWriteCallback([this](){handleWrite();});
-    channel_->setCloseCallback([this](){handleClose();});
-    channel_->setErrorCallback([this](){handleError();});
 
-
-    channel_->enableReading();//开启读事件
-    loop_->addChannel(channel_);
 }
 
 TcpConnection::~TcpConnection(){
@@ -36,7 +27,7 @@ void TcpConnection::handleRead(){
                 {
                     //将消息处理交给线程池，避免在IO线程中执行耗时操作
                     threadPool_->submit([this,data](){
-                        messageCallback_(fd_,data);
+                        messageCallback_(shared_from_this(),data);
                     });
                 }
         }
@@ -80,6 +71,59 @@ void TcpConnection::handleWrite(){
 }
 }
 void TcpConnection::send(const std::string &msg){//
+    if(loop_->isInLoopThread()){//如果在IO线程中，直接发送
+        sendInLoop(msg);
+    }
+    else{//否则转发到IO线程执行发送
+        loop_->runInLoop([this,msg](){
+            sendInLoop(msg);
+        });
+    }
+}
+
+void TcpConnection::handleClose(){
+    if(!connection_)
+        return;
+    connection_=false;
+    channel_->disableAll();
+
+    int fd = fd_;
+    if(fd_ >= 0){
+        loop_->removeChannel(fd_);
+        ::close(fd_);
+        fd_ = -1;
+    }
+
+    closeCallback_(shared_from_this());
+}
+
+void TcpConnection::handleError(){
+    int err = 0;
+    socklen_t len = sizeof(err);
+
+    if (::getsockopt(fd_, SOL_SOCKET, SO_ERROR, &err, &len) < 0)
+    {
+        err = errno;
+    }
+    std::cerr << "TcpConnection error: " << strerror(err) << std::endl;
+}
+
+
+void TcpConnection::setCloseCallback(CloseCallback cb){
+    closeCallback_=std::move(cb);
+}
+
+void TcpConnection::setMessageCallback(MessageCallback cb){
+    messageCallback_=std::move(cb);
+}
+EventLoop* TcpConnection::getLoop() const{
+    return loop_;
+}
+int TcpConnection::fd() const{
+    return fd_;
+}
+void TcpConnection::sendInLoop(const std::string& msg){
+
     if(outputBuffer_.empty()){//如果outputBuffer_为空，尝试直接发送
         ssize_t n=::write(fd_,msg.data(),msg.size());
 
@@ -106,38 +150,24 @@ void TcpConnection::send(const std::string &msg){//
     }
 }
 
-void TcpConnection::handleClose(){
-    if(!connection_)
-        return;
-    connection_=false;
-    channel_->disableAll();
+void TcpConnection::connectionEstablished(){
+    channel_=new Channel(loop_,fd_);
+    //绑定回调
+    channel_->setReadCallback([this](){handleRead();});
+    channel_->setWriteCallback([this](){handleWrite();});
+    channel_->setCloseCallback([this](){handleClose();});
+    channel_->setErrorCallback([this](){handleError();});
 
-    int fd = fd_;
-    if(fd_ >= 0){
+
+    channel_->enableReading();//开启读事件
+    loop_->addChannel(channel_);
+}
+
+void TcpConnection::connectionDestroyed(){
+    if(connection_){
+        connection_=false;
+        channel_->disableAll();
         loop_->removeChannel(fd_);
-        ::close(fd_);
-        fd_ = -1;
+        delete channel_;
     }
-
-    closeCallback_(fd);
-}
-
-void TcpConnection::handleError(){
-    int err = 0;
-    socklen_t len = sizeof(err);
-
-    if (::getsockopt(fd_, SOL_SOCKET, SO_ERROR, &err, &len) < 0)
-    {
-        err = errno;
-    }
-    std::cerr << "TcpConnection error: " << strerror(err) << std::endl;
-}
-
-
-void TcpConnection::setCloseCallback(CloseCallback cb){
-    closeCallback_=std::move(cb);
-}
-
-void TcpConnection::setMessageCallback(MessageCallback cb){
-    messageCallback_=std::move(cb);
 }

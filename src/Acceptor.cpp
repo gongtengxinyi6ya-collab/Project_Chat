@@ -2,15 +2,7 @@
 
 Acceptor::Acceptor(EventLoop* loop,int port):loop_(loop),listenSocket_()
 {   
-    listenSocket_.bind(port);
-    listenSocket_.listen();
-
-
-    channel_=new Channel(loop_,listenSocket_.fd());
-    channel_->setReadCallback([this](){handleRead();});
-    channel_->enableReading();
-
-    loop_->addChannel(channel_);
+    
 }
 
 void Acceptor::handleRead(){
@@ -33,4 +25,14 @@ void Acceptor::handleRead(){
 
 void Acceptor::setNewConnectionCallback(NewConnectionCallback cb){
     newConnectionCallback_=std::move(cb);
+}
+
+void Acceptor::listen(){
+    listenSocket_.bind(listenSocket_.fd());
+    listenSocket_.listen();
+
+    channel_=new Channel(loop_,listenSocket_.fd());
+    channel_->setReadCallback(std::bind(&Acceptor::handleRead,this));
+    channel_->enableReading();
+    loop_->addChannel(channel_);
 }

@@ -1,7 +1,11 @@
 #include "TcpServer.h"
+#include "EventLoopThreadPool.h"
+#include "EventLoop.h"
+#include "TcpConnection.h"
 
 TcpServer::TcpServer(EventLoop* loop,int port)
-:loop_(loop),acceptor_(loop_,port){
+:baseloop_(loop),acceptor_(baseloop_,port),threadNum_(0),started_(false){
+    iothreadPool_ = std::make_unique<EventLoopThreadPool>(baseloop_);
     acceptor_.setNewConnectionCallback(std::bind(&TcpServer::newConnection,this,std::placeholders::_1));
     threadPool_ = std::make_unique<ThreadPool>();
 }
@@ -12,7 +16,12 @@ TcpServer::~TcpServer(){
 }
 
 void TcpServer::start(){
-    loop_->loop();
+    if(started_)
+        return;
+    started_=true;
+    iothreadPool_->setThreadNum(threadNum_);
+    iothreadPool_->start();
+    acceptor_.listen();
 }
 
 void TcpServer::newConnection(int fd){
@@ -21,31 +30,54 @@ void TcpServer::newConnection(int fd){
         std::cerr<<"fd already exists!"<<std::endl;
         return;
     }
-
-    auto newconnection = std::make_unique<TcpConnection>(loop_,fd,threadPool_.get(),this);
-    std::cout<<"new connection fd:"<<fd<<std::endl;
-
-    // 先设置回调再把 unique_ptr 放入容器，避免悬空引用
-    newconnection->setCloseCallback(std::bind(&TcpServer::removeConnection,this,std::placeholders::_1));
-    newconnection->setMessageCallback(std::bind(&TcpServer::onMessage,this,std::placeholders::_1,std::placeholders::_2));
-
-    connections_[fd] = std::move(newconnection);
+    EventLoop* ioloop=iothreadPool_->getNextLoop();
+    ioloop->runInLoop([this,fd,ioloop](){
+        auto conn=std::make_shared<TcpConnection>(ioloop,fd,threadPool_.get(),this);
+        conn->setMessageCallback([this](std::shared_ptr<TcpConnection> conn,const std::string& msg){
+            baseloop_->runInLoop([this,conn,msg](){
+                onMessage(conn,msg);
+            });
+        });
+        conn->setCloseCallback([this](std::shared_ptr<TcpConnection> conn){
+                int fd=conn->fd();
+                baseloop_->runInLoop([this,conn](){
+                    removeConnectionInBaseLoop(conn);
+                });
+        });
+        conn->connectionEstablished();
+        baseloop_->runInLoop([this,conn](){
+            addConnectionInBaseLoop(conn);
+        });
+    });
 }
 
-void TcpServer::removeConnection(int fd){
+void TcpServer::removeConnectionInBaseLoop(const std::shared_ptr<TcpConnection>& conn){
+    int fd=conn->fd();
     auto it=connections_.find(fd);
     if(it!=connections_.end()){
+        auto ioloop=conn->getLoop();
         connections_.erase(it);
         std::cout<<"connection closed fd:"<<fd<<std::endl;
+        ioloop->queueInLoop([conn](){
+            conn->connectionDestroyed();
+        });
     }
 
 }
 
-void TcpServer::onMessage(int fd,const std::string& msg){
+void TcpServer::onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& msg){
     //转发消息给其他客户端
     for(auto& pair:connections_){
-        if(pair.first!=fd){
+        if(pair.second!=conn){
             pair.second->send(msg);
         }
     }
+}
+void TcpServer::setThreadNum(int numThreads){
+    threadNum_=numThreads;
+}
+
+void TcpServer::addConnectionInBaseLoop(const std::shared_ptr<TcpConnection>& conn){
+    int fd=conn->fd();
+    connections_[fd]=std::move(conn);
 }

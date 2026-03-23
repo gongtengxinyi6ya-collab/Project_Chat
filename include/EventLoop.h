@@ -39,6 +39,8 @@ private:
     bool quit_;
     std::vector<struct epoll_event> activeEvents_;//epoll事件列表
     std::unordered_map<int,Channel*> channels_;
+    int epollfd_;//epoll文件描述符
+    
 
     std::vector<std::function<void()>> pendingFunctors_;//存放其他线程提交的任务，IO线程在loop中执行这些任务
     std::mutex mutex_;//保护pendingFunctors_的线程安全

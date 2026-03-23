@@ -9,6 +9,7 @@ class Acceptor{
 public:
     Acceptor(EventLoop* loop,int port);
     void setNewConnectionCallback(NewConnectionCallback cb);
+    void listen();
 private:
     void handleRead();
     Socket listenSocket_;
