@@ -1,6 +1,6 @@
 #include "Acceptor.h"
 
-Acceptor::Acceptor(EventLoop* loop,int port):loop_(loop),listenSocket_()
+Acceptor::Acceptor(EventLoop* loop,int port):loop_(loop),listenSocket_(),channel_(nullptr),port_(port)
 {   
     
 }
@@ -28,11 +28,11 @@ void Acceptor::setNewConnectionCallback(NewConnectionCallback cb){
 }
 
 void Acceptor::listen(){
-    listenSocket_.bind(listenSocket_.fd());
+    listenSocket_.bind(port_);
     listenSocket_.listen();
 
     channel_=new Channel(loop_,listenSocket_.fd());
     channel_->setReadCallback(std::bind(&Acceptor::handleRead,this));
     channel_->enableReading();
-    loop_->addChannel(channel_);
+   
 }

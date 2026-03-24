@@ -23,7 +23,8 @@ void TcpServer::start(){
     iothreadPool_->start();
     acceptor_.listen();
 }
-
+//从Acceptor接收到新连接，在EventLoopThreadPool中选择一个IO线程，创建TcpConnection对象，
+//再投递到baseloop保存到connections_中
 void TcpServer::newConnection(int fd){
     //检测fd重复
     if(connections_.find(fd)!=connections_.end()){

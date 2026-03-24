@@ -149,7 +149,7 @@ void TcpConnection::sendInLoop(const std::string& msg){
         channel_->enableWriting();
     }
 }
-
+//连接建立，创建Channel，绑定回调，注册到EventLoop
 void TcpConnection::connectionEstablished(){
     channel_=new Channel(loop_,fd_);
     //绑定回调

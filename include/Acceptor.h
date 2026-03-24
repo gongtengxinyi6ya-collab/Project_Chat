@@ -12,6 +12,7 @@ public:
     void listen();
 private:
     void handleRead();
+    int port_;
     Socket listenSocket_;
     EventLoop* loop_;
     Channel* channel_;

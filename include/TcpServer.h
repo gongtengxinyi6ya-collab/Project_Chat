@@ -10,7 +10,7 @@ class EventLoopThreadPool;
 class TcpConnection;
 
 //管理所有客户端连接，创建TcpConnection,删除/关闭连接，处理聊天逻辑
-
+//在主线程中监听新连接，分发到IO线程处理，IO线程中创建TcpConnection对象，保存到connections_中
 class TcpServer{
 public:
     TcpServer(EventLoop* loop,int port);
