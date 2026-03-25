@@ -1,6 +1,11 @@
+#pragma once
 #include <vector>
 #include <string>
 #include <assert.h>
+#include <cstring>
+#include <algorithm>
+#include <sys/uio.h>
+#include <sys/unistd.h>
 //封装Buffer,缓存数据，管理读写位置并支持解析完整消息
 class Buffer{
 public:

@@ -1,6 +1,7 @@
 #include "TcpConnection.h"
 #include "TcpServer.h"
 #include "ThreadPool.h"
+
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server)
 :loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true){
 
@@ -17,28 +18,30 @@ TcpConnection::~TcpConnection(){
 }
 
 void TcpConnection::handleRead(){
-    char buffer[BUFFERSIZE];
+    int saveErrno;
     while(true){
 
-        ssize_t n=read(fd_,buffer,BUFFERSIZE);
-        if(n>0){//读取成功
-            std::string data(buffer,n);
-            if(messageCallback_)//调用消息回调，交给服务器处理
-                {
-                    //将消息处理交给线程池，避免在IO线程中执行耗时操作
-                    threadPool_->submit([this,data](){
-                        messageCallback_(shared_from_this(),data);
-                    });
-                }
+        ssize_t n=inputBuffer_.readFd(fd_,&saveErrno);
+        if(n>0){//当n>0,可能还要数据继续循环
+            //解析消息，调用消息回调
+            const char* eol=inputBuffer_.findEOL();
+            while(eol){
+                std::string msg(inputBuffer_.peek(),eol);
+                if(messageCallback_)
+                    messageCallback_(shared_from_this(),msg);
+
+                inputBuffer_.retrieveUntil(eol+1);
+                eol=inputBuffer_.findEOL();
+            }
         }
         else if(n==0){//客户端关闭连接
             handleClose();
             return;
         }
         else {
-            if(errno==EAGAIN)//数据读完
+            if(saveErrno==EAGAIN||saveErrno==EWOULDBLOCK)//数据读完
                 break;
-            else if(errno==EINTR)//信号打断
+            else if(saveErrno==EINTR)//信号打断
                 continue;
             else{
                 handleError();
@@ -51,10 +54,10 @@ void TcpConnection::handleRead(){
 
 
 void TcpConnection::handleWrite(){
-    while(!outputBuffer_.empty()){
-        ssize_t n=write(fd_,outputBuffer_.data(),outputBuffer_.size());
+    while(!outputBuffer_.writeableBytes()>0){
+        ssize_t n=outputBuffer_.writeFd(fd_,nullptr);
         if(n>0){//发送成功，清除outputBuffer_中字节
-            outputBuffer_.erase(0,n);
+            outputBuffer_.retrieve(n);
     }
         else if(n==-1){
         if(errno==EAGAIN||errno==EWOULDBLOCK)//缓冲区满需等待下一次
@@ -64,10 +67,11 @@ void TcpConnection::handleWrite(){
             return;
         }
     }
-    //如果outputBuffer_已发送完，关闭写事件
-    if(outputBuffer_.empty()){
+    //如果outputBuffer_为空，关闭写事件
+    if(outputBuffer_.readableBytes()==0){
         channel_->disableWritng();
-    }
+    }   
+    
 }
 }
 void TcpConnection::send(const std::string &msg){//
@@ -124,7 +128,7 @@ int TcpConnection::fd() const{
 }
 void TcpConnection::sendInLoop(const std::string& msg){
 
-    if(outputBuffer_.empty()){//如果outputBuffer_为空，尝试直接发送
+    if(outputBuffer_.readableBytes()==0){//如果outputBuffer_为空，尝试直接发送
         ssize_t n=::write(fd_,msg.data(),msg.size());
 
         if(n>=0){

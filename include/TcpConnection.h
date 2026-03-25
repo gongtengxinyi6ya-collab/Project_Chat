@@ -4,8 +4,10 @@
 
 #include "EventLoop.h"
 #include "Channel.h"
+#include "Buffer.h"
 class ThreadPool;
 class TcpServer;
+
 
 const int BUFFERSIZE=4096;
 //管理一个客户端连接对象，处理读写数据，关闭连接
@@ -40,7 +42,8 @@ private:
     TcpServer* server_;//服务器对象指针，调用服务器的消息转发函数
     Channel* channel_;//事件监听
     
-    std::string outputBuffer_;//待发送数据
+    Buffer outputBuffer_;//待发送数据
+    Buffer inputBuffer_;//读入缓存
     bool connection_;
     CloseCallback closeCallback_;//删除连接回调
     MessageCallback messageCallback_;//消息回调，保存服务器注册的消息回调函数

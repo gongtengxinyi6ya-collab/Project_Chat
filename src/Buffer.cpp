@@ -1,6 +1,6 @@
 #include "Buffer.h"
 
-Buffer::Buffer():readerIndex_(0),writerIndex_(0){}
+Buffer::Buffer():readerIndex_(kCheapPrepend),writerIndex_(kCheapPrepend){}
 
 size_t Buffer::readableBytes() const{
     return writerIndex_-readerIndex_;
@@ -29,4 +29,76 @@ void Buffer::retrieve(size_t len){
         retrieveAll();
     }
 }
-void 
+void Buffer::retrieveUntil(const char* end){
+    assert(peek()<=end);
+    assert(end<=beginWrite());
+    retrieve(end-peek());
+}
+void Buffer::retrieveAll(){
+    readerIndex_=kCheapPrepend;
+    writerIndex_=kCheapPrepend;
+}
+std::string Buffer::retrieveAsString(size_t len){
+    assert(len<=readableBytes());
+    len=std::min(len,readableBytes());
+    std::string result(peek(),len);
+    retrieve(len);
+    return result;
+}
+
+void Buffer::ensureWritableBytes(size_t len){
+    //优先搬移，其次扩容
+    if(writeableBytes()>=len)
+        return ;
+    else if((writeableBytes()+prependableBytes()-kCheapPrepend)>=len)
+    {
+        size_t readableBytes_old=readableBytes();
+        std::memmove(beginWrite(),peek(),readableBytes());
+        readerIndex_=kCheapPrepend;
+        writerIndex_=kCheapPrepend+readableBytes_old;
+    }
+    else{
+        buffer_.resize(writerIndex_+len);
+    }
+}
+
+void Buffer::append(const char* data,size_t len){
+    ensureWritableBytes(len);
+    std::copy(data,data+len,beginWrite());
+    hasWritten(len);
+}
+
+const char* Buffer::findEOL()const{
+    const char* res=(const char*)memchr(peek(),'\n',readableBytes());
+    if(!res)
+        return nullptr;
+    else
+        return res;
+}
+ssize_t Buffer::readFd(int fd,int* savedErrno){
+    iovec vec[2];
+    char extrabuf[65536];
+    vec[0].iov_base=beginWrite();
+    vec[0].iov_len=writeableBytes();
+    vec[1].iov_base=extrabuf;
+    vec[1].iov_len=sizeof(extrabuf);
+
+    ssize_t n=readv(fd,vec,2);
+    if(n<0){
+        *savedErrno=errno;
+        return n;
+    }
+    else if(n>=0&&n<=writeableBytes()){
+        hasWritten(n);
+    }
+}
+
+ssize_t Buffer::writeFd(int fd,int* savedErrno){
+    ssize_t n=::write(fd,peek(),readableBytes());
+    if(n<0){
+        *savedErrno=errno;
+    }
+    else if(n>0){
+        retrieve(n);
+    }
+}
