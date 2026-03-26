@@ -1,12 +1,12 @@
 #include "Buffer.h"
 
-Buffer::Buffer():readerIndex_(kCheapPrepend),writerIndex_(kCheapPrepend){}
+Buffer::Buffer():buffer_(kCheapPrepend+1024),readerIndex_(kCheapPrepend),writerIndex_(kCheapPrepend){}
 
 size_t Buffer::readableBytes() const{
     return writerIndex_-readerIndex_;
 }
 size_t Buffer::writeableBytes() const{
-    buffer_.size()-writerIndex_;
+    return buffer_.size()-writerIndex_;
 }
 size_t Buffer::prependableBytes() const{
     return readerIndex_;
@@ -53,7 +53,7 @@ void Buffer::ensureWritableBytes(size_t len){
     else if((writeableBytes()+prependableBytes()-kCheapPrepend)>=len)
     {
         size_t readableBytes_old=readableBytes();
-        std::memmove(beginWrite(),peek(),readableBytes());
+        std::memmove(buffer_.data()+kCheapPrepend,peek(),readableBytes());
         readerIndex_=kCheapPrepend;
         writerIndex_=kCheapPrepend+readableBytes_old;
     }
@@ -85,20 +85,30 @@ ssize_t Buffer::readFd(int fd,int* savedErrno){
 
     ssize_t n=readv(fd,vec,2);
     if(n<0){
-        *savedErrno=errno;
+        if(savedErrno)
+            *savedErrno=errno;
         return n;
     }
-    else if(n>=0&&n<=writeableBytes()){
+    else if ((size_t)n <= writeableBytes()) {
+    
         hasWritten(n);
     }
+    else {
+      
+        hasWritten(writeableBytes());
+        append(extrabuf, n - writeableBytes());
+    }
+    return n;
 }
 
 ssize_t Buffer::writeFd(int fd,int* savedErrno){
     ssize_t n=::write(fd,peek(),readableBytes());
     if(n<0){
-        *savedErrno=errno;
+            if(savedErrno)
+                *savedErrno=errno;
     }
     else if(n>0){
         retrieve(n);
     }
+    return n;
 }

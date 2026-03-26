@@ -26,7 +26,7 @@ void TcpConnection::handleRead(){
             //解析消息，调用消息回调
             const char* eol=inputBuffer_.findEOL();
             while(eol){
-                std::string msg(inputBuffer_.peek(),eol);
+                std::string msg(inputBuffer_.peek(),eol-inputBuffer_.peek());
                 if(messageCallback_)
                     messageCallback_(shared_from_this(),msg);
 
@@ -54,10 +54,10 @@ void TcpConnection::handleRead(){
 
 
 void TcpConnection::handleWrite(){
-    while(!outputBuffer_.writeableBytes()>0){
+    while(outputBuffer_.readableBytes()>0){
         ssize_t n=outputBuffer_.writeFd(fd_,nullptr);
         if(n>0){//发送成功，清除outputBuffer_中字节
-            outputBuffer_.retrieve(n);
+            
     }
         else if(n==-1){
         if(errno==EAGAIN||errno==EWOULDBLOCK)//缓冲区满需等待下一次
@@ -128,12 +128,13 @@ int TcpConnection::fd() const{
 }
 void TcpConnection::sendInLoop(const std::string& msg){
 
+    auto line=msg+"\n";
     if(outputBuffer_.readableBytes()==0){//如果outputBuffer_为空，尝试直接发送
-        ssize_t n=::write(fd_,msg.data(),msg.size());
+        ssize_t n=::write(fd_,line.data(),line.size());
 
         if(n>=0){
-            if((size_t)n<msg.size()){//未全部发送完，剩余数据存入outputBuffer
-            outputBuffer_.append(msg.data()+n,msg.size()-n);
+            if((size_t)n<line.size()){//未全部发送完，剩余数据存入outputBuffer
+            outputBuffer_.append(line.data()+n,line.size()-n);
             channel_->enableWriting();
         }
 
@@ -143,13 +144,13 @@ void TcpConnection::sendInLoop(const std::string& msg){
                 n=0;
             else
                 throw::std::runtime_error("write() failed");
-            outputBuffer_.append(msg.data()+n,msg.size()-n);
+            outputBuffer_.append(line.data()+n,line.size()-n);
             channel_->enableWriting();
         }
         
     }
     else{//outputBuffer_不为空，直接追加到outputBuffer_后面
-        outputBuffer_.append(msg.data(),msg.size());
+        outputBuffer_.append(line.data(),line.size());
         channel_->enableWriting();
     }
 }
