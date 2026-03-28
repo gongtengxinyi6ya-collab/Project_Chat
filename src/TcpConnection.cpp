@@ -30,8 +30,10 @@ void TcpConnection::handleRead(){
 
                 uint32_t len=inputBuffer_.peekUInt32();
                 if(len==0){//空消息
-                    handleClose();
-                    return;
+                    inputBuffer_.retrieveUInt32();
+                    if(messageCallback_)
+                        messageCallback_(shared_from_this(),"");
+                    continue;   
                 }
                 if(len>kMaxFrameLen){//超过长度认为非法协议
                     handleClose();
@@ -48,7 +50,8 @@ void TcpConnection::handleRead(){
             }
         }
         else if(n==0){//客户端关闭连接
-            inputBuffer_.retrieveUInt32();//消费掉长度字段
+            handleClose();
+            return;
         }
         else {
             if(saveErrno==EAGAIN||saveErrno==EWOULDBLOCK)//数据读完
