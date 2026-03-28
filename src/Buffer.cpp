@@ -82,21 +82,21 @@ ssize_t Buffer::readFd(int fd,int* savedErrno){
     vec[0].iov_len=writeableBytes();
     vec[1].iov_base=extrabuf;
     vec[1].iov_len=sizeof(extrabuf);
-
+    size_t writeable=writeableBytes();
     ssize_t n=readv(fd,vec,2);
     if(n<0){
         if(savedErrno)
             *savedErrno=errno;
         return n;
     }
-    else if ((size_t)n <= writeableBytes()) {
+    else if ((size_t)n <= writeable) {
     
         hasWritten(n);
     }
     else {
       
-        hasWritten(writeableBytes());
-        append(extrabuf, n - writeableBytes());
+        hasWritten(writeable);
+        append(extrabuf, n - writeable);
     }
     return n;
 }
@@ -111,4 +111,23 @@ ssize_t Buffer::writeFd(int fd,int* savedErrno){
         retrieve(n);
     }
     return n;
+}
+
+//4字节长度前缀协议
+u_int32_t Buffer::peekUInt32() const{
+    assert(readableBytes()>=4);
+    const char* p=peek();
+    u_int32_t x=0;
+    memcpy(&x,p,sizeof(x));
+    return ntohl(x);
+
+}
+
+void Buffer::retrieveUInt32(){
+    assert(readableBytes()>=4);
+    retrieve(4);
+}
+void Buffer::appendUint32(uint32_t x){
+    uint32_t be=htonl(x);
+    append(reinterpret_cast<const char *>(&be),sizeof(be));
 }

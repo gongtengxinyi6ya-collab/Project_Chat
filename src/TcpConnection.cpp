@@ -24,19 +24,31 @@ void TcpConnection::handleRead(){
         ssize_t n=inputBuffer_.readFd(fd_,&saveErrno);
         if(n>0){//当n>0,可能还要数据继续循环
             //解析消息，调用消息回调
-            const char* eol=inputBuffer_.findEOL();
-            while(eol){
-                std::string msg(inputBuffer_.peek(),eol-inputBuffer_.peek());
-                if(messageCallback_)
-                    messageCallback_(shared_from_this(),msg);
+            while(true){
+                if(inputBuffer_.readableBytes()<4)
+                    break;
 
-                inputBuffer_.retrieveUntil(eol+1);
-                eol=inputBuffer_.findEOL();
+                uint32_t len=inputBuffer_.peekUInt32();
+                if(len==0){//空消息
+                    handleClose();
+                    return;
+                }
+                if(len>kMaxFrameLen){//超过长度认为非法协议
+                    handleClose();
+                    return; 
+                }
+                if(inputBuffer_.readableBytes()<4+len){
+                    //长度不够
+                    break;
+                }
+                inputBuffer_.retrieveUInt32();
+                auto payload=inputBuffer_.retrieveAsString(len);
+                if(messageCallback_)
+                    messageCallback_(shared_from_this(),payload);
             }
         }
         else if(n==0){//客户端关闭连接
-            handleClose();
-            return;
+            inputBuffer_.retrieveUInt32();//消费掉长度字段
         }
         else {
             if(saveErrno==EAGAIN||saveErrno==EWOULDBLOCK)//数据读完
@@ -55,10 +67,10 @@ void TcpConnection::handleRead(){
 
 void TcpConnection::handleWrite(){
     while(outputBuffer_.readableBytes()>0){
-        ssize_t n=outputBuffer_.writeFd(fd_,nullptr);
+        ssize_t n=::write(fd_,outputBuffer_.peek(),outputBuffer_.readableBytes());
         if(n>0){//发送成功，清除outputBuffer_中字节
-            
-    }
+            outputBuffer_.retrieve(n);
+        }
         else if(n==-1){
         if(errno==EAGAIN||errno==EWOULDBLOCK)//缓冲区满需等待下一次
             return;
@@ -128,29 +140,14 @@ int TcpConnection::fd() const{
 }
 void TcpConnection::sendInLoop(const std::string& msg){
 
-    auto line=msg+"\n";
-    if(outputBuffer_.readableBytes()==0){//如果outputBuffer_为空，尝试直接发送
-        ssize_t n=::write(fd_,line.data(),line.size());
-
-        if(n>=0){
-            if((size_t)n<line.size()){//未全部发送完，剩余数据存入outputBuffer
-            outputBuffer_.append(line.data()+n,line.size()-n);
-            channel_->enableWriting();
-        }
-
-        }
-        else{
-            if(errno==EAGAIN||errno==EWOULDBLOCK)
-                n=0;
-            else
-                throw::std::runtime_error("write() failed");
-            outputBuffer_.append(line.data()+n,line.size()-n);
-            channel_->enableWriting();
-        }
-        
+    uint32_t len=msg.size();
+    if(len>kMaxFrameLen){
+        std::cerr<<"Message too long to send"<<std::endl;
+        return;
     }
-    else{//outputBuffer_不为空，直接追加到outputBuffer_后面
-        outputBuffer_.append(line.data(),line.size());
+    outputBuffer_.appendUint32(len);
+    outputBuffer_.append(msg.data(),len);
+    if(!channel_->inEpoll()){//如果Channel不在epoll中，注册写事件
         channel_->enableWriting();
     }
 }
@@ -165,7 +162,6 @@ void TcpConnection::connectionEstablished(){
 
 
     channel_->enableReading();//开启读事件
-    loop_->addChannel(channel_);
 }
 
 void TcpConnection::connectionDestroyed(){

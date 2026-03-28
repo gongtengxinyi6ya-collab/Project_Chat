@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <sys/uio.h>
 #include <sys/unistd.h>
+#include <arpa/inet.h>
+
+static constexpr size_t kMaxFrameLen=64*1024;
 //封装Buffer,缓存数据，管理读写位置并支持解析完整消息
 class Buffer{
 public:
@@ -32,6 +35,12 @@ public:
     const char* findEOL() const;//查找\n
     void retrieveUntil(const char* end);//消费到某个指针位置
 
+    //4字节长度前缀协议
+    u_int32_t peekUInt32() const;//从peek()读取4字节并返回
+    void retrieveUInt32();//消费4字节长度
+    void appendUint32(uint32_t x);//把长度追加到outputBuffer_中
+
+
 
 
 private:
@@ -39,5 +48,5 @@ private:
     size_t readerIndex_;//读位置
     size_t writerIndex_;//写位置
     static constexpr size_t kCheapPrepend=8;//预留空间，方便在头部添加数据
-
+    
 };
