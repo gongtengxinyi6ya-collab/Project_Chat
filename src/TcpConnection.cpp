@@ -94,8 +94,8 @@ void TcpConnection::send(const std::string &msg){//
         sendInLoop(msg);
     }
     else{//否则转发到IO线程执行发送
-        loop_->runInLoop([this,msg](){
-            sendInLoop(msg);
+        loop_->runInLoop([self=shared_from_this(),msg](){
+            self->sendInLoop(msg);
         });
     }
 }
@@ -148,11 +148,10 @@ void TcpConnection::sendInLoop(const std::string& msg){
         std::cerr<<"Message too long to send"<<std::endl;
         return;
     }
+    
     outputBuffer_.appendUint32(len);
     outputBuffer_.append(msg.data(),len);
-    if(!channel_->inEpoll()){//如果Channel不在epoll中，注册写事件
-        channel_->enableWriting();
-    }
+    channel_->enableWriting();//注册写事件，等待发送机会
 }
 //连接建立，创建Channel，绑定回调，注册到EventLoop
 void TcpConnection::connectionEstablished(){
