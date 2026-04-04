@@ -60,7 +60,8 @@ private:
     //心跳检测
     TimerId heartbeatTimerId_;//周期定时器句柄
     std::chrono::steady_clock::time_point lastPong_;//最近收到Pong的时间
-    std::chrono::steady_clock::time_point lastRecv_;//最近一次收到任何帧时间
+    std::chrono::steady_clock::time_point lastActiveTime_;//最近收到业务帧
+    std::chrono::steady_clock::time_point lastHeartbeeatTime_;//最近收到心跳帧
     std::chrono::milliseconds heartbeatInterval_{5000};
     std::chrono::milliseconds heartbeatTimeout_{15000};
     void onHeartbeatTick();//每次心跳定时器触发时执行，检测超时并发送ping

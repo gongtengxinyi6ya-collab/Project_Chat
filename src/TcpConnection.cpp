@@ -48,6 +48,8 @@ void TcpConnection::handleRead(){
                 if(handleControlFrame(payload)){//如果是控制帧已处理，继续读取下一条消息
                     continue;
                 }
+                lastActiveTime_=std::chrono::steady_clock::now();
+                refreshIdleTimer();
                 if(messageCallback_)
                     messageCallback_(shared_from_this(),payload);
             }
@@ -187,7 +189,8 @@ void TcpConnection::connectionDestroyed(){
 //心跳检测接口
 void TcpConnection::startHeartbeat(){
     lastPong_=std::chrono::steady_clock::now();
-    lastRecv_=std::chrono::steady_clock::now();
+    lastActiveTime_=std::chrono::steady_clock::now();
+    lastHeartbeeatTime_=std::chrono::steady_clock::now();
     std::weak_ptr<TcpConnection> weakSelf=shared_from_this();
     heartbeatTimerId_=loop_->runEvery(heartbeatInterval_,[weakSelf](){
         if(auto self=weakSelf.lock()){
@@ -202,6 +205,7 @@ void TcpConnection::stopHeartbeat(){
 }
 
 bool TcpConnection::handleControlFrame(const std::string& payload){
+    lastHeartbeeatTime_=std::chrono::steady_clock::now();
     if(payload=="PONG"){
         lastPong_=std::chrono::steady_clock::now();
         return true;
@@ -218,7 +222,7 @@ void TcpConnection::onHeartbeatTick(){//心跳定时器回调，检查连接状�
         std::cerr<<"Connection "<<fd_<<" timed out, no PONG received"<<std::endl;
         handleClose();
     }
-    else if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastRecv_)>heartbeatInterval_){
+    else if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastHeartbeeatTime_)>heartbeatInterval_){
         std::cerr<<"No data received from connection "<<fd_<<" for a while, sending PING"<<std::endl;
         send("PING");
     }
