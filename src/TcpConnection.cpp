@@ -45,6 +45,9 @@ void TcpConnection::handleRead(){
                 }
                 inputBuffer_.retrieveUInt32();
                 auto payload=inputBuffer_.retrieveAsString(len);
+                if(handleControlFrame(payload)){//如果是控制帧已处理，继续读取下一条消息
+                    continue;
+                }
                 if(messageCallback_)
                     messageCallback_(shared_from_this(),payload);
             }
@@ -89,16 +92,6 @@ void TcpConnection::handleWrite(){
     
 }
 }
-void TcpConnection::send(const std::string &msg){//
-    if(loop_->isInLoopThread()){//如果在IO线程中，直接发送
-        sendInLoop(msg);
-    }
-    else{//否则转发到IO线程执行发送
-        loop_->runInLoop([self=shared_from_this(),msg](){
-            self->sendInLoop(msg);
-        });
-    }
-}
 
 void TcpConnection::handleClose(){
     if(!connection_)
@@ -114,6 +107,10 @@ void TcpConnection::handleClose(){
     }
 
     closeCallback_(shared_from_this());
+    stopHeartbeat();
+    if(idleTimerId_.valid()){
+        loop_->cancel(idleTimerId_);
+    }
 }
 
 void TcpConnection::handleError(){
@@ -141,6 +138,17 @@ EventLoop* TcpConnection::getLoop() const{
 int TcpConnection::fd() const{
     return fd_;
 }
+
+void TcpConnection::send(const std::string &msg){//
+    if(loop_->isInLoopThread()){//如果在IO线程中，直接发送
+        sendInLoop(msg);
+    }
+    else{//否则转发到IO线程执行发送
+        loop_->runInLoop([self=shared_from_this(),msg](){
+            self->sendInLoop(msg);
+        });
+    }
+}
 void TcpConnection::sendInLoop(const std::string& msg){
 
     uint32_t len=msg.size();
@@ -162,8 +170,9 @@ void TcpConnection::connectionEstablished(){
     channel_->setCloseCallback([this](){handleClose();});
     channel_->setErrorCallback([this](){handleError();});
 
-
     channel_->enableReading();//开启读事件
+    startHeartbeat();//启动心跳检测
+    refreshIdleTimer();//启动空闲超时检测
 }
 
 void TcpConnection::connectionDestroyed(){
@@ -173,4 +182,62 @@ void TcpConnection::connectionDestroyed(){
         loop_->removeChannel(fd_);
         delete channel_;
     }
+}
+
+//心跳检测接口
+void TcpConnection::startHeartbeat(){
+    lastPong_=std::chrono::steady_clock::now();
+    lastRecv_=std::chrono::steady_clock::now();
+    std::weak_ptr<TcpConnection> weakSelf=shared_from_this();
+    heartbeatTimerId_=loop_->runEvery(heartbeatInterval_,[weakSelf](){
+        if(auto self=weakSelf.lock()){
+            self->onHeartbeatTick();
+        }  
+    });
+}
+void TcpConnection::stopHeartbeat(){
+    if(heartbeatTimerId_.valid()){
+        loop_->cancel(heartbeatTimerId_);
+    }
+}
+
+bool TcpConnection::handleControlFrame(const std::string& payload){
+    if(payload=="PONG"){
+        lastPong_=std::chrono::steady_clock::now();
+        return true;
+    }
+    if(payload=="PING"){
+        send("PONG");
+        return true;
+    }
+    return false;
+}
+void TcpConnection::onHeartbeatTick(){//心跳定时器回调，检查连接状态
+    TimePoint now=std::chrono::steady_clock::now();
+    if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastPong_)>heartbeatTimeout_){
+        std::cerr<<"Connection "<<fd_<<" timed out, no PONG received"<<std::endl;
+        handleClose();
+    }
+    else if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastRecv_)>heartbeatInterval_){
+        std::cerr<<"No data received from connection "<<fd_<<" for a while, sending PING"<<std::endl;
+        send("PING");
+    }
+}
+
+//空闲超时接口
+void TcpConnection::refreshIdleTimer(){
+    if(idleTimerId_.valid()){
+        loop_->cancel(idleTimerId_);
+    }
+    std::weak_ptr<TcpConnection> weakconn=shared_from_this();
+    idleTimerId_=loop_->runAfter(idleTimeout_,[weakconn](){
+        auto self=weakconn.lock();
+        if(self){
+            self->onIdTimerout();
+        }
+    });
+}
+void TcpConnection::onIdTimerout(){
+    std::cerr<<"Connection "<<fd_<<" idle timeout, no data received for "<<idleTimeout_.count()<<" ms"<<std::endl;
+    handleClose();
 }

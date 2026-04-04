@@ -134,7 +134,8 @@ void TimerQueue::handleRead(){
         resetTimerfd(timers_.begin()->first);//begin()最早到期
     }
     else{
-        resetTimerfd(TimePoint::max());
+
+        resetTimerfd(TimePoint::max());//没有定时器了，设置为无效值
     }
 }
 

@@ -60,6 +60,13 @@ static void recvLoop(int fd, std::atomic<bool>& running) {
 
                 in.retrieveUInt32();
                 std::string payload = in.retrieveAsString(len);
+                if(payload=="PING"){
+                    if(!sendAllFramed(fd, "PONG")){
+                        running.store(false);
+                        return;
+                    }
+                    continue;
+                }
                 std::cout << payload << std::endl;
             }
             continue;

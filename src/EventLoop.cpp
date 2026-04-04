@@ -16,7 +16,7 @@ EventLoop:: EventLoop():looping(false),quit_(false),epollfd_(-1),activeEvents_(E
     wakeupChannel_->setReadCallback(std::bind(&EventLoop::handleWakeup,this));
     wakeupChannel_->enableReading();
     this->addChannel(wakeupChannel_.get());
-
+    timerQueue_=std::make_unique<TimerQueue>(this);
 }
 EventLoop:: ~EventLoop(){
 
@@ -129,24 +129,7 @@ void EventLoop::updateChannel(Channel* channel)
 bool EventLoop::isInLoopThread() const{
     return threadId_==std::this_thread::get_id();
 }
-void EventLoop::runInLoop(std::function<void()> func){
-    if(isInLoopThread()){
-        func();
-    }
-    else{
-        queueInLoop(std::move(func));
-        wakeup();
-    }
-}
-void EventLoop::queueInLoop(std::function<void()> func){
-    {
-        std::lock_guard lk(mutex_);
-        pendingFunctors_.push_back(std::move(func));
-    }
-    if(!isInLoopThread()){
-        wakeup();
-    }
-}
+
 
 void EventLoop::wakeup(){
     uint64_t one=1;
@@ -164,13 +147,29 @@ void EventLoop::handleWakeup(){
     }
 }
 void EventLoop::doPendingFunctors(){
-    std::vector<std::function<void()>> functors;
+    std::vector<std::unique_ptr<TaskBase>> functors;
     {
         std::lock_guard lk(mutex_);
         functors.swap(pendingFunctors_);
     }
     for(const auto& func:functors){
-        func();
+        func->call();
     }
 
+}
+
+//定时器接口
+TimerId EventLoop::runAt(TimePoint when,TimerCallback cb){
+    return timerQueue_->addTimer(std::move(cb),when,Duration{0});
+}
+TimerId EventLoop::runAfter(Duration delay,TimerCallback cb){
+    TimePoint when=std::chrono::steady_clock::now()+delay;
+    return runAt(when,std::move(cb));
+}
+TimerId EventLoop::runEvery(Duration interval,TimerCallback cb){
+    TimePoint when=std::chrono::steady_clock::now()+interval;
+    return timerQueue_->addTimer(std::move(cb),when,interval);
+}
+void EventLoop::cancel(TimerId id){
+    timerQueue_->cancel(id);
 }

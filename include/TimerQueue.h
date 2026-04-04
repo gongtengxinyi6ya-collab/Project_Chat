@@ -16,12 +16,12 @@ class Channel;
 
 using TimePoint=std::chrono::steady_clock::time_point;
 using Duration=std::chrono::milliseconds;
+using TimerCallback=std::function<void()>;
 /*管理EventLoop的所有定时器，包括添加，取消，到期触发，重复重排
 用timerfd把最近一次到期时间转为epoll可读事件
 线程归属：在所属EventLoop线程执行
 */
 class TimerQueue{
-    using TimerCallback=std::function<void()>;
     using Entry=std::pair<TimePoint,uint64_t>;//Timer*轻量好排序
 public:
     explicit TimerQueue(EventLoop* loop);

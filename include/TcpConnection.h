@@ -35,6 +35,15 @@ public:
     void connectionEstablished();//连接建立，注册事件
     void connectionDestroyed();//连接销毁，取消事件
 
+    //心跳检测接口
+    
+    void startHeartbeat();//在建立连接后启动心跳周期任务
+    void stopHeartbeat();//连接关闭时取消心跳定时器
+    bool handleControlFrame(const std::string& payload);//拦截处理控制帧，不进入广播
+
+    //空闲超时接口
+    void refreshIdleTimer();//重置idle计时
+    void onIdTimerout();//到期处理
 private:
     EventLoop* loop_;//
     int fd_;//客户端socket
@@ -47,4 +56,18 @@ private:
     bool connection_;
     CloseCallback closeCallback_;//删除连接回调
     MessageCallback messageCallback_;//消息回调，保存服务器注册的消息回调函数
+
+    //心跳检测
+    TimerId heartbeatTimerId_;//周期定时器句柄
+    std::chrono::steady_clock::time_point lastPong_;//最近收到Pong的时间
+    std::chrono::steady_clock::time_point lastRecv_;//最近一次收到任何帧时间
+    std::chrono::milliseconds heartbeatInterval_{5000};
+    std::chrono::milliseconds heartbeatTimeout_{15000};
+    void onHeartbeatTick();//每次心跳定时器触发时执行，检测超时并发送ping
+
+    //空闲超时：一段时间内没有收到任何业务帧
+    TimerId idleTimerId_;//
+    std::chrono::milliseconds idleTimeout_{60000};//超时时间
+
+
 };
