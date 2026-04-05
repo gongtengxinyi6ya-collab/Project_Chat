@@ -48,7 +48,7 @@ void EventLoop:: loop(){
                     try {
                         it->second->handleEvent();
                     } catch (const std::exception& e) {
-                        std::cerr << "Exception in handleEvent: " << e.what() << std::endl;
+                        LOG_ERROR(std::string("Error handling event for fd ") + std::to_string(fd) + ": " + e.what());
                         // 可以选择关闭连接或处理错误
                     }
                 }
@@ -135,7 +135,7 @@ void EventLoop::wakeup(){
     uint64_t one=1;
     ssize_t n=write(wakeupFd_,&one,sizeof(one));
     if(n!=sizeof(one)){
-        std::cerr<<"EventLoop::wakeup() writes "<<n<<" bytes instead of 8"<<std::endl;
+        LOG_WARN("EventLoop::wakeup() writes " + std::to_string(n) + " bytes instead of 8");
     }
 }
 
@@ -143,7 +143,7 @@ void EventLoop::handleWakeup(){
     uint64_t one=1;
     ssize_t n=read(wakeupFd_,&one,sizeof(one));
     if(n!=sizeof(one)){
-        std::cerr<<"EventLoop::handleWakeup() reads "<<n<<" bytes instead of 8"<<std::endl;
+        LOG_WARN("EventLoop::handleWakeup() reads " + std::to_string(n) + " bytes instead of 8");
     }
 }
 void EventLoop::doPendingFunctors(){

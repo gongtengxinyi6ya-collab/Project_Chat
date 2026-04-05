@@ -1,3 +1,4 @@
+#pragma once
 #include <string_view>
 #include <memory>
 //日志输出抽象接口

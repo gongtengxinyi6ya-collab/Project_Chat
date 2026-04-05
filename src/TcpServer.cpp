@@ -28,7 +28,7 @@ void TcpServer::start(){
 void TcpServer::newConnection(int fd){
     //检测fd重复
     if(connections_.find(fd)!=connections_.end()){
-        std::cerr<<"fd already exists!"<<std::endl;
+        LOG_ERROR("Duplicate fd "+std::to_string(fd)+" received in newConnection, closing it");
         return;
     }
     EventLoop* ioloop=iothreadPool_->getNextLoop();
@@ -50,6 +50,7 @@ void TcpServer::newConnection(int fd){
             addConnectionInBaseLoop(conn);
         });
     });
+    LOG_INFO("New connection fd: " + std::to_string(fd)+"assigned to ioloop" );
 }
 
 void TcpServer::removeConnectionInBaseLoop(const std::shared_ptr<TcpConnection>& conn){
@@ -58,7 +59,7 @@ void TcpServer::removeConnectionInBaseLoop(const std::shared_ptr<TcpConnection>&
     if(it!=connections_.end()){
         auto ioloop=conn->getLoop();
         connections_.erase(it);
-        std::cout<<"connection closed fd:"<<fd<<std::endl;
+        LOG_INFO("Connection removed fd: " + std::to_string(fd));
         ioloop->queueInLoop([conn](){
             conn->connectionDestroyed();
         });

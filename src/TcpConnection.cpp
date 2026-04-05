@@ -155,7 +155,7 @@ void TcpConnection::sendInLoop(const std::string& msg){
 
     uint32_t len=msg.size();
     if(len>kMaxFrameLen){
-        std::cerr<<"Message too long to send"<<std::endl;
+        LOG_WARN("Message length " + std::to_string(len) + " exceeds maximum frame length, message discarded"+" to send, fd="+std::to_string(fd_));
         return;
     }
     
@@ -223,7 +223,7 @@ void TcpConnection::onHeartbeatTick(){//心跳定时器回调，检查连接状�
         handleClose();
     }
     else if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastHeartbeeatTime_)>heartbeatInterval_){
-        LOG_INFO("No data received from connection " + std::to_string(fd_) + " for a while, sending PING");
+        LOG_DEBUG("Connection " + std::to_string(fd_) + " heartbeat tick, sending PING");
         send("PING");
     }
 }
