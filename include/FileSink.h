@@ -7,7 +7,7 @@
 //继承LogSink,实现write方法，将日志输出到文件
 class FileSink:public LogSink{
 public:
-    FileSink();//
+    FileSink(std::string filepath);//
     void write(std::string_view line) override;
     ~FileSink();
 private:
@@ -15,7 +15,7 @@ private:
     std::string path_;
 };
 
-FileSink::FileSink(){
+FileSink::FileSink(std::string filepath):path_(std::move(filepath)){
     fd_ = open(path_.c_str(),O_WRONLY|O_CREAT|O_APPEND,0644);
     if(fd_==-1){
         throw std::runtime_error("Failed to open log file: "+path_);
