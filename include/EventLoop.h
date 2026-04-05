@@ -16,6 +16,8 @@
 #include "Channel.h"
 #include "TimerQueue.h"
 #include "TimerId.h"
+#include "LogMacros.h"
+
 const int EPOLL_MAX_EVENTS=100;
 
 

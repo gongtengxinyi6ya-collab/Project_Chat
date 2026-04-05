@@ -33,7 +33,7 @@ void EventLoop:: loop(){
         {
             if(errno==EINTR)//信号中断
                 continue;
-            perror("epoll_wait error");
+            LOG_SYSERR("epoll_wait error");
             break;
         }
         
