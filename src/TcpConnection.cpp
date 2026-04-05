@@ -123,7 +123,7 @@ void TcpConnection::handleError(){
     {
         err = errno;
     }
-    std::cerr << "TcpConnection error: " << strerror(err) << std::endl;
+    LOG_ERROR("TcpConnection::handleError");
 }
 
 
@@ -219,11 +219,11 @@ bool TcpConnection::handleControlFrame(const std::string& payload){
 void TcpConnection::onHeartbeatTick(){//心跳定时器回调，检查连接状态
     TimePoint now=std::chrono::steady_clock::now();
     if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastPong_)>heartbeatTimeout_){
-        std::cerr<<"Connection "<<fd_<<" timed out, no PONG received"<<std::endl;
+        LOG_WARN("Connection " + std::to_string(fd_) + " heartbeat timeout, no PONG received for " + std::to_string(heartbeatTimeout_.count()) + " ms, closing connection");
         handleClose();
     }
     else if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastHeartbeeatTime_)>heartbeatInterval_){
-        std::cerr<<"No data received from connection "<<fd_<<" for a while, sending PING"<<std::endl;
+        LOG_INFO("No data received from connection " + std::to_string(fd_) + " for a while, sending PING");
         send("PING");
     }
 }
@@ -242,6 +242,6 @@ void TcpConnection::refreshIdleTimer(){
     });
 }
 void TcpConnection::onIdTimerout(){
-    std::cerr<<"Connection "<<fd_<<" idle timeout, no data received for "<<idleTimeout_.count()<<" ms"<<std::endl;
+    LOG_WARN("Connection " + std::to_string(fd_) + " idle timeout, no data received for " + std::to_string(idleTimeout_.count()) + " ms, closing connection");
     handleClose();
 }

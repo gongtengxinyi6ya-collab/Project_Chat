@@ -24,8 +24,7 @@ void Socket::bind(int port){
     m_addr.sin_addr.s_addr=htonl(INADDR_ANY);
     m_addr.sin_port=htons(port);
     if(::bind(listenfd_,(sockaddr*)&m_addr,sizeof(m_addr))==-1){
-        std::cerr << "bind() failed, errno=" << errno 
-              << ", " << strerror(errno) << std::endl;
+        LOG_SYSERR("bind() failed");
         throw::std::runtime_error("bind() failed");
     }
 }
@@ -49,7 +48,7 @@ int Socket::accept(){
         if(errno==EAGAIN||errno==EWOULDBLOCK)
             return -1;
 
-        std::cerr << "accept errno=" << errno << std::endl;
+        LOG_SYSERR("accept() failed");
         throw std::runtime_error("accept() failed");
     }
     return clientfd_;

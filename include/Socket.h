@@ -4,6 +4,7 @@
 #include <map>
 #include <cstring>
 #include <iostream>
+#include "LogMacros.h"
 #include "until.h"
 
 class Socket{

@@ -5,6 +5,7 @@
 #include "EventLoop.h"
 #include "Channel.h"
 #include "Buffer.h"
+#include "LogMacros.h"
 class ThreadPool;
 class TcpServer;
 
