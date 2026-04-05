@@ -29,7 +29,7 @@ private:
     Logger(const Logger&)=delete;//禁止拷贝构造
     Logger& operator=(const Logger&)=delete;//禁止拷贝赋值
 
-    std::atomic<LogLevel> minLevel_{LogLevel::INFO};//最小输出级别
+    std::atomic<LogLevel> minLevel_{LogLevel::DEBUG};//最小输出级别
     bool incldeSource_{true};//是否打印
     std::unique_ptr<LogSink> sink_;//输出目标
     std::mutex mutex_;//同步写保护

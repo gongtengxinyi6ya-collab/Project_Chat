@@ -13,6 +13,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include "LogMacros.h"
 
 static bool sendAllFramed(int fd, const std::string& payload) {
     if (payload.size() > kMaxFrameLen) {
@@ -113,6 +114,7 @@ int main(int argc, char** argv) {
         ::close(fd);
         return 1;
     }
+    LOG_INFO("Connected to " + std::string(ip) + ":" + std::to_string(port));
 
     std::atomic<bool> running{true};
     std::thread reader([&] { recvLoop(fd, running); });
