@@ -20,13 +20,17 @@ void Logger::log(LogLevel level,std::string_view msg,const char* file,int line,c
     }
     auto now=std::chrono::system_clock::now();
     //转化为time_t+毫秒部分
+    time_t timeT=std::chrono::system_clock::to_time_t(now);
     auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count()%1000;
     //获取线程id
     uint64_t tid=std::hash<std::thread::id>{}(std::this_thread::get_id());
     //组装一行字符串:YYYY-mm-dd HH:MM:SS.mmm [LEVEL] [tid=...] msg
     std::string logLine;
     logLine.reserve(256);
-    logLine.append(std::to_string(ms));
+    char timeBuf[32];
+    std::strftime(timeBuf,sizeof(timeBuf),"%Y-%m-%d %H:%M:%S",std::localtime(&timeT));
+    logLine.append(timeBuf);
+    logLine.append("."+std::to_string(ms));
     std::string levelStr=" ["+std::string(logLevelToString(level))+"] ";
     logLine.append(levelStr);
     logLine.append("[tid="+std::to_string(tid)+"] ");
