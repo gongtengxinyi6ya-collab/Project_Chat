@@ -98,6 +98,7 @@ void EventLoop::removeChannel(int fd)
         if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,fd,nullptr)==-1){
             throw std::runtime_error("epoll_ctl del failed");
         }
+        channels_[fd]->setInEpoll(false);
         channels_.erase(it);
     }
 }

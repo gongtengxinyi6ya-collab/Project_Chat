@@ -98,21 +98,16 @@ void TcpConnection::handleWrite(){
 void TcpConnection::handleClose(){
     if(!connection_)
         return;
-    connection_=false;
-    channel_->disableAll();
-
-    int fd = fd_;
-    if(fd_ >= 0){
-        loop_->removeChannel(fd_);
-        ::close(fd_);
-        fd_ = -1;
-    }
-
-    closeCallback_(shared_from_this());
     stopHeartbeat();
     if(idleTimerId_.valid()){
         loop_->cancel(idleTimerId_);
     }
+    connection_=false;
+    channel_->disableAll();
+    
+    loop_->removeChannel(fd_);
+    ::close(fd_);
+    closeCallback_(shared_from_this());
 }
 
 void TcpConnection::handleError(){
@@ -207,7 +202,8 @@ void TcpConnection::stopHeartbeat(){
 bool TcpConnection::handleControlFrame(const std::string& payload){
     lastHeartbeeatTime_=std::chrono::steady_clock::now();
     if(payload=="PONG"){
-        lastPong_=std::chrono::steady_clock::now();
+        lastHeartbeeatTime_=std::chrono::steady_clock::now();
+        LOG_INFO("Received PONG from connection " + std::to_string(fd_));
         return true;
     }
     if(payload=="PING"){
@@ -218,7 +214,7 @@ bool TcpConnection::handleControlFrame(const std::string& payload){
 }
 void TcpConnection::onHeartbeatTick(){//心跳定时器回调，检查连接状态
     TimePoint now=std::chrono::steady_clock::now();
-    if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastPong_)>heartbeatTimeout_){
+    if(std::chrono::duration_cast<std::chrono::milliseconds>(now-lastHeartbeeatTime_)>heartbeatTimeout_){
         LOG_WARN("Connection " + std::to_string(fd_) + " heartbeat timeout, no PONG received for " + std::to_string(heartbeatTimeout_.count()) + " ms, closing connection");
         handleClose();
     }
