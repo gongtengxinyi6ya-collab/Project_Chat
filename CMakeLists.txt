@@ -20,6 +20,7 @@ add_library(chat_lib ${SRC_FILES})
 target_include_directories(chat_lib
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/include/im
 )
 
 if(MSVC)
