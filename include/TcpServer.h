@@ -4,6 +4,7 @@
 #include <memory>
 #include <unordered_map>
 #include "LogMacros.h"
+#include "im/ImService.h"
 
 class EventLoop;
 class EventLoopThreadPool;
@@ -34,4 +35,8 @@ private:
     // 使用 unique_ptr 让连接自动释放，避免手动 delete
     std::unordered_map<int,std::shared_ptr<TcpConnection>> connections_;//管理所有连接，key为fd，value为TcpConnection对象指针
     std::unique_ptr<ThreadPool> threadPool_;//线程池，处理消息转发等耗时操作
+
+    //IM系统
+    std::unique_ptr<im::Imservice> imService_;//IM业务对象，处理消息逻辑
+    
 };

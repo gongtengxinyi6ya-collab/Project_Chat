@@ -8,6 +8,15 @@ TcpServer::TcpServer(EventLoop* loop,int port)
     iothreadPool_ = std::make_unique<EventLoopThreadPool>(baseloop_);
     acceptor_.setNewConnectionCallback(std::bind(&TcpServer::newConnection,this,std::placeholders::_1));
     threadPool_ = std::make_unique<ThreadPool>();
+    imService_ = std::make_unique<im::Imservice>();
+    imService_->setSendToConnKey([this](im::Imservice::ConnKey key,const std::string& payload){
+        baseloop_->runInLoop([this,key,payload](){
+            auto it=connections_.find(key);
+            if(it!=connections_.end()){
+                it->second->send(payload);
+            }
+        });
+    });
 }
 
 TcpServer::~TcpServer(){
@@ -64,16 +73,13 @@ void TcpServer::removeConnectionInBaseLoop(const std::shared_ptr<TcpConnection>&
             conn->connectionDestroyed();
         });
     }
+    imService_->onDisconnect(conn);//通知IM业务连接断开，清理状态
 
 }
 
 void TcpServer::onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& msg){
-    //转发消息给其他客户端
-    for(auto& pair:connections_){
-        if(pair.second!=conn){
-            pair.second->send(msg);
-        }
-    }
+    //转发给IM业务对象处理
+    imService_->onMessage(conn,msg);    
 }
 void TcpServer::setThreadNum(int numThreads){
     threadNum_=numThreads;

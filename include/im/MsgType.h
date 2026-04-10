@@ -3,10 +3,13 @@
 #include <optional>
 namespace im{
 enum class MsgType:uint16_t{
-    AUTH_REQ=1,
-    AUTH_RESP=2,
-    ECHO_REQ=3,
+    AUTH_REQ=1,//
+    AUTH_RESP=2,//登录响应
+    ECHO_REQ=3,//
     ECHO_RESP=4,
+    DM_REQ=5,//私聊请求
+    DM_RESP=6,//私聊响应
+    DM_PUSH=7,//私聊消息推送
     ERR=255
 };
 //从整数转换为MsgType枚举

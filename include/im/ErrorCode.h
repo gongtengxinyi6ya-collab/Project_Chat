@@ -5,12 +5,15 @@
 namespace im {
 
 enum class ErrorCode: uint16_t{
-    OK,
+    OK,//成功
     BAD_JSON,//
     MISSING_FIELD,//缺少必要字段
     UNSUPPORTED_VER,//不支持的协议版本
     UNKNOWN_TYPE,//未知的消息类型
     NOT_AUTHED,//未认证
+    USER_EXISTS,//用户已存在
+    BAD_REQUEST,//字段类型不对
+    NO_SUCH_USER,//
     INTERNAL//服务器内部错误
 
 };
