@@ -13,14 +13,13 @@ endif()
 # =========================
 # 库（核心代码）
 # =========================
-file(GLOB SRC_FILES src/*.cpp)
+file(GLOB SRC_FILES src/*.cpp src/im/*.cpp)
 
 add_library(chat_lib ${SRC_FILES})
 
 target_include_directories(chat_lib
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
-        ${PROJECT_SOURCE_DIR}/include/im
 )
 
 if(MSVC)

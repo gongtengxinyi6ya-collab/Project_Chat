@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <optional>
+namespace im{
 enum class MsgType:uint16_t{
     AUTH_REQ=1,
     AUTH_RESP=2,
@@ -9,7 +10,7 @@ enum class MsgType:uint16_t{
     ERR=255
 };
 //从整数转换为MsgType枚举
-std::optional<MsgType> msgTypeFromInt(uint32_t v){
+inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
     switch(v){
         case 1:
             return MsgType::AUTH_REQ;
@@ -25,9 +26,10 @@ std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return std::nullopt;//无效的消息类型
     }
 }
-uint32_t msgTypeToInt(MsgType t){
+inline uint32_t msgTypeToInt(MsgType t){
     return static_cast<uint32_t>(t);
 }
-bool isValidMsgType(uint32_t v){
+inline bool isValidMsgType(uint32_t v){
     return msgTypeFromInt(v).has_value();
+}
 }

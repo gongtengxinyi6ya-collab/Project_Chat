@@ -9,6 +9,7 @@
 把Response编码为std::string
 统一做字段校验，版本校验，type校验*/
 //请求：客户端发给服务端
+namespace im{
 struct Request{
     uint32_t ver;//协议版本
     MsgType type;//请求类型
@@ -22,11 +23,10 @@ struct Request{
 struct Response{
     uint32_t ver;
     uint64_t req_id;
+    MsgType type;//响应类型,可以和请求类型相同也可以不同,比如请求是AUTH_REQ响应是AUTH_RESP
     bool ok;//请求是否成功
-    ErrorCode code;//错误码
+    im::ErrorCode code;//错误码
     std::string msg;//错误信息
     nlohmann::json data;//扩展返回字段
 };
-static std::variant<Request,Response> parseOrError(std::string_view payload);//把字符串解析为Request或Response,如果解析失败返回错误信息
-    
-static std::string encodeResponse(const Response& resp);//把Response编码为字符串
+}

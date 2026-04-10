@@ -2,7 +2,9 @@
 #include <cstdint>
 
 //错误码常量
-enum class  ErrorCode: uint16_t{
+namespace im {
+
+enum class ErrorCode: uint16_t{
     OK,
     BAD_JSON,//
     MISSING_FIELD,//缺少必要字段
@@ -12,7 +14,8 @@ enum class  ErrorCode: uint16_t{
     INTERNAL//服务器内部错误
 
 };
-const char* errCodeToString(ErrorCode code){
+
+inline const char* errCodeToString(ErrorCode code){
     switch(code){
         case ErrorCode::OK:
             return "OK";
@@ -31,5 +34,6 @@ const char* errCodeToString(ErrorCode code){
         default:
             return "Unknown Error Code";
     }
+}
 
 }
