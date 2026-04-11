@@ -23,6 +23,12 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::ECHO_REQ;
         case 4:
             return MsgType::ECHO_RESP;
+        case 5:
+            return MsgType::DM_REQ;
+        case 6:
+            return MsgType::DM_RESP;
+        case 7:
+            return MsgType::DM_PUSH;
         case 255:
             return MsgType::ERR;
         default:

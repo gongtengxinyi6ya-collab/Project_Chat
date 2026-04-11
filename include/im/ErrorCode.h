@@ -32,6 +32,12 @@ inline const char* errCodeToString(ErrorCode code){
             return "Unknown Type";
         case ErrorCode::NOT_AUTHED:
             return "Not Authenticated";
+        case ErrorCode::USER_EXISTS:
+            return "User exists";
+        case ErrorCode::BAD_REQUEST:
+            return "Request Error";
+        case ErrorCode::NO_SUCH_USER:
+            return "User do not exist";
         case ErrorCode::INTERNAL:
             return "Internal Server Error";
         default:

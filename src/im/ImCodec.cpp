@@ -36,7 +36,7 @@ std::variant<im::Request,im::Response> im::tryParse(std::string_view payload){
         return im::Response{.ver=1,.req_id=0,.type=im::MsgType::ERR,.ok=false,.code=im::ErrorCode::BAD_JSON,.msg="Invalid JSON format",.data=nlohmann::json{}};
     }
 }
-
+//
 std::string im::encodeResponse(const im::Response& resp){
     nlohmann::json j;
     j["ver"]=resp.ver;
@@ -47,4 +47,12 @@ std::string im::encodeResponse(const im::Response& resp){
     j["msg"]=resp.msg;
     j["data"]=resp.data;
     return j.dump();
+}
+
+//Response辅助函数
+im::Response im::makeErr(const im::Request& req,im::ErrorCode code,const std::string& msg,nlohmann::json data){
+    return im::Response{.ver=req.ver,.req_id=req.req_id,.type=im::MsgType::ERR,.ok=false,.code=code,.msg=msg,.data=data};
+}
+im::Response im::makeOk(const im::Request& req,im::MsgType type,nlohmann::json data,std::string mag){
+    return im::Response{.ver=req.ver,.req_id=req.req_id,.type=type,.ok=true,.code=im::ErrorCode::OK,.msg=mag,.data=data};
 }
