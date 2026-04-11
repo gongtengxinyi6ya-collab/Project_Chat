@@ -17,7 +17,7 @@ enum class ErrorCode: uint16_t{
     INTERNAL//服务器内部错误
 
 };
-
+//把错误码转换为字符串，便于调试和日志记录
 inline const char* errCodeToString(ErrorCode code){
     switch(code){
         case ErrorCode::OK:

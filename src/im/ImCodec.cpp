@@ -43,7 +43,7 @@ std::string im::encodeResponse(const im::Response& resp){
     j["req_id"]=resp.req_id;
     j["type"]=im::msgTypeToInt(resp.type);
     j["ok"]=resp.ok;
-    j["code"]=im::errCodeToString(resp.code);
+    j["code"]=static_cast<uint16_t>(resp.code);
     j["msg"]=resp.msg;
     j["data"]=resp.data;
     return j.dump();

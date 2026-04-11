@@ -10,6 +10,8 @@ enum class MsgType:uint16_t{
     DM_REQ=5,//私聊请求
     DM_RESP=6,//私聊响应
     DM_PUSH=7,//私聊消息推送
+    LIST_USERS_REQ=8,//用户列表请求
+    LIST_USERS_RESP=9,//用户列表响应
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -29,6 +31,10 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::DM_RESP;
         case 7:
             return MsgType::DM_PUSH;
+        case 8:
+            return MsgType::LIST_USERS_REQ;
+        case 9:
+            return MsgType::LIST_USERS_RESP;
         case 255:
             return MsgType::ERR;
         default:

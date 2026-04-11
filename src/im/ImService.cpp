@@ -33,7 +33,8 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
                 resp=handleDm(*req_ptr,key,session);
                 break;
             default:
-                resp={.ver=req_ptr->ver,.req_id=req_ptr->req_id,.type=req_ptr->type,.ok=false,.code=im::ErrorCode::UNKNOWN_TYPE,.msg="Unknown message type",.data=nlohmann::json{}};
+                resp=im::makeErr(*req_ptr,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
+                break;
         }
         std::string resp_str=im::encodeResponse(resp);
         if(sendToConnKey_   ){
@@ -81,12 +82,20 @@ std::optional<im::Response> im::Imservice::guarddAuthed(const im::Request& req,c
     return std::nullopt;
 }
 void im::Imservice::cleanupUserConn(ConnKey key,const Session &session){
-    if(!session.username_.empty()&&userConnMap_[session.username_]==key){
-        userConnMap_.erase(session.username_);
+    
+    if(!session.username_.empty()){
+        auto it=userConnMap_.find(session.username_);
+        if(it!=userConnMap_.end()&&it->second==key){
+            userConnMap_.erase(session.username_);
+        }
     }
 }
 im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session& session){
-    guarddAuthed(req,session);
+    auto err=guarddAuthed(req,session);
+    if(err.has_value()){
+        return err.value();
+    }
+
     //取目标
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
