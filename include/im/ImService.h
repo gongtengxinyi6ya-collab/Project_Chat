@@ -40,6 +40,6 @@ private:
     im::Response handleEcho(const im::Request& req,ConnKey key,Session& session);//回显
     im::Response handleAuth(const im::Request& req,ConnKey key,Session& session);//登录，把session状态改为Authed,绑定身份
     im::Response handleDm(const im::Request& req,ConnKey key,Session& session);//把私聊消息投递到目标连接，并回复发送方投递结果
-    
+    im::Response handleListUsers(const im::Request& req,ConnKey key,Session& session);//在线用户名列表
 };
 }

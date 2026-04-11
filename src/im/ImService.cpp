@@ -32,6 +32,9 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             case im::MsgType::DM_REQ:
                 resp=handleDm(*req_ptr,key,session);
                 break;
+            case im::MsgType::LIST_USERS_REQ:
+                resp=handleListUsers(*req_ptr,key,session);
+                break;
             default:
                 resp=im::makeErr(*req_ptr,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
                 break;
@@ -116,4 +119,16 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
     sendToConnKey_(targetKey,pushStr);
     return makeOk(req,im::MsgType::DM_RESP);
 
+}
+
+im::Response im::Imservice::handleListUsers(const im::Request& req,ConnKey key,Session& session){
+    auto err=guarddAuthed(req,session);
+    if(err.has_value()){
+        return err.value();
+    }
+    std::vector<std::string> users;
+    for(const auto& pair:userConnMap_){
+        users.push_back(pair.first);
+    }
+    return makeOk(req,im::MsgType::LIST_USERS_RESP,nlohmann::json{{"users",users}});
 }
