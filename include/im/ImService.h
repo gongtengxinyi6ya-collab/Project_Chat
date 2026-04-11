@@ -29,6 +29,8 @@ public:
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
     Session& getOrCreateSession(ConnKey key);//不存在则创建,保证每个连接都有Session
+    std::optional<im::Response> guarddAuthed(const im::Request& req,const Session& session);//统一门禁
+    void cleanupUserConn(ConnKey key,const Session& session);
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
     SendToConnKeyFn sendToConnKey_;

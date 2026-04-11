@@ -41,7 +41,7 @@ std::string im::encodeResponse(const im::Response& resp){
     nlohmann::json j;
     j["ver"]=resp.ver;
     j["req_id"]=resp.req_id;
-    j["type"]=resp.type;
+    j["type"]=im::msgTypeToInt(resp.type);
     j["ok"]=resp.ok;
     j["code"]=im::errCodeToString(resp.code);
     j["msg"]=resp.msg;

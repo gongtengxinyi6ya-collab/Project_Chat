@@ -41,7 +41,12 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
 }
 void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     ConnKey key=conn->fd();
+    auto it=sessions_.find(key);
+    if(it!=sessions_.end()){
+        cleanupUserConn(key,it->second);
+    }
     sessions_.erase(key);
+
 }
 im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& session){
     if(!req.body.contains("user")){
@@ -61,4 +66,16 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
     session.username_=username;
     userConnMap_[username]=key;
     return im::Response{.ver=1,.req_id=req.req_id,.type=im::MsgType::AUTH_RESP,.ok=true,.code=im::ErrorCode::OK,.msg="Authentication successful",.data=nlohmann::json{}}; 
+}
+
+std::optional<im::Response> im::Imservice::guarddAuthed(const im::Request& req,const Session& session){
+    if(session.state_!=im::ConnState::Authed){
+        return im::Response{.ver=1,.req_id=req.req_id,.type=im::MsgType::ERR,.ok=false,.code=im::ErrorCode::NOT_AUTHED,.msg="Unauthorized: Please authenticate first",.data=nlohmann::json{}};
+    }
+    return std::nullopt;
+}
+void im::Imservice::cleanupUserConn(ConnKey key,const Session &session){
+    if(!session.username_.empty()&&userConnMap_[session.username_]==key){
+        userConnMap_.erase(session.username_);
+    }
 }
