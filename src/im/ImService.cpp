@@ -42,7 +42,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
         }
         decorate(resp,req_ptr->req_id);
         std::string resp_str=im::encodeResponse(resp);
-        if(sendToConnKey_   ){
+        if(sendToConnKey_ ){
         sendToConnKey_(key,resp_str);
         }
     }
@@ -128,9 +128,11 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
     std::string content=req.body["content"].get<std::string>();
     //构造推送消息
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"from",session.username_},{"to",req.to},{"content",content}}};
+    decorate(pushMsg,req.req_id);
     std::string pushStr=im::encodeResponse(pushMsg);
-    decorate(pushMsg);
-    sendToConnKey_(targetKey,pushStr);
+    if(!sendToConnKey_(targetKey,pushStr)){
+        return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"to","..."},{"delivered",false}});
+    }
     return makeOk(req,im::MsgType::DM_RESP);
 
 }

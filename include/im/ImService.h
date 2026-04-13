@@ -22,7 +22,7 @@ namespace im{
 class Imservice{
 public:
     using ConnKey=int;//连接标识
-    using SendToConnKeyFn=std::function<void (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
+    using SendToConnKeyFn=std::function<bool (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
 
     explicit Imservice(uint32_t supportedVer=1);
     void setSendToConnKey(SendToConnKeyFn fn);
