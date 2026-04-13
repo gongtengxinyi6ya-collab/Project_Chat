@@ -12,9 +12,81 @@
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <optional>
 #include <thread>
 #include "LogMacros.h"
+#include "im/ImMessage.h"
+#include "third_party/json.hpp"
+struct ClientState{
+    std::string username;
+    uint64_t nextReqId{1};
+    uint64_t nextSeq{1};
 
+    uint64_t allocReqId(){
+        return nextReqId++;
+    }
+    uint64_t allocSeq(){
+        return nextSeq++;
+    }
+};
+class CommandBuilder{
+public:
+    std::string buildAuthReq(ClientState& state,std::string user){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::AUTH_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=user;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["user"]=user;
+        return body.dump();
+        
+    }
+    std::string buildDmReq(ClientState& state,std::string to,std::string content){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::DM_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]=to;
+        body["seq"]=state.allocSeq();
+        body["content"]=content;
+        return body.dump();
+    }
+    std::string buildListUsersReq(ClientState& state){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::LIST_USERS_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        return body.dump();
+    }
+
+};
+//把/auth jason,/dm tom hello,/list转为payload字符串，返回nullopt表示解析失败
+std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
+    if(line.empty()) return std::nullopt;
+    CommandBuilder builder;
+    if(line.rfind("/auth ",0)==0){
+        std::string user=line.substr(6);
+        state.username=user;
+        return builder.buildAuthReq(state,user);
+    }
+    if(line.rfind("/dm ",0)==0){
+        size_t firstSpace=line.find(' ',4);
+        if(firstSpace==std::string::npos) return std::nullopt;
+        std::string to=line.substr(4,firstSpace-4);
+        std::string content=line.substr(firstSpace+1);
+        return builder.buildDmReq(state,to,content);
+    }
+    if(line=="/list"){
+        return builder.buildListUsersReq(state);
+    }
+    return std::nullopt;
+}
 static bool sendAllFramed(int fd, const std::string& payload) {
     if (payload.size() > kMaxFrameLen) {
         std::cerr << "payload too large: " << payload.size() << " > " << kMaxFrameLen << "\n";
@@ -122,7 +194,13 @@ int main(int argc, char** argv) {
     std::string line;
     while (running.load() && std::getline(std::cin, line)) {
         if (line == "/quit") break;
-        if (!sendAllFramed(fd, line)) {
+        ClientState state;
+        auto payloadOpt = tryParseCommandLine(line, state);
+        if (!payloadOpt) {
+            std::cerr << "invalid command\n";
+            continue;   
+        }
+        if (!sendAllFramed(fd, *payloadOpt)) {
             running.store(false);
             break;
         }
