@@ -64,9 +64,40 @@ public:
         body["seq"]=state.allocSeq();
         return body.dump();
     }
+    std::string buildJoinReq(ClientState& state,std::string room){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::JOIN_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["room"]=room;
+        return body.dump();
+    }
+    std::string buildLeaveReq(ClientState& state){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::LEAVE_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        return body.dump();
+    }
+    std::string buildRoomMsgReq(ClientState& state,std::string content){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::ROOM_MSG_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["content"]=content;
+        return body.dump();
 
 };
-//把/auth jason,/dm tom hello,/list转为payload字符串，返回nullopt表示解析失败
+//把/auth jason,/dm tom hello,/list,/join room,/leave ,/say 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
     if(line.empty()) return std::nullopt;
     if(line[0]!='/'){
@@ -93,6 +124,30 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     if(line=="/list"){
         return builder.buildListUsersReq(state);
     }
+    if(line.rfind("/join ",0)==0){
+        if(state.username.empty()){
+            std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
+            return std::nullopt;
+        }
+        std::string room=line.substr(6);
+        return builder.buildJoinReq(state,room);
+    }
+    if(line=="/leave"){
+        if(state.username.empty()){
+            std::cerr<<"please authenticate first"<<std::endl;
+            return std::nullopt;
+        }
+        return builder.buildLeaveReq(state);
+    }
+    if(line.rfind("/say ",0)==0){
+        if(state.username.empty()){
+            std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
+            return std::nullopt;
+        }
+        std::string content=line.substr(5);
+        return builder.buildRoomMsgReq(state,content);
+    }
+
     return std::nullopt;
 }
 static bool sendAllFramed(int fd, const std::string& payload) {

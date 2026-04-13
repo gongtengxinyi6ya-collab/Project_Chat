@@ -12,6 +12,13 @@ enum class MsgType:uint16_t{
     DM_PUSH=7,//私聊消息推送
     LIST_USERS_REQ=8,//用户列表请求
     LIST_USERS_RESP=9,//用户列表响应
+    JOIN_REQ=10,
+    JOIN_RESP,
+    LEAVE_REQ,
+    LEAVE_RESP,
+    ROOM_MSG_REQ,
+    ROOM_MSG_RESP,
+    ROOM_MSG_PUSH,
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -35,6 +42,20 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::LIST_USERS_REQ;
         case 9:
             return MsgType::LIST_USERS_RESP;
+        case 10:
+            return MsgType::JOIN_REQ;
+        case 11:
+            return MsgType::JOIN_RESP;
+        case 12:
+            return MsgType::LEAVE_REQ;
+        case 13:
+            return MsgType::LEAVE_RESP;
+        case 14:
+            return MsgType::ROOM_MSG_REQ;
+        case 15:
+            return MsgType::ROOM_MSG_RESP;
+        case 16:
+            return MsgType::ROOM_MSG_PUSH;
         case 255:
             return MsgType::ERR;
         default:

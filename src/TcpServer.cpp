@@ -10,16 +10,13 @@ TcpServer::TcpServer(EventLoop* loop,int port)
     threadPool_ = std::make_unique<ThreadPool>();
     imService_ = std::make_unique<im::Imservice>();
     imService_->setSendToConnKey([this](im::Imservice::ConnKey key,const std::string& payload){
-        bool res=false;
-        baseloop_->runInLoop([this,key,payload,&res](){
             auto it=connections_.find(key);
             if(it!=connections_.end()){
                 it->second->send(payload);
-                res=true;
+                return true;
             }
-        });
-        return res;
-    });
+            return false;
+});
 }
 
 TcpServer::~TcpServer(){
