@@ -36,10 +36,12 @@ private:
     SendToConnKeyFn sendToConnKey_;
     std::unordered_map<ConnKey,Session> sessions_;//每条连接一份状态
     std::unordered_map<std::string,ConnKey> userConnMap_;//用户id到连接的映射，私聊定位
-    
+    uint64_t nextMsgId_{1};//全局递增消息id，用于推送消息唯一标识
     im::Response handleEcho(const im::Request& req,ConnKey key,Session& session);//回显
     im::Response handleAuth(const im::Request& req,ConnKey key,Session& session);//登录，把session状态改为Authed,绑定身份
     im::Response handleDm(const im::Request& req,ConnKey key,Session& session);//把私聊消息投递到目标连接，并回复发送方投递结果
     im::Response handleListUsers(const im::Request& req,ConnKey key,Session& session);//在线用户名列表
-};
+    uint64_t nowMs() const;//获取当前时间戳
+    void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
+    };
 }

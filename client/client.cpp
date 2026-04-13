@@ -69,6 +69,10 @@ public:
 //把/auth jason,/dm tom hello,/list转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
     if(line.empty()) return std::nullopt;
+    if(line[0]!='/'){
+        //不是/开头，默认当raw payload
+        return line;
+    }
     CommandBuilder builder;
     if(line.rfind("/auth ",0)==0){
         std::string user=line.substr(6);
@@ -76,6 +80,10 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         return builder.buildAuthReq(state,user);
     }
     if(line.rfind("/dm ",0)==0){
+        if(state.username.empty()){
+            std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
+            return std::nullopt;
+        }
         size_t firstSpace=line.find(' ',4);
         if(firstSpace==std::string::npos) return std::nullopt;
         std::string to=line.substr(4,firstSpace-4);
@@ -192,9 +200,9 @@ int main(int argc, char** argv) {
     std::thread reader([&] { recvLoop(fd, running); });
 
     std::string line;
+    ClientState state;
     while (running.load() && std::getline(std::cin, line)) {
         if (line == "/quit") break;
-        ClientState state;
         auto payloadOpt = tryParseCommandLine(line, state);
         if (!payloadOpt) {
             std::cerr << "invalid command\n";

@@ -14,6 +14,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
     if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
         //请求解析失败，直接返回错误响应
         if(resp_ptr->ok==false){
+            decorate(*resp_ptr);
             std::string resp_str=im::encodeResponse(*resp_ptr);
             if(sendToConnKey_){
                 sendToConnKey_(key,resp_str);
@@ -39,6 +40,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
                 resp=im::makeErr(*req_ptr,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
                 break;
         }
+        decorate(resp,req_ptr->req_id);
         std::string resp_str=im::encodeResponse(resp);
         if(sendToConnKey_   ){
         sendToConnKey_(key,resp_str);
@@ -116,6 +118,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
     //构造推送消息
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"from",session.username_},{"to",req.to},{"content",content}}};
     std::string pushStr=im::encodeResponse(pushMsg);
+    decorate(pushMsg);
     sendToConnKey_(targetKey,pushStr);
     return makeOk(req,im::MsgType::DM_RESP);
 
@@ -131,4 +134,15 @@ im::Response im::Imservice::handleListUsers(const im::Request& req,ConnKey key,S
         users.push_back(pair.first);
     }
     return makeOk(req,im::MsgType::LIST_USERS_RESP,nlohmann::json{{"users",users}});
+}
+
+uint64_t im::Imservice::nowMs()const{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> clientReqId=std::nullopt){
+    resp.data["msg_id"]=nextMsgId_++;
+    resp.data["server_ts_ms"]=nowMs();
+    if(clientReqId.has_value()){
+        resp.data["client_req_id"]=*clientReqId;
+    }
 }
