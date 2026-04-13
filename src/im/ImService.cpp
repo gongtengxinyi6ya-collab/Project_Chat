@@ -57,6 +57,17 @@ void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     sessions_.erase(key);
 
 }
+
+im::Session& im::Imservice::getOrCreateSession(ConnKey key){
+    auto it=sessions_.find(key);
+    if(it!=sessions_.end()){
+        return it->second;
+    }
+    //不存在则创建
+    Session session;
+    sessions_[key]=session;
+    return sessions_[key];
+}
 im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& session){
     if(!req.body.contains("user")){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing username field");
@@ -136,10 +147,17 @@ im::Response im::Imservice::handleListUsers(const im::Request& req,ConnKey key,S
     return makeOk(req,im::MsgType::LIST_USERS_RESP,nlohmann::json{{"users",users}});
 }
 
+im::Response im::Imservice::handleEcho(const im::Request& req,ConnKey key,Session& session){
+    auto err=guarddAuthed(req,session);
+    if(err.has_value()){
+        return err.value();
+    }
+    return makeOk(req,im::MsgType::ECHO_RESP,req.body);
+}
 uint64_t im::Imservice::nowMs()const{
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
-void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> clientReqId=std::nullopt){
+void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> clientReqId){
     resp.data["msg_id"]=nextMsgId_++;
     resp.data["server_ts_ms"]=nowMs();
     if(clientReqId.has_value()){
