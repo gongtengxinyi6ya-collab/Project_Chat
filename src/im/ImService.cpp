@@ -102,7 +102,7 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
 }
 
 std::optional<im::Response> im::Imservice::guarddAuthed(const im::Request& req,const Session& session){
-    if(session.state_!=im::ConnState::Authed){
+    if(session.state_!=im::ConnState::Authed||session.state_!=im::ConnState::InRoom){
         return makeErr(req,im::ErrorCode::NOT_AUTHED,"Unauthorized: Please authenticate first");
     }
     return std::nullopt;
