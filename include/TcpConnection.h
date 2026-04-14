@@ -64,12 +64,12 @@ private:
     std::chrono::steady_clock::time_point lastActiveTime_;//最近收到业务帧
     std::chrono::steady_clock::time_point lastHeartbeeatTime_;//最近收到心跳帧
     std::chrono::milliseconds heartbeatInterval_{5000};
-    std::chrono::milliseconds heartbeatTimeout_{15000};
+    std::chrono::milliseconds heartbeatTimeout_{30000};
     void onHeartbeatTick();//每次心跳定时器触发时执行，检测超时并发送ping
 
     //空闲超时：一段时间内没有收到任何业务帧
     TimerId idleTimerId_;//
-    std::chrono::milliseconds idleTimeout_{60000};//超时时间
+    std::chrono::milliseconds idleTimeout_{120000};//超时时间
 
 
 };

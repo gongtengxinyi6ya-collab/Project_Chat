@@ -95,7 +95,17 @@ public:
         body["seq"]=state.allocSeq();
         body["content"]=content;
         return body.dump();
-
+    }
+    std::string buildRoomMembers(ClientState& state){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::ROOM_MEMBERS_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        return body.dump();
+    }
 };
 //把/auth jason,/dm tom hello,/list,/join room,/leave ,/say 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
@@ -146,6 +156,9 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         }
         std::string content=line.substr(5);
         return builder.buildRoomMsgReq(state,content);
+    }
+    if(line=="/members"){
+        return builder.buildRoomMembers(state);
     }
 
     return std::nullopt;

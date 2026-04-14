@@ -14,6 +14,7 @@ enum class ErrorCode: uint16_t{
     USER_EXISTS,//用户已存在
     BAD_REQUEST,//字段类型不对
     NO_SUCH_USER,//
+    NOT_IN_ROOM,//不在房间
     INTERNAL//服务器内部错误
 
 };
@@ -38,6 +39,8 @@ inline const char* errCodeToString(ErrorCode code){
             return "Request Error";
         case ErrorCode::NO_SUCH_USER:
             return "User do not exist";
+        case ErrorCode::NOT_IN_ROOM:
+            return "User is not in room";
         case ErrorCode::INTERNAL:
             return "Internal Server Error";
         default:

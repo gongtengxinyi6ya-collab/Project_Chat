@@ -51,7 +51,7 @@ private:
     im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入房间
     im::Response handleLeave(const im::Request&,ConnKey,Session&);//退出房间
     im::Response handleRoomMsg(const im::Request&,ConnKey,Session&);//提交房间消息
-    
+    im::Response handleRoomMembers(const im::Request&,ConnKey,Session&);//获取房间成员列表
     
 
     };

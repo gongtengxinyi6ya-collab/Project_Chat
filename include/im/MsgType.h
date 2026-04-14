@@ -19,6 +19,8 @@ enum class MsgType:uint16_t{
     ROOM_MSG_REQ,
     ROOM_MSG_RESP,
     ROOM_MSG_PUSH,
+    ROOM_MEMBERS_REQ,
+    ROOM_MEMBERS_RESP,
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -56,6 +58,10 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::ROOM_MSG_RESP;
         case 16:
             return MsgType::ROOM_MSG_PUSH;
+        case 17:
+            return MsgType::ROOM_MEMBERS_REQ;
+        case 18:
+            return MsgType::ROOM_MEMBERS_RESP;
         case 255:
             return MsgType::ERR;
         default:

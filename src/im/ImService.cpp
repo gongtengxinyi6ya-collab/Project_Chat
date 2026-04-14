@@ -38,10 +38,13 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
                 break;
             case im::MsgType::JOIN_REQ:
                 resp=handleJoin(*req_ptr,key,session);
+                break;
             case im::MsgType::LEAVE_REQ:
                 resp=handleLeave(*req_ptr,key,session);
+                break;
             case im::MsgType::ROOM_MSG_REQ:
                 resp=handleRoomMsg(*req_ptr,key,session);
+                break;
             default:
                 resp=im::makeErr(*req_ptr,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
                 break;
@@ -59,8 +62,8 @@ void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     auto it=sessions_.find(key);
     if(it!=sessions_.end()){
         cleanupUserConn(key,it->second);
+        removeFromRoom(key,it->second);
     }
-    removeFromRoom(key,it->second);
     sessions_.erase(key);
 
 }
@@ -223,7 +226,7 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
 }
 im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Session& session){
     if(session.state_!=im::ConnState::InRoom){
-        return makeErr(req,im::ErrorCode::BAD_REQUEST,"You must join a room to send messages");
+        return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"You must join a room to send messages");
     }
     if(!req.body.contains("content")||!req.body["content"].is_string()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
@@ -233,12 +236,34 @@ im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Se
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::ROOM_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"room",room},{"content",content}}};
     decorate(pushMsg,req.req_id);
     std::string pushStr=im::encodeResponse(pushMsg);
-    auto members=roomMembers_[room];
-    for(ConnKey memberKey:members){
+    auto& members=roomMembers_[room];
+    int fanout=0;
+    for(const ConnKey& memberKey:members){
         if(memberKey!=key){
             sendToConnKey_(memberKey,pushStr);
+            fanout++;
         }
     }
-    return makeOk(req,im::MsgType::ROOM_MSG_RESP);
+    return makeOk(req,im::MsgType::ROOM_MSG_RESP,nlohmann::json{{"room",room},{"delivered_to",fanout}});
+
+}
+im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key,Session& session){
+    auto err=guarddAuthed(req,session);
+    if(err.has_value()){
+        return err.value();
+    }
+    std::string room=session.room_;
+    auto keys=roomMembers_.find(room);
+    if(keys!=roomMembers_.end()){
+        std::vector<std::string> usernames;
+        for(const auto& it:keys->second){
+            auto res=sessions_.find(it);
+            if(res!=sessions_.end()){
+                usernames.push_back(res->second.username_);
+            }
+        }
+        return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"members",usernames}});
+    }
+    return makeErr(req,im::ErrorCode::INTERNAL,"Room members not found");
 
 }
