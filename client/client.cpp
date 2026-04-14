@@ -163,6 +163,43 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
 
     return std::nullopt;
 }
+//尝试parse JSON,按type分类打印摘要，失败则原样输出
+void printPretty(const std::string& payload){
+    try{
+        auto json=nlohmann::json::parse(payload);
+        if(!json.contains("type")||!json["type"].is_number()){
+            std::cout<<payload<<std::endl;
+            return;
+        }
+        int typeInt=json["type"].get<int>();
+        auto typeOpt=im::msgTypeFromInt(typeInt);
+        if(!typeOpt.has_value()){
+            std::cout<<payload<<std::endl;
+            return;
+        }
+        im::MsgType type=typeOpt.value();
+        switch(type){
+            case im::MsgType::AUTH_RESP:
+                std::cout<<"AUTH_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            case im::MsgType::DM_PUSH:
+                std::cout<<"[DM] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
+                break;
+            case im::MsgType::ROOM_MSG_PUSH:
+                std::cout<<"[Room: "<<json["data"]["room"].get<std::string>()<<"] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
+                break;
+            case im::MsgType::ROOM_EVENT_PUSH:
+                std::cout<<"[ROOM EVENT] "<<json["data"]["user"].get<std::string>()<<" "<<json["data"]["event"].get<std::string>()<<" "<<json["data"]["room"].get<std::string>()<<std::endl;
+            default:
+                std::cout<<payload<<std::endl;
+                break;
+        }
+    }catch(const std::exception& e){
+        std::cerr<<"Failed to parse JSON: "<<e.what()<<std::endl;
+        std::cout<<payload<<std::endl;
+    }
+}
+
 static bool sendAllFramed(int fd, const std::string& payload) {
     if (payload.size() > kMaxFrameLen) {
         std::cerr << "payload too large: " << payload.size() << " > " << kMaxFrameLen << "\n";

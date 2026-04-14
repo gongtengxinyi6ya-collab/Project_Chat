@@ -30,6 +30,7 @@ public:
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
     Session& getOrCreateSession(ConnKey key);//不存在则创建,保证每个连接都有Session
     std::optional<im::Response> guarddAuthed(const im::Request& req,const Session& session);//统一门禁
+
     void cleanupUserConn(ConnKey key,const Session& session);
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
@@ -48,6 +49,7 @@ private:
     void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
     //房间接口
     void removeFromRoom(ConnKey,Session& session);//退房清理（断连/换房/leave)
+    void broadcastToRoom(const std::string&,ConnKey,const im::Response&push);//对房间内其他成员推送事件；
     im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入房间
     im::Response handleLeave(const im::Request&,ConnKey,Session&);//退出房间
     im::Response handleRoomMsg(const im::Request&,ConnKey,Session&);//提交房间消息

@@ -37,11 +37,18 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
                 resp=handleListUsers(*req_ptr,key,session);
                 break;
             case im::MsgType::JOIN_REQ:
+            {
                 resp=handleJoin(*req_ptr,key,session);
+                im::Response event=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_}});
+                broadcastToRoom(req_ptr->body["room"].get<std::string>(),key,event);
                 break;
-            case im::MsgType::LEAVE_REQ:
+            }
+            case im::MsgType::LEAVE_REQ:{
                 resp=handleLeave(*req_ptr,key,session);
+                im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_}});
+                broadcastToRoom(req_ptr->body["room"].get<std::string>(),key,leaveEvent);
                 break;
+            }
             case im::MsgType::ROOM_MSG_REQ:
                 resp=handleRoomMsg(*req_ptr,key,session);
                 break;
@@ -102,7 +109,7 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
 }
 
 std::optional<im::Response> im::Imservice::guarddAuthed(const im::Request& req,const Session& session){
-    if(session.state_!=im::ConnState::Authed||session.state_!=im::ConnState::InRoom){
+    if(session.state_!=im::ConnState::Authed&&session.state_!=im::ConnState::InRoom){
         return makeErr(req,im::ErrorCode::NOT_AUTHED,"Unauthorized: Please authenticate first");
     }
     return std::nullopt;
@@ -116,6 +123,7 @@ void im::Imservice::cleanupUserConn(ConnKey key,const Session &session){
         }
     }
 }
+
 im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session& session){
     auto err=guarddAuthed(req,session);
     if(err.has_value()){
@@ -187,7 +195,17 @@ void im::Imservice::removeFromRoom(ConnKey key,Session& session){
         session.state_=im::ConnState::Authed;
     }
 }
-
+void im::Imservice::broadcastToRoom(const std::string& room,ConnKey key,const im::Response& push){
+    auto keys=roomMembers_.find(room);
+    std::string pushptr=encodeResponse(push);
+    if(keys!=roomMembers_.end()){
+        for(auto& it:keys->second){
+            if(it!=key){
+                sendToConnKey_(it,pushptr);
+            }
+        }
+    }
+}
 im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Session& session){
     auto err=guarddAuthed(req,session);
     if(err.has_value()){
