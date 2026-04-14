@@ -12,5 +12,5 @@ public:
 private:
     std::unordered_map<std::string,std::unordered_set<ConnKey>> roomMembers_;
 
-}
+};
 }
