@@ -29,7 +29,8 @@ public:
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
     Session& getOrCreateSession(ConnKey key);//不存在则创建,保证每个连接都有Session
-    std::optional<im::Response> guarddAuthed(const im::Request& req,const Session& session);//统一门禁
+    std::optional<Response> guardAuthenticated(const Request& ,const Session&);//登录门禁
+    std::optional<Response> guardInRoom(const Request&,const Session&);//房间门禁
 
     void cleanupUserConn(ConnKey key,const Session& session);
 private:
@@ -48,6 +49,7 @@ private:
     uint64_t nowMs() const;//获取当前时间戳
     void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
     //房间接口
+    
     void removeFromRoom(ConnKey,Session& session);//退房清理（断连/换房/leave)
     void broadcastToRoom(const std::string&,ConnKey,const im::Response&push);//对房间内其他成员推送事件；
     im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入房间

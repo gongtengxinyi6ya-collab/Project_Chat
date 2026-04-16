@@ -40,13 +40,13 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             {
                 resp=handleJoin(*req_ptr,key,session);
                 im::Response event=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_}});
-                broadcastToRoom(req_ptr->body["room"].get<std::string>(),key,event);
+                broadcastToRoom(session.room_,key,event);
                 break;
             }
             case im::MsgType::LEAVE_REQ:{
                 resp=handleLeave(*req_ptr,key,session);
                 im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_}});
-                broadcastToRoom(req_ptr->body["room"].get<std::string>(),key,leaveEvent);
+                broadcastToRoom(session.room_,key,leaveEvent);
                 break;
             }
             case im::MsgType::ROOM_MSG_REQ:
@@ -108,11 +108,17 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
     return makeOk(req,im::MsgType::AUTH_RESP);
 }
 
-std::optional<im::Response> im::Imservice::guarddAuthed(const im::Request& req,const Session& session){
-    if(session.state_!=im::ConnState::Authed&&session.state_!=im::ConnState::InRoom){
-        return makeErr(req,im::ErrorCode::NOT_AUTHED,"Unauthorized: Please authenticate first");
+std::optional<im::Response> im::Imservice::guardAuthenticated(const Request& req,const Session& session){
+    if(session.state_==im::ConnState::Authed||session.state_==im::ConnState::InRoom){
+        return std::nullopt;
     }
-    return std::nullopt;
+    return makeErr(req,im::ErrorCode::NOT_AUTHED,"Unauthed, please authenticate first");
+}
+std::optional<im::Response> im::Imservice::guardInRoom(const Request& req,const Session& session){
+    if(session.state_==im::ConnState::InRoom){
+        return std::nullopt;
+    }
+    return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room,please join the room first");
 }
 void im::Imservice::cleanupUserConn(ConnKey key,const Session &session){
     
@@ -125,7 +131,7 @@ void im::Imservice::cleanupUserConn(ConnKey key,const Session &session){
 }
 
 im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session& session){
-    auto err=guarddAuthed(req,session);
+    auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
@@ -156,7 +162,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
 }
 
 im::Response im::Imservice::handleListUsers(const im::Request& req,ConnKey key,Session& session){
-    auto err=guarddAuthed(req,session);
+    auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
@@ -168,7 +174,7 @@ im::Response im::Imservice::handleListUsers(const im::Request& req,ConnKey key,S
 }
 
 im::Response im::Imservice::handleEcho(const im::Request& req,ConnKey key,Session& session){
-    auto err=guarddAuthed(req,session);
+    auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
@@ -188,7 +194,7 @@ void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> clientRe
 //房间接口
 void im::Imservice::removeFromRoom(ConnKey key,Session& session){
     if(!session.room_.empty()){
-        roomManager_.leave(session.room_,key);
+        roomManager_.removeKeyEverywhere(key,session.room_);
         session.room_.clear();
         session.state_=im::ConnState::Authed;
     }
@@ -203,8 +209,9 @@ void im::Imservice::broadcastToRoom(const std::string& room,ConnKey key,const im
         }
    
 }
+
 im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Session& session){
-    auto err=guarddAuthed(req,session);
+        auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
@@ -229,7 +236,7 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
 }
 
 im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Session& session){
-    auto err=guarddAuthed(req,session);
+    auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
@@ -240,8 +247,9 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     return makeOk(req,im::MsgType::LEAVE_RESP);
 }
 im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Session& session){
-    if(session.state_!=im::ConnState::InRoom){
-        return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"You must join a room to send messages");
+    auto err=guardInRoom(req,session);
+    if(err.has_value()){
+        return err.value();
     }
     if(!req.body.contains("content")||!req.body["content"].is_string()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
@@ -263,7 +271,7 @@ im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Se
 
 }
 im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key,Session& session){
-    auto err=guarddAuthed(req,session);
+    auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
