@@ -188,23 +188,20 @@ void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> clientRe
 //房间接口
 void im::Imservice::removeFromRoom(ConnKey key,Session& session){
     if(!session.room_.empty()){
-        roomMembers_[session.room_].erase(key);
-        if(roomMembers_[session.room_].empty())
-            roomMembers_.erase(session.room_);
+        roomManager_.leave(session.room_,key);
         session.room_.clear();
         session.state_=im::ConnState::Authed;
     }
 }
 void im::Imservice::broadcastToRoom(const std::string& room,ConnKey key,const im::Response& push){
-    auto keys=roomMembers_.find(room);
+    auto keys=roomManager_.members(room);
     std::string pushptr=encodeResponse(push);
-    if(keys!=roomMembers_.end()){
-        for(auto& it:keys->second){
+        for(auto& it:keys){
             if(it!=key){
                 sendToConnKey_(it,pushptr);
             }
         }
-    }
+   
 }
 im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Session& session){
     auto err=guarddAuthed(req,session);
@@ -224,7 +221,7 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     if(session.state_==im::ConnState::InRoom&&session.room_!=room){
         removeFromRoom(key,session);
     }
-    roomMembers_[room].insert(key);
+    roomManager_.join(room,key);
     session.room_=room;
     session.state_=im::ConnState::InRoom;
     return makeOk(req,im::MsgType::JOIN_RESP);
@@ -254,7 +251,7 @@ im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Se
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::ROOM_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"room",room},{"content",content}}};
     decorate(pushMsg,req.req_id);
     std::string pushStr=im::encodeResponse(pushMsg);
-    auto& members=roomMembers_[room];
+    auto members=roomManager_.members(room);
     int fanout=0;
     for(const ConnKey& memberKey:members){
         if(memberKey!=key){
@@ -271,17 +268,16 @@ im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key
         return err.value();
     }
     std::string room=session.room_;
-    auto keys=roomMembers_.find(room);
-    if(keys!=roomMembers_.end()){
-        std::vector<std::string> usernames;
-        for(const auto& it:keys->second){
-            auto res=sessions_.find(it);
-            if(res!=sessions_.end()){
-                usernames.push_back(res->second.username_);
+    auto keys=roomManager_.members(room);
+    std::vector<std::string> usernames;
+    for(const auto& it:keys){
+        auto res=sessions_.find(it);
+        if(res!=sessions_.end()){
+            usernames.push_back(res->second.username_);
             }
         }
-        return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"members",usernames}});
-    }
+    return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"members",usernames}});
+    
     return makeErr(req,im::ErrorCode::INTERNAL,"Room members not found");
 
 }

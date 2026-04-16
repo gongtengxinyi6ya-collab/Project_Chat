@@ -13,7 +13,7 @@
 #include "im/Session.h"
 #include "im/ImMessage.h"
 #include "im/ImCodec.h"
-
+#include "im/RoomManager.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -39,7 +39,7 @@ private:
     std::unordered_map<std::string,ConnKey> userConnMap_;//用户id到连接的映射，私聊定位
     uint64_t nextMsgId_{1};//全局递增消息id，用于推送消息唯一标识
 
-    std::unordered_map<std::string,std::unordered_set<ConnKey>> roomMembers_;//房间成员表
+    RoomManager roomManager_;//房间管理
 
     im::Response handleEcho(const im::Request& req,ConnKey key,Session& session);//回显
     im::Response handleAuth(const im::Request& req,ConnKey key,Session& session);//登录，把session状态改为Authed,绑定身份
