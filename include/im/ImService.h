@@ -48,6 +48,8 @@ private:
     im::Response handleListUsers(const im::Request& req,ConnKey key,Session& session);//在线用户名列表
     uint64_t nowMs() const;//获取当前时间戳
     void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
+    std::optional<std::string> usernameByKey(ConnKey key) const;//把connKey映射为username
+
     //房间接口
     
     void removeFromRoom(ConnKey,Session& session);//退房清理（断连/换房/leave)

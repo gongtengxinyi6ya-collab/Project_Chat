@@ -59,3 +59,15 @@ void im::RoomManager::removeKeyEverywhere(ConnKey key,std::optional<std::string>
         }
     }
 }
+
+bool im::RoomManager::hasRoom(const std::string& room)const{
+    auto it=roomMembers_.find(room);
+    return it!=roomMembers_.end();
+}
+bool im::RoomManager::isMember(const std::string& room,ConnKey key)const{
+    auto it=roomMembers_.find(room);
+    if(it!=roomMembers_.end()){
+        return it->second.find(key)!=it->second.end();
+    }
+    return false;
+}

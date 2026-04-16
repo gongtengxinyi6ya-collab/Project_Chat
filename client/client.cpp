@@ -253,7 +253,7 @@ static void recvLoop(int fd, std::atomic<bool>& running) {
                     }
                     continue;
                 }
-                std::cout << payload << std::endl;
+                printPretty(payload);
             }
             continue;
         }

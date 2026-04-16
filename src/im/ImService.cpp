@@ -39,14 +39,17 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             case im::MsgType::JOIN_REQ:
             {
                 resp=handleJoin(*req_ptr,key,session);
+                if(resp.ok){
                 im::Response event=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_}});
                 broadcastToRoom(session.room_,key,event);
+                }
                 break;
             }
             case im::MsgType::LEAVE_REQ:{
                 resp=handleLeave(*req_ptr,key,session);
+                std::string oldRoom=session.room_;
                 im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_}});
-                broadcastToRoom(session.room_,key,leaveEvent);
+                broadcastToRoom(oldRoom,key,leaveEvent);
                 break;
             }
             case im::MsgType::ROOM_MSG_REQ:
@@ -260,32 +263,43 @@ im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Se
     decorate(pushMsg,req.req_id);
     std::string pushStr=im::encodeResponse(pushMsg);
     auto members=roomManager_.members(room);
-    int fanout=0;
+    size_t fanout=0;
+    if(members.size()>0){
+        fanout=members.size()-1;
+    }
     for(const ConnKey& memberKey:members){
         if(memberKey!=key){
             sendToConnKey_(memberKey,pushStr);
-            fanout++;
         }
     }
     return makeOk(req,im::MsgType::ROOM_MSG_RESP,nlohmann::json{{"room",room},{"delivered_to",fanout}});
 
 }
 im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key,Session& session){
-    auto err=guardAuthenticated(req,session);
+    auto err=guardInRoom(req,session);
     if(err.has_value()){
         return err.value();
     }
     std::string room=session.room_;
     auto keys=roomManager_.members(room);
-    std::vector<std::string> usernames;
-    for(const auto& it:keys){
-        auto res=sessions_.find(it);
-        if(res!=sessions_.end()){
-            usernames.push_back(res->second.username_);
+    if(keys.size()>0){
+        std::vector<std::string> usernames;
+        for(const auto& it:keys){
+            auto name=usernameByKey(it);
+            if(name.has_value()){
+                usernames.push_back(name.value());
             }
         }
-    return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"members",usernames}});
-    
+        return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"cout",keys.size()},{"members",usernames}});
+    }
     return makeErr(req,im::ErrorCode::INTERNAL,"Room members not found");
 
+}
+
+std::optional<std::string> im::Imservice::usernameByKey(ConnKey key)const{
+    auto it=sessions_.find(key);
+    if(it!=sessions_.end()&&!it->second.username_.empty()){
+        return it->second.username_;
+    }
+    return std::nullopt;
 }
