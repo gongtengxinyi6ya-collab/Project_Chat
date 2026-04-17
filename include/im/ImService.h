@@ -14,6 +14,7 @@
 #include "im/ImMessage.h"
 #include "im/ImCodec.h"
 #include "im/RoomManager.h"
+#include "im/SessionManager.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -28,16 +29,14 @@ public:
     void setSendToConnKey(SendToConnKeyFn fn);
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
-    Session& getOrCreateSession(ConnKey key);//不存在则创建,保证每个连接都有Session
+
     std::optional<Response> guardAuthenticated(const Request& ,const Session&);//登录门禁
     std::optional<Response> guardInRoom(const Request&,const Session&);//房间门禁
 
-    void cleanupUserConn(ConnKey key,const Session& session);
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
     SendToConnKeyFn sendToConnKey_;
-    std::unordered_map<ConnKey,Session> sessions_;//每条连接一份状态
-    std::unordered_map<std::string,ConnKey> userConnMap_;//用户id到连接的映射，私聊定位
+    SessionManager sessionManager_;
     uint64_t nextMsgId_{1};//全局递增消息id，用于推送消息唯一标识
 
     RoomManager roomManager_;//房间管理

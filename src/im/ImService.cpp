@@ -9,7 +9,7 @@ void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
 }
 void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const std::string &payload){
     ConnKey key=conn->fd();
-    auto &session=getOrCreateSession(key);
+    auto &session=sessionManager_.getOrCreate(key);
     auto req_or_resp=im::tryParse(payload);
     if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
         //请求解析失败，直接返回错误响应
@@ -40,15 +40,15 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             {
                 resp=handleJoin(*req_ptr,key,session);
                 if(resp.ok){
-                im::Response event=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_}});
+                im::Response event=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"room",session.room_}});
                 broadcastToRoom(session.room_,key,event);
                 }
                 break;
             }
             case im::MsgType::LEAVE_REQ:{
-                resp=handleLeave(*req_ptr,key,session);
                 std::string oldRoom=session.room_;
-                im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_}});
+                resp=handleLeave(*req_ptr,key,session);
+                im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"room",session.room_}});
                 broadcastToRoom(oldRoom,key,leaveEvent);
                 break;
             }
@@ -62,32 +62,21 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
         decorate(resp,req_ptr->req_id);
         std::string resp_str=im::encodeResponse(resp);
         if(sendToConnKey_ ){
-        sendToConnKey_(key,resp_str);
+            sendToConnKey_(key,resp_str);
         }
     }
 
 }
 void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     ConnKey key=conn->fd();
-    auto it=sessions_.find(key);
-    if(it!=sessions_.end()){
-        cleanupUserConn(key,it->second);
-        removeFromRoom(key,it->second);
-    }
-    sessions_.erase(key);
+    auto it=sessionManager_.find(key);
+    removeFromRoom(key,*it);
+    sessionManager_.unbindUser(key);
+    sessionManager_.erase(key);
 
 }
 
-im::Session& im::Imservice::getOrCreateSession(ConnKey key){
-    auto it=sessions_.find(key);
-    if(it!=sessions_.end()){
-        return it->second;
-    }
-    //不存在则创建
-    Session session;
-    sessions_[key]=session;
-    return sessions_[key];
-}
+
 im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& session){
     if(!req.body.contains("user")){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing username field");
@@ -102,12 +91,10 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
     if(session.state_==im::ConnState::Authed&&session.username_!=username){
         return makeErr(req,im::ErrorCode::USER_EXISTS,"User already authenticated with a different username");
     }
-    if(userConnMap_.count(username)&&userConnMap_[username]!=key){
-        return makeErr(req,im::ErrorCode::USER_EXISTS,"Username already in use");
+    
+    if(!sessionManager_.bindUser(key,username)){
+        return makeErr(req,im::ErrorCode::USER_EXISTS,"User already exist");
     }
-    session.state_=im::ConnState::Authed;
-    session.username_=username;
-    userConnMap_[username]=key;
     return makeOk(req,im::MsgType::AUTH_RESP);
 }
 
@@ -123,15 +110,7 @@ std::optional<im::Response> im::Imservice::guardInRoom(const Request& req,const 
     }
     return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room,please join the room first");
 }
-void im::Imservice::cleanupUserConn(ConnKey key,const Session &session){
-    
-    if(!session.username_.empty()){
-        auto it=userConnMap_.find(session.username_);
-        if(it!=userConnMap_.end()&&it->second==key){
-            userConnMap_.erase(session.username_);
-        }
-    }
-}
+
 
 im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
@@ -143,11 +122,11 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
     }
-    auto it=userConnMap_.find(req.to);
-    if(it==userConnMap_.end()){
+    auto it=sessionManager_.connKeyByUser(req.to);
+    if(!it.has_value()){
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"Recipient user does not exist");
     }
-    ConnKey targetKey=it->second;
+    ConnKey targetKey=it.value();
     //取文本
     if(!req.body.contains("content")||!req.body["content"].is_string()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
@@ -169,10 +148,7 @@ im::Response im::Imservice::handleListUsers(const im::Request& req,ConnKey key,S
     if(err.has_value()){
         return err.value();
     }
-    std::vector<std::string> users;
-    for(const auto& pair:userConnMap_){
-        users.push_back(pair.first);
-    }
+    const std::vector<std::string>& users=sessionManager_.onLineUsers();
     return makeOk(req,im::MsgType::LIST_USERS_RESP,nlohmann::json{{"users",users}});
 }
 
@@ -272,7 +248,7 @@ im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Se
             sendToConnKey_(memberKey,pushStr);
         }
     }
-    return makeOk(req,im::MsgType::ROOM_MSG_RESP,nlohmann::json{{"room",room},{"delivered_to",fanout}});
+    return makeOk(req,im::MsgType::ROOM_MSG_RESP,nlohmann::json{{"room",room},{"fanout",fanout}});
 
 }
 im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key,Session& session){
@@ -297,9 +273,9 @@ im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key
 }
 
 std::optional<std::string> im::Imservice::usernameByKey(ConnKey key)const{
-    auto it=sessions_.find(key);
-    if(it!=sessions_.end()&&!it->second.username_.empty()){
-        return it->second.username_;
+    auto it=sessionManager_.find(key);
+    if(it&&!it->username_.empty()){
+        return it->username_;
     }
     return std::nullopt;
 }
