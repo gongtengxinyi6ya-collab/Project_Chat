@@ -48,7 +48,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             case im::MsgType::LEAVE_REQ:{
                 std::string oldRoom=session.room_;
                 resp=handleLeave(*req_ptr,key,session);
-                im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"room",session.room_}});
+                im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"room",oldRoom}});
                 broadcastToRoom(oldRoom,key,leaveEvent);
                 break;
             }
@@ -69,11 +69,11 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
 }
 void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     ConnKey key=conn->fd();
-    auto it=sessionManager_.find(key);
-    removeFromRoom(key,*it);
-    sessionManager_.unbindUser(key);
-    sessionManager_.erase(key);
-
+    if(auto it=sessionManager_.find(key)){
+        removeFromRoom(key,*it);
+        sessionManager_.unbindUser(key);
+        sessionManager_.erase(key);
+    }
 }
 
 
@@ -134,9 +134,8 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
     std::string content=req.body["content"].get<std::string>();
     //构造推送消息
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"from",session.username_},{"to",req.to},{"content",content}}};
-    decorate(pushMsg,req.req_id);
-    std::string pushStr=im::encodeResponse(pushMsg);
-    if(!sendToConnKey_(targetKey,pushStr)){
+    
+    if(!sendPush(targetKey,pushMsg,req.req_id)){
         return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"to","..."},{"delivered",false}});
     }
     return makeOk(req,im::MsgType::DM_RESP);
@@ -169,6 +168,17 @@ void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> clientRe
         resp.data["client_req_id"]=*clientReqId;
     }
 }
+bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t> clientReqid){
+    push.req_id=0;
+    decorate(push,clientReqid);
+    auto payload=encodeResponse(push);
+    if(sendToConnKey_){
+        sendToConnKey_(target,payload);
+        return true;
+    }
+    return false;
+}
+
 
 //房间接口
 void im::Imservice::removeFromRoom(ConnKey key,Session& session){
@@ -180,10 +190,9 @@ void im::Imservice::removeFromRoom(ConnKey key,Session& session){
 }
 void im::Imservice::broadcastToRoom(const std::string& room,ConnKey key,const im::Response& push){
     auto keys=roomManager_.members(room);
-    std::string pushptr=encodeResponse(push);
         for(auto& it:keys){
             if(it!=key){
-                sendToConnKey_(it,pushptr);
+                sendPush(it,push);
             }
         }
    
