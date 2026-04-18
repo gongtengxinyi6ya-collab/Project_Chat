@@ -120,7 +120,7 @@ std::string im::Imservice::resolveRoomOrActive(const Request& req,const Session&
     if(!session.activeRoom_.empty()){
         return session.activeRoom_;
     }
-    return nullptr;
+    return "";
 }
 
 im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session& session){
@@ -183,8 +183,7 @@ bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t
     push.req_id=0;
     decorate(push,clientReqid);
     auto payload=encodeResponse(push);
-    if(sendToConnKey_){
-        sendToConnKey_(target,payload);
+    if(sendToConnKey_&&sendToConnKey_(target,payload)){
         return true;
     }
     return false;
@@ -194,7 +193,7 @@ bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t
 //房间接口
 void im::Imservice::removeFromRoom(ConnKey key,Session& session){
     if(!session.activeRoom_.empty()){
-        roomManager_.removeKeyEverywhere(key);
+        roomManager_.leave(session.activeRoom_,key);
         session.rooms_.erase(session.activeRoom_);
         session.activeRoom_.clear();
         
@@ -231,7 +230,7 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     roomManager_.join(room,key);
     session.rooms_.insert(room);
     session.activeRoom_=room;
-    return makeOk(req,im::MsgType::JOIN_RESP);
+    return makeOk(req,im::MsgType::JOIN_RESP,nlohmann::json{{"room",room},{"active_room",session.activeRoom_}});
 
 }
 
@@ -249,7 +248,7 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     }
     removeFromRoom(key,session);
 
-    return makeOk(req,im::MsgType::LEAVE_RESP);
+    return makeOk(req,im::MsgType::LEAVE_RESP,nlohmann::json{{"room",room},{"active_room",session.activeRoom_}});
 }
 im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Session& session){
     auto err=guardInRoom(req,session);
@@ -260,7 +259,7 @@ im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Se
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
     }
     std::string content=req.body["content"].get<std::string>();
-    std::string room=session.activeRoom_;
+    std::string room=resolveRoomOrActive(req,session,"room");
     if(!room.empty()&&!session.rooms_.count(room)){
         return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room");
     }
@@ -285,7 +284,7 @@ im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key
     if(err.has_value()){
         return err.value();
     }
-    std::string room=session.activeRoom_;
+    std::string room=resolveRoomOrActive(req,session,"room");
     if(!room.empty()&&!session.rooms_.count(room)){
         return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room");
     }

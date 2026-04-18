@@ -79,7 +79,7 @@ public:
         body["room"]=room;
         return body.dump();
     }
-    std::string buildLeaveReq(ClientState& state){
+    std::string buildLeaveReq(ClientState& state,std::optional<std::string> room){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::LEAVE_REQ);
@@ -87,9 +87,12 @@ public:
         body["from"]=state.username;
         body["to"]="";
         body["seq"]=state.allocSeq();
+        if(room.has_value()){
+            body["room"]=room.value();
+        }
         return body.dump();
     }
-    std::string buildRoomMsgReq(ClientState& state,std::string content){
+    std::string buildRoomMsgReq(ClientState& state,std::string content,std::optional<std::string> room){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::ROOM_MSG_REQ);
@@ -98,9 +101,12 @@ public:
         body["to"]="";
         body["seq"]=state.allocSeq();
         body["content"]=content;
+        if(room.has_value()){
+            body["room"]=room.value();
+        }
         return body.dump();
     }
-    std::string buildRoomMembers(ClientState& state){
+    std::string buildRoomMembers(ClientState& state,std::optional<std::string> room){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::ROOM_MEMBERS_REQ);
@@ -108,6 +114,9 @@ public:
         body["from"]=state.username;
         body["to"]="";
         body["seq"]=state.allocSeq();
+        if(room.has_value()){
+            body["room"]=room.value();
+        }
         return body.dump();
     }
 };
@@ -151,7 +160,15 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
             std::cerr<<"please authenticate first"<<std::endl;
             return std::nullopt;
         }
-        return builder.buildLeaveReq(state);
+        return builder.buildLeaveReq(state,std::nullopt);
+    }
+    if(line.rfind("/leave ",0)==0){
+        if(state.username.empty()){
+            std::cerr<<"please authenticate first"<<std::endl;
+            return std::nullopt;
+        }
+        std::string room=line.substr(7);
+        return builder.buildLeaveReq(state,room);
     }
     if(line.rfind("/say ",0)==0){
         if(state.username.empty()){
@@ -159,16 +176,37 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
             return std::nullopt;
         }
         std::string content=line.substr(5);
-        return builder.buildRoomMsgReq(state,content);
+        return builder.buildRoomMsgReq(state,content,std::nullopt);
+    }
+    if(line.rfind("/say ",0)==0){
+        if(state.username.empty()){
+            std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
+            return std::nullopt;
+        }
+        size_t firstSpace=line.find(' ',5);
+        if(firstSpace==std::string::npos) return std::nullopt;
+        std::string room=line.substr(5,firstSpace-5);
+        std::string content=line.substr(firstSpace+1);
+        return builder.buildRoomMsgReq(state,content,room);
     }
     if(line=="/members"){
-        return builder.buildRoomMembers(state);
+        return builder.buildRoomMembers(state,std::nullopt);
+    }
+    if(line.rfind("/members ",0)==0){
+        std::string room=line.substr(9);
+        return builder.buildRoomMembers(state,room);
+    }
+    if(line=="/rooms"){
+        std::cout<<"Room Lists: "<<std::endl;
+        for(const auto& room:state.rooms){
+            std::cout<<room<<std::endl;
+        }
     }
 
     return std::nullopt;
 }
 //尝试parse JSON,按type分类打印摘要，失败则原样输出
-void printPretty(const std::string& payload){
+void printPretty(const std::string& payload,ClientState& state){
     try{
         auto json=nlohmann::json::parse(payload);
         if(!json.contains("type")||!json["type"].is_number()){
@@ -201,12 +239,22 @@ void printPretty(const std::string& payload){
                 std::cout<<std::endl;
                 break;
             }
-            case im::MsgType::JOIN_RESP:
+            case im::MsgType::JOIN_RESP:{
                 std::cout<<"JOIN_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                if(json["ok"].get<bool>()){
+                    state.rooms.insert(json["data"]["room"]);
+                    state.activeRoom=json["data"]["active_room"];
+                }
                 break;
-            case im::MsgType::LEAVE_RESP:
+            }
+            case im::MsgType::LEAVE_RESP:{
                 std::cout<<"LEAVE_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                if(json["ok"].get<bool>()){
+                    state.rooms.erase(json["data"]["room"]);
+                    state.activeRoom=json["data"]["active_room"];
+                }
                 break;
+            }
             case im::MsgType::ROOM_MSG_RESP:
                 std::cout<<"ROOM_MSG_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
@@ -257,7 +305,7 @@ static bool sendAllFramed(int fd, const std::string& payload) {
     return true;
 }
 
-static void recvLoop(int fd, std::atomic<bool>& running) {
+static void recvLoop(int fd, std::atomic<bool>& running,ClientState& state) {
     Buffer in;
     char tmp[4096];
 
@@ -286,7 +334,7 @@ static void recvLoop(int fd, std::atomic<bool>& running) {
                     }
                     continue;
                 }
-                printPretty(payload);
+                printPretty(payload,state);
             }
             continue;
         }
@@ -334,11 +382,11 @@ int main(int argc, char** argv) {
     }
     LOG_INFO("Connected to " + std::string(ip) + ":" + std::to_string(port));
 
-    std::atomic<bool> running{true};
-    std::thread reader([&] { recvLoop(fd, running); });
-
     std::string line;
     ClientState state;
+    std::atomic<bool> running{true};
+    std::thread reader([&] { recvLoop(fd, running,state); });
+
     while (running.load() && std::getline(std::cin, line)) {
         if (line == "/quit") break;
         auto payloadOpt = tryParseCommandLine(line, state);
