@@ -178,14 +178,14 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         std::string content=line.substr(5);
         return builder.buildRoomMsgReq(state,content,std::nullopt);
     }
-    if(line.rfind("/say ",0)==0){
+    if(line.rfind("/sayto ",0)==0){
         if(state.username.empty()){
             std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
             return std::nullopt;
         }
-        size_t firstSpace=line.find(' ',5);
+        size_t firstSpace=line.find(' ',7);
         if(firstSpace==std::string::npos) return std::nullopt;
-        std::string room=line.substr(5,firstSpace-5);
+        std::string room=line.substr(7,firstSpace-7);
         std::string content=line.substr(firstSpace+1);
         return builder.buildRoomMsgReq(state,content,room);
     }
@@ -201,6 +201,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         for(const auto& room:state.rooms){
             std::cout<<room<<std::endl;
         }
+        return std::nullopt;
     }
 
     return std::nullopt;
