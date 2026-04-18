@@ -40,13 +40,13 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             {
                 resp=handleJoin(*req_ptr,key,session);
                 if(resp.ok){
-                im::Response event=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"room",session.room_}});
-                broadcastToRoom(session.room_,key,event);
+                im::Response event=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"room",session.activeRoom_}});
+                broadcastToRoom(session.activeRoom_,key,event);
                 }
                 break;
             }
             case im::MsgType::LEAVE_REQ:{
-                std::string oldRoom=session.room_;
+                std::string oldRoom=session.activeRoom_;
                 resp=handleLeave(*req_ptr,key,session);
                 im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"room",oldRoom}});
                 broadcastToRoom(oldRoom,key,leaveEvent);
@@ -102,18 +102,26 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
 }
 
 std::optional<im::Response> im::Imservice::guardAuthenticated(const Request& req,const Session& session){
-    if(session.state_==im::ConnState::Authed||session.state_==im::ConnState::InRoom){
+    if(session.state_==im::ConnState::Authed){
         return std::nullopt;
     }
     return makeErr(req,im::ErrorCode::NOT_AUTHED,"Unauthed, please authenticate first");
 }
 std::optional<im::Response> im::Imservice::guardInRoom(const Request& req,const Session& session){
-    if(session.state_==im::ConnState::InRoom){
+    if(!session.activeRoom_.empty()){
         return std::nullopt;
     }
     return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room,please join the room first");
 }
-
+std::string im::Imservice::resolveRoomOrActive(const Request& req,const Session& session,const char* fieldName){
+    if(req.body.contains(fieldName)&&req.body[fieldName].is_string()){
+        return req.body[fieldName];
+    }
+    if(!session.activeRoom_.empty()){
+        return session.activeRoom_;
+    }
+    return nullptr;
+}
 
 im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
@@ -185,10 +193,11 @@ bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t
 
 //房间接口
 void im::Imservice::removeFromRoom(ConnKey key,Session& session){
-    if(!session.room_.empty()){
-        roomManager_.removeKeyEverywhere(key,session.room_);
-        session.room_.clear();
-        session.state_=im::ConnState::Authed;
+    if(!session.activeRoom_.empty()){
+        roomManager_.removeKeyEverywhere(key);
+        session.rooms_.erase(session.activeRoom_);
+        session.activeRoom_.clear();
+        
     }
 }
 void im::Imservice::broadcastToRoom(const std::string& room,ConnKey key,const im::Response& push){
@@ -202,7 +211,7 @@ void im::Imservice::broadcastToRoom(const std::string& room,ConnKey key,const im
 }
 
 im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Session& session){
-        auto err=guardAuthenticated(req,session);
+    auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
@@ -213,15 +222,15 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     if(room.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Room name cannot be empty");
     }
-    if(session.state_==im::ConnState::InRoom&&session.room_==room){
+    if(!session.activeRoom_.empty()&&session.activeRoom_==room){
         return makeOk(req,im::MsgType::JOIN_RESP);
     }
-    if(session.state_==im::ConnState::InRoom&&session.room_!=room){
+    if(!session.activeRoom_.empty()&&session.activeRoom_!=room){
         removeFromRoom(key,session);
     }
     roomManager_.join(room,key);
-    session.room_=room;
-    session.state_=im::ConnState::InRoom;
+    session.rooms_.insert(room);
+    session.activeRoom_=room;
     return makeOk(req,im::MsgType::JOIN_RESP);
 
 }
@@ -231,10 +240,15 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     if(err.has_value()){
         return err.value();
     }
-    if(session.state_!=im::ConnState::InRoom){
+    std::string room=resolveRoomOrActive(req,session,"room");
+    if(room.empty()){
+        return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in the room");
+    }
+    if(session.activeRoom_!=room){
         return makeOk(req,im::MsgType::LEAVE_RESP);
     }
     removeFromRoom(key,session);
+
     return makeOk(req,im::MsgType::LEAVE_RESP);
 }
 im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Session& session){
@@ -246,7 +260,10 @@ im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Se
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
     }
     std::string content=req.body["content"].get<std::string>();
-    std::string room=session.room_;
+    std::string room=session.activeRoom_;
+    if(!room.empty()&&!session.rooms_.count(room)){
+        return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room");
+    }
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::ROOM_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"room",room},{"content",content}}};
     decorate(pushMsg,req.req_id);
     std::string pushStr=im::encodeResponse(pushMsg);
@@ -268,7 +285,10 @@ im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key
     if(err.has_value()){
         return err.value();
     }
-    std::string room=session.room_;
+    std::string room=session.activeRoom_;
+    if(!room.empty()&&!session.rooms_.count(room)){
+        return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room");
+    }
     auto keys=roomManager_.members(room);
     if(keys.size()>0){
         std::vector<std::string> usernames;

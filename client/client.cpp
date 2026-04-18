@@ -14,11 +14,15 @@
 #include <string>
 #include <optional>
 #include <thread>
+#include <unordered_set>
+
 #include "LogMacros.h"
 #include "im/ImMessage.h"
 #include "third_party/json.hpp"
 struct ClientState{
     std::string username;
+    std::unordered_set<std::string> rooms;
+    std::string activeRoom;
     uint64_t nextReqId{1};
     uint64_t nextSeq{1};
 
@@ -210,7 +214,7 @@ void printPretty(const std::string& payload){
                 std::cout<<"[Room: "<<json["data"]["room"].get<std::string>()<<"] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
                 break;
             case im::MsgType::ROOM_MEMBERS_RESP:{
-                std::cout<<"Room members ("<<json["data"]["cout"]<<" members in total) :"<<std::endl;
+                std::cout<<"Room members ("<<json["data"]["count"]<<" members in total) :"<<std::endl;
                 for(const auto& member:json["data"]["members"]){
                     std::cout<<member.get<std::string>()<<" ";
                 }
