@@ -7,7 +7,7 @@ im::Session& im::SessionManager::getOrCreate(ConnKey key){
     }
     Session session;
     sessions_[key]=session;
-    return session;
+    return sessions_[key];
 }
 const im::Session* im::SessionManager::find(ConnKey key)const{
     auto it=sessions_.find(key);

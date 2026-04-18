@@ -55,6 +55,9 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             case im::MsgType::ROOM_MSG_REQ:
                 resp=handleRoomMsg(*req_ptr,key,session);
                 break;
+            case im::MsgType::ROOM_MEMBERS_REQ:
+                resp=handleRoomMembers(*req_ptr,key,session);
+                break;
             default:
                 resp=im::makeErr(*req_ptr,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
                 break;

@@ -185,11 +185,40 @@ void printPretty(const std::string& payload){
             case im::MsgType::DM_PUSH:
                 std::cout<<"[DM] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
                 break;
+            case im::MsgType::DM_RESP:
+                std::cout<<"DM_RESP: "<<(json["ok"].get<bool>()?"delivered":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            case im::MsgType::LIST_USERS_RESP:
+            {
+                std::cout<<"Online users: ";
+                for(const auto& user:json["data"]["users"]){
+                    std::cout<<user.get<std::string>()<<" ";
+                }
+                std::cout<<std::endl;
+                break;
+            }
+            case im::MsgType::JOIN_RESP:
+                std::cout<<"JOIN_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            case im::MsgType::LEAVE_RESP:
+                std::cout<<"LEAVE_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            case im::MsgType::ROOM_MSG_RESP:
+                std::cout<<"ROOM_MSG_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
             case im::MsgType::ROOM_MSG_PUSH:
                 std::cout<<"[Room: "<<json["data"]["room"].get<std::string>()<<"] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
                 break;
+            case im::MsgType::ROOM_MEMBERS_RESP:{
+                std::cout<<"Room members ("<<json["data"]["cout"]<<" members in total) :"<<std::endl;
+                for(const auto& member:json["data"]["members"]){
+                    std::cout<<member.get<std::string>()<<" ";
+                }
+                break;
+            }
             case im::MsgType::ROOM_EVENT_PUSH:
                 std::cout<<"[ROOM EVENT] "<<json["data"]["user"].get<std::string>()<<" "<<json["data"]["event"].get<std::string>()<<" "<<json["data"]["room"].get<std::string>()<<std::endl;
+                break;
             default:
                 std::cout<<payload<<std::endl;
                 break;
