@@ -73,7 +73,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
 void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     ConnKey key=conn->fd();
     if(auto it=sessionManager_.find(key)){
-        removeFromRoom(key,*it);
+        roomManager_.removeKeyEverywhere(key);
         sessionManager_.unbindUser(key);
         sessionManager_.erase(key);
     }
@@ -195,7 +195,6 @@ void im::Imservice::removeFromRoom(ConnKey key,Session& session){
     if(!session.activeRoom_.empty()){
         roomManager_.leave(session.activeRoom_,key);
         session.rooms_.erase(session.activeRoom_);
-        session.activeRoom_.clear();
         
     }
 }
@@ -225,7 +224,7 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
         return makeOk(req,im::MsgType::JOIN_RESP);
     }
     if(!session.activeRoom_.empty()&&session.activeRoom_!=room){
-        removeFromRoom(key,session);
+        session.activeRoom_=room;
     }
     roomManager_.join(room,key);
     session.rooms_.insert(room);
@@ -240,13 +239,13 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
         return err.value();
     }
     std::string room=resolveRoomOrActive(req,session,"room");
-    if(room.empty()){
+    if(room.empty()||!session.rooms_.count(room)){
         return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in the room");
     }
-    if(session.activeRoom_!=room){
-        return makeOk(req,im::MsgType::LEAVE_RESP);
-    }
     removeFromRoom(key,session);
+    if(session.activeRoom_==room){
+        session.activeRoom_.clear();
+    }
 
     return makeOk(req,im::MsgType::LEAVE_RESP,nlohmann::json{{"room",room},{"active_room",session.activeRoom_}});
 }
@@ -297,9 +296,9 @@ im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key
                 usernames.push_back(name.value());
             }
         }
-        return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"cout",keys.size()},{"members",usernames}});
+        return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"count",keys.size()},{"members",usernames}});
     }
-    return makeErr(req,im::ErrorCode::INTERNAL,"Room members not found");
+    return makeErr(req,im::ErrorCode::OK,"Room members not found");
 
 }
 
