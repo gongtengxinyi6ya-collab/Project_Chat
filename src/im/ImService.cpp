@@ -191,11 +191,13 @@ bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t
 
 
 //房间接口
-void im::Imservice::removeFromRoom(ConnKey key,Session& session){
-    if(!session.activeRoom_.empty()){
-        roomManager_.leave(session.activeRoom_,key);
-        session.rooms_.erase(session.activeRoom_);
-        
+void im::Imservice::removeFromRoom(ConnKey key,Session& session,const std::string& room){
+    if(!room.empty()){
+        roomManager_.leave(room,key);
+        session.rooms_.erase(room);
+        if(room==session.activeRoom_){
+            session.activeRoom_.clear();
+        }
     }
 }
 void im::Imservice::broadcastToRoom(const std::string& room,ConnKey key,const im::Response& push){
@@ -243,11 +245,7 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     if(room.empty()||!session.rooms_.count(room)){
         return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in the room");
     }
-    roomManager_.leave(room,key);
-    session.rooms_.erase(room);
-    if(session.activeRoom_==room){
-        session.activeRoom_.clear();
-    }
+    removeFromRoom(key,session,room);
 
     return makeOk(req,im::MsgType::LEAVE_RESP,nlohmann::json{{"room",room},{"active_room",session.activeRoom_}});
 }
@@ -300,7 +298,7 @@ im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key
         }
         return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"count",keys.size()},{"members",usernames}});
     }
-    return makeErr(req,im::ErrorCode::OK,"Room members not found");
+    return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"count",0},{"members",std::vector<std::string>{}}});
 
 }
 

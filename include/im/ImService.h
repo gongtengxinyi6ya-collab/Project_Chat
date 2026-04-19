@@ -53,7 +53,7 @@ private:
 
     //房间接口
     
-    void removeFromRoom(ConnKey,Session& session);//退房清理（断连/换房/leave)
+    void removeFromRoom(ConnKey,Session& session,const std::string&);//退房清理（断连/换房/leave)
     void broadcastToRoom(const std::string&,ConnKey,const im::Response&push);//对房间内其他成员推送事件；
     im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入房间
     im::Response handleLeave(const im::Request&,ConnKey,Session&);//退出房间
