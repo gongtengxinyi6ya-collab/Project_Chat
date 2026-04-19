@@ -48,8 +48,10 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             case im::MsgType::LEAVE_REQ:{
                 std::string oldRoom=session.activeRoom_;
                 resp=handleLeave(*req_ptr,key,session);
-                im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"room",oldRoom}});
-                broadcastToRoom(oldRoom,key,leaveEvent);
+                if(resp.ok){
+                    im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"room",oldRoom}});
+                    broadcastToRoom(oldRoom,key,leaveEvent);
+                }
                 break;
             }
             case im::MsgType::ROOM_MSG_REQ:
@@ -196,7 +198,12 @@ void im::Imservice::removeFromRoom(ConnKey key,Session& session,const std::strin
         roomManager_.leave(room,key);
         session.rooms_.erase(room);
         if(room==session.activeRoom_){
-            session.activeRoom_.clear();
+            if(!session.rooms_.empty()){
+                session.activeRoom_=*session.rooms_.begin();
+            }
+            else{
+                session.activeRoom_.clear();
+            }
         }
     }
 }
@@ -284,9 +291,7 @@ im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key
         return err.value();
     }
     std::string room=resolveRoomOrActive(req,session,"room");
-    if(!room.empty()&&!session.rooms_.count(room)){
-        return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room");
-    }
+    
     auto keys=roomManager_.members(room);
     if(keys.size()>0){
         std::vector<std::string> usernames;

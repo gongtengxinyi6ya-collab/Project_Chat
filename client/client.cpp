@@ -196,13 +196,6 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         std::string room=line.substr(9);
         return builder.buildRoomMembers(state,room);
     }
-    if(line=="/rooms"){
-        std::cout<<"Room Lists: "<<std::endl;
-        for(const auto& room:state.rooms){
-            std::cout<<room<<std::endl;
-        }
-        return std::nullopt;
-    }
 
     return std::nullopt;
 }
@@ -243,16 +236,20 @@ void printPretty(const std::string& payload,ClientState& state){
             case im::MsgType::JOIN_RESP:{
                 std::cout<<"JOIN_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 if(json["ok"].get<bool>()){
-                    state.rooms.insert(json["data"]["room"]);
-                    state.activeRoom=json["data"]["active_room"];
+                    if(json["data"].contains("room")&&json["data"]["room"].is_string()&&json["data"].contains("active_room")&&json["data"]["active_room"].is_string()){
+                        state.rooms.insert(json["data"]["room"]);
+                        state.activeRoom=json["data"]["active_room"];
+                    }
                 }
                 break;
             }
             case im::MsgType::LEAVE_RESP:{
                 std::cout<<"LEAVE_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 if(json["ok"].get<bool>()){
-                    state.rooms.erase(json["data"]["room"]);
-                    state.activeRoom=json["data"]["active_room"];
+                    if(json["data"].contains("room")&&json["data"]["room"].is_string()&&json["data"].contains("active_room")&&json["data"]["active_room"].is_string()){
+                        state.rooms.erase(json["data"]["room"]);
+                        state.activeRoom=json["data"]["active_room"];
+                    }
                 }
                 break;
             }
@@ -390,6 +387,13 @@ int main(int argc, char** argv) {
 
     while (running.load() && std::getline(std::cin, line)) {
         if (line == "/quit") break;
+        if(line=="/rooms"){
+        std::cout<<"Room Lists: "<<std::endl;
+        for(const auto& room:state.rooms){
+            std::cout<<room<<std::endl;
+        }
+        continue;
+    }
         auto payloadOpt = tryParseCommandLine(line, state);
         if (!payloadOpt) {
             std::cerr << "invalid command\n";
