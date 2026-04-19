@@ -223,8 +223,9 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     if(!session.activeRoom_.empty()&&session.activeRoom_==room){
         return makeOk(req,im::MsgType::JOIN_RESP);
     }
-    if(!session.activeRoom_.empty()&&session.activeRoom_!=room){
+    if(session.rooms_.count(room)){
         session.activeRoom_=room;
+        return makeOk(req,im::MsgType::JOIN_RESP,nlohmann::json{{"room",room},{"active_room",session.activeRoom_}});
     }
     roomManager_.join(room,key);
     session.rooms_.insert(room);
@@ -242,7 +243,8 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     if(room.empty()||!session.rooms_.count(room)){
         return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in the room");
     }
-    removeFromRoom(key,session);
+    roomManager_.leave(room,key);
+    session.rooms_.erase(room);
     if(session.activeRoom_==room){
         session.activeRoom_.clear();
     }
