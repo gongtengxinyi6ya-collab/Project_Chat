@@ -21,7 +21,12 @@ enum class MsgType:uint16_t{
     ROOM_MSG_PUSH,
     ROOM_MEMBERS_REQ,
     ROOM_MEMBERS_RESP,
-    ROOM_EVENT_PUSH,
+    ROOM_EVENT_PUSH,    
+    SWITCH_ROOM_REQ,
+    SWITCH_ROOM_RESP,
+    LIST_ROOMS_REQ,
+    LIST_ROOMS_RESP,
+    
     ERR=255
 };
 //从整数转换为MsgType枚举
