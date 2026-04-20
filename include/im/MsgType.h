@@ -12,21 +12,18 @@ enum class MsgType:uint16_t{
     DM_PUSH=7,//私聊消息推送
     LIST_USERS_REQ=8,//用户列表请求
     LIST_USERS_RESP=9,//用户列表响应
-    JOIN_REQ=10,
-    JOIN_RESP,
-    LEAVE_REQ,
-    LEAVE_RESP,
-    ROOM_MSG_REQ,
-    ROOM_MSG_RESP,
-    ROOM_MSG_PUSH,
-    ROOM_MEMBERS_REQ,
-    ROOM_MEMBERS_RESP,
-    ROOM_EVENT_PUSH,    
-    SWITCH_ROOM_REQ,
-    SWITCH_ROOM_RESP,
-    LIST_ROOMS_REQ,
-    LIST_ROOMS_RESP,
-    
+
+    CREATE_GROUP_REQ,//创建群聊请求
+    CREATE_GROUP_RESP,
+    JOIN_GROUP_REQ,
+    JOIN_GROUP_RESP,
+    LEAVE_GROUP_REQ,
+    LEAVE_GROUP_RESP,
+    GROUP_MEMBERS_REQ,
+    GROUP_MEMBERS_RESP,
+    LIST_GROUPS_REQ,
+    LIST_GROUPS_RESP,
+    GROUP_EVENT_PUSH,
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -51,25 +48,27 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
         case 9:
             return MsgType::LIST_USERS_RESP;
         case 10:
-            return MsgType::JOIN_REQ;
+            return MsgType::CREATE_GROUP_REQ;
         case 11:
-            return MsgType::JOIN_RESP;
+            return MsgType::CREATE_GROUP_RESP;
         case 12:
-            return MsgType::LEAVE_REQ;
+            return MsgType::JOIN_GROUP_REQ;
         case 13:
-            return MsgType::LEAVE_RESP;
+            return MsgType::JOIN_GROUP_RESP;
         case 14:
-            return MsgType::ROOM_MSG_REQ;
+            return MsgType::LEAVE_GROUP_REQ;
         case 15:
-            return MsgType::ROOM_MSG_RESP;
+            return MsgType::LEAVE_GROUP_RESP;
         case 16:
-            return MsgType::ROOM_MSG_PUSH;
+            return MsgType::GROUP_MEMBERS_REQ;
         case 17:
-            return MsgType::ROOM_MEMBERS_REQ;
+            return MsgType::GROUP_MEMBERS_RESP;
         case 18:
-            return MsgType::ROOM_MEMBERS_RESP;
+            return MsgType::LIST_GROUPS_REQ;
         case 19:
-            return MsgType::ROOM_EVENT_PUSH;
+            return MsgType::LEAVE_GROUP_RESP;
+        case 20:
+            return MsgType::GROUP_EVENT_PUSH;
         case 255:
             return MsgType::ERR;
         default:

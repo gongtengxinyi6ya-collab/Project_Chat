@@ -19,6 +19,6 @@ private:
     std::string name_;//群名
     std::string owner_;//群主用户名
     std::unordered_set<std::string> members_;//成员用户名集合
-    u_int64_t createAtMs_;//创建时间戳
+    uint64_t createAtMs_;//创建时间戳
 };
 }

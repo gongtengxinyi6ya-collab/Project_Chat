@@ -15,8 +15,7 @@ enum class ConnState{
 struct Session{
     ConnState state_;
     std::string username_;
-    std::unordered_set<std::string> rooms_;//已经加入的房间集合
-    std::string activeRoom_;//当前房间
+    std::unordered_set<std::string> joinedGroupIds_;//已经加入的群聊集合
 
     
     Session():state_(ConnState::Connected),username_(""){}

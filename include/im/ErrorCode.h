@@ -14,7 +14,10 @@ enum class ErrorCode: uint16_t{
     USER_EXISTS,//用户已存在
     BAD_REQUEST,//字段类型不对
     NO_SUCH_USER,//
-    NOT_IN_ROOM,//不在房间
+    NO_SUCH_GROUP,
+    ALREADY_IN_GROUP,
+    NOT_IN_GROUP,
+    GROUP_NAME_INVALID,
     INTERNAL//服务器内部错误
 
 };
@@ -39,8 +42,14 @@ inline const char* errCodeToString(ErrorCode code){
             return "Request Error";
         case ErrorCode::NO_SUCH_USER:
             return "User do not exist";
-        case ErrorCode::NOT_IN_ROOM:
-            return "User is not in room";
+        case ErrorCode::NO_SUCH_GROUP:
+            return "Group do not exist";
+        case ErrorCode::ALREADY_IN_GROUP:
+            return "User is already in the group";
+        case ErrorCode::NOT_IN_GROUP:
+            return "The user is not in the group";
+        case ErrorCode::GROUP_NAME_INVALID:
+            return "Group name is invalid";
         case ErrorCode::INTERNAL:
             return "Internal Server Error";
         default:

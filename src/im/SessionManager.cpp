@@ -29,30 +29,42 @@ bool im::SessionManager::bindUser(ConnKey key,std::string name){
     }
     sessions_[key].username_=name;
     sessions_[key].state_=im::ConnState::Authed;
-    userConnMap_[name]=key;
+    userConnMap_[name].insert(key);
+    connUserMap_[key]=name;
     return true;
 }
-void im::SessionManager::unbindUser(ConnKey key){
-    auto it=sessions_.find(key);
-    if(it!=sessions_.end()){
-        std::string name=it->second.username_;
-        if(!name.empty()){
-            auto pair=userConnMap_.find(name);
-            if(pair!=userConnMap_.end()&&pair->second==key){
-                userConnMap_.erase(name);
-            }
-        }
+void im::SessionManager::unbindConn(ConnKey key){
+    auto it=connUserMap_.find(key);
+    if(it==connUserMap_.end()){
+        return;
     }
+    userConnMap_[it->second].erase(key);
+    if(userConnMap_[it->second].empty()){
+        userConnMap_.erase(it->second);
+    }
+    connUserMap_.erase(key);
 }
-std::optional<im::SessionManager::ConnKey> im::SessionManager::connKeyByUser(const std::string& user) const{
-    if(user.empty()){
-        return std::nullopt;
-    }
+std::vector<im::SessionManager::ConnKey> im::SessionManager::connKeysByUser(const std::string& user) const{
     auto it=userConnMap_.find(user);
-    if(it==userConnMap_.end()){
+    if(it!=userConnMap_.end()){
+        std::vector<ConnKey> keys;
+        keys.insert(keys.end(),it->second.begin(),it->second.end());
+    }
+    return {};
+}
+std::optional<std::string> im::SessionManager::usernameByConn(ConnKey key)const{
+    auto it=connUserMap_.find(key);
+    if(it==connUserMap_.end()){
         return std::nullopt;
     }
     return it->second;
+}
+bool im::SessionManager::isOnLine(const std::string& username)const{
+    auto it=userConnMap_.find(username);
+    if(it==userConnMap_.end()&&it->second.empty()){
+        return false;
+    }
+    return true;
 }
 std::vector<std::string> im::SessionManager::onLineUsers()const{
     std::vector<std::string> usernames;

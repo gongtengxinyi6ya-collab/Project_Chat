@@ -13,7 +13,8 @@
 #include "im/Session.h"
 #include "im/ImMessage.h"
 #include "im/ImCodec.h"
-#include "im/RoomManager.h"
+#include "im/Group.h"
+#include "im/GroupManager.h"
 #include "im/SessionManager.h"
 class TcpConnection;
 
@@ -31,7 +32,7 @@ public:
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
 
     std::optional<Response> guardAuthenticated(const Request& ,const Session&);//登录门禁
-    std::optional<Response> guardInRoom(const Request&,const Session&);//房间门禁
+    std::optional<Response> guardInGroup(const Request&,const Session&);//房间门禁
 
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
@@ -39,7 +40,7 @@ private:
     SessionManager sessionManager_;
     uint64_t nextMsgId_{1};//全局递增消息id，用于推送消息唯一标识
 
-    RoomManager roomManager_;//房间管理
+    GroupManager groupManager_;//房间管理
 
     im::Response handleEcho(const im::Request& req,ConnKey key,Session& session);//回显
     im::Response handleAuth(const im::Request& req,ConnKey key,Session& session);//登录，把session状态改为Authed,绑定身份
@@ -49,17 +50,17 @@ private:
     void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
     std::optional<std::string> usernameByKey(ConnKey key) const;//把connKey映射为username
     bool sendPush(ConnKey,Response,std::optional<uint64_t> clientReqid=std::nullopt);//统一对push做decorate,encode,sendToConnKey
-    std::string resolveRoomOrActive(const Request&,const Session&,const char* );//解析room参数，优先fieldName,否则activeRoom
+    std::string resolveGroup(const Request&,const Session&,const char* );//解析room参数，优先fieldName,否则activeRoom
 
-    //房间接口
-    
-    void removeFromRoom(ConnKey,Session& session,const std::string&);//退房清理（断连/换房/leave)
-    void broadcastToRoom(const std::string&,ConnKey,const im::Response&push);//对房间内其他成员推送事件；
-    im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入房间
-    im::Response handleLeave(const im::Request&,ConnKey,Session&);//退出房间
-    im::Response handleRoomMsg(const im::Request&,ConnKey,Session&);//提交房间消息
-    im::Response handleRoomMembers(const im::Request&,ConnKey,Session&);//获取房间成员列表
-    
+    //群聊接口
+    Response handleCreateGroup(const Request&,ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
+    void removeFromGroup(ConnKey,Session& session,const std::string&);//退房清理（断连/换房/leave)
+    void broadcastToGroup(const std::string&,const std::string&,ConnKey,const im::Response&push);//对房间内其他成员推送事件；
+    im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入群
+    im::Response handleLeave(const im::Request&,ConnKey,Session&);//退出群
+    im::Response handleGroupMsg(const im::Request&,ConnKey,Session&);//提交房间消息
+    im::Response handleGroupMembers(const im::Request&,ConnKey,Session&);//获取群聊成员列表
+    Response handleListGroups(const Request&,ConnKey,Session&);//返回当前用户加入的群列表
 
     };
 }

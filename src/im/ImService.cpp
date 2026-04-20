@@ -193,27 +193,18 @@ bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t
 
 
 //房间接口
-void im::Imservice::removeFromRoom(ConnKey key,Session& session,const std::string& room){
-    if(!room.empty()){
-        roomManager_.leave(room,key);
-        session.rooms_.erase(room);
-        if(room==session.activeRoom_){
-            if(!session.rooms_.empty()){
-                session.activeRoom_=*session.rooms_.begin();
-            }
-            else{
-                session.activeRoom_.clear();
+
+
+void im::Imservice::broadcastToGroup(const std::string& groupId,const std::string& fromUser,ConnKey senderkey,const im::Response& push){
+    const auto& users=groupManager_.members(groupId);//根据群id取成员用户名列表
+    for(const auto& user:users){
+        const auto& keys=sessionManager_.connKeysByUser(user);
+        for(const auto& key:keys){
+            if(key!=senderkey){
+                sendPush(key,push);
             }
         }
     }
-}
-void im::Imservice::broadcastToRoom(const std::string& room,ConnKey key,const im::Response& push){
-    auto keys=roomManager_.members(room);
-        for(auto& it:keys){
-            if(it!=key){
-                sendPush(it,push);
-            }
-        }
    
 }
 
@@ -222,25 +213,26 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     if(err.has_value()){
         return err.value();
     }
-    if(!req.body.contains("room")||!req.body["room"].is_string()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing room name");
+    if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupId name");
     }
-    std::string room=req.body["room"].get<std::string>();
-    if(room.empty()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Room name cannot be empty");
+    std::string groupId=req.body["groupId"].get<std::string>();
+    if(groupId.empty()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId cannot be empty");
     }
-    if(!session.activeRoom_.empty()&&session.activeRoom_==room){
-        return makeOk(req,im::MsgType::JOIN_RESP);
+    auto user=sessionManager_.usernameByConn(key);
+    if(!user.has_value()){
+        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"user is not exist");
     }
-    if(session.rooms_.count(room)){
-        session.activeRoom_=room;
-        return makeOk(req,im::MsgType::JOIN_RESP,nlohmann::json{{"room",room},{"active_room",session.activeRoom_}});
+    auto joinResult=groupManager_.joinGroup(groupId,user.value());
+    if(joinResult==JoinResult::ERR_NO_SUCH_GROUP){
+        return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"no such group");
     }
-    roomManager_.join(room,key);
-    session.rooms_.insert(room);
-    session.activeRoom_=room;
-    return makeOk(req,im::MsgType::JOIN_RESP,nlohmann::json{{"room",room},{"active_room",session.activeRoom_}});
-
+    if(joinResult==JoinResult::OK_ALREADY_IN){
+        return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
+    }
+    session.joinedGroupIds_.insert(groupId);
+    return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
 }
 
 im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Session& session){

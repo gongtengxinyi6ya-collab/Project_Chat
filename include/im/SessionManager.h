@@ -1,5 +1,6 @@
 #pragma once
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <optional>
 #include <vector>
@@ -12,13 +13,16 @@ public:
     Session& getOrCreate(ConnKey);//确保每个连接有Session
     const Session* find(ConnKey) const;//查找
     Session* find(ConnKey);//查找，非常量
-    bool bindUser(ConnKey,std::string);//auth成功后绑定，负责唯一性判断
-    void unbindUser(ConnKey);//断连清理username映射
-    std::optional<ConnKey> connKeyByUser(const std::string &user)const;//DM路由定位
+    bool bindUser(ConnKey,std::string);//用户可多连接在线
+    void unbindConn(ConnKey);//断连解绑在线关系
+    std::vector<ConnKey> connKeysByUser(const std::string &user)const;//获取某用户全部在线连接
+    std::optional<std::string> usernameByConn(ConnKey)const;//根据连接获取用户
+    bool isOnLine(const std::string& username)const;//判断用户是否在线
     std::vector<std::string> onLineUsers()const;//返回成员列表
     void erase(ConnKey);//删除session
 private:
     std::unordered_map<ConnKey,Session> sessions_;
-    std::unordered_map<std::string,ConnKey> userConnMap_;
+    std::unordered_map<std::string,std::unordered_set<ConnKey>> userConnMap_;//一个用户多连接，支持多端登录
+    std::unordered_map<ConnKey,std::string> connUserMap_;
 };
 }

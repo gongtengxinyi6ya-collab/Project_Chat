@@ -8,7 +8,7 @@ std::pair<bool,std::string> im::GroupManager::createGroup(const std::string& own
     if(!g.addMember(owner)){
         return {false,""};
     }
-    groupsById_[groupId]=std::move(g);
+    groupsById_.emplace(groupId,std::move(g));
     userGroups_[owner].insert(groupId);
     return {true, groupId};
 }
@@ -37,8 +37,8 @@ im::QuitResult im::GroupManager::leaveGroup(const std::string& groupId,const std
     if(!it->second.removeMember(user)){
         return QuitResult::ERR_NOT_IN_GROUP;
     }
-    groupsById_.erase(groupId);
     userGroups_[user].erase(groupId);
+    return QuitResult::OK_LEFT;
 }
 std::vector<std::string> im::GroupManager::members(const std::string & groupId) const{
     auto it=groupsById_.find(groupId);
