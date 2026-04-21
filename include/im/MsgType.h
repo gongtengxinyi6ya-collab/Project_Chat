@@ -69,7 +69,7 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
         case 18:
             return MsgType::LIST_GROUPS_REQ;
         case 19:
-            return MsgType::LEAVE_GROUP_RESP;
+            return MsgType::LIST_GROUPS_RESP;
         case 20:
             return MsgType::GROUP_EVENT_PUSH;
         case 21:

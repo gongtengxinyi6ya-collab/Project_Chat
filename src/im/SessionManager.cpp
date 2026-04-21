@@ -24,9 +24,6 @@ im::Session* im::SessionManager::find(ConnKey key){
     return nullptr;
 }
 bool im::SessionManager::bindUser(ConnKey key,std::string name){
-    if(userConnMap_.count(name)){
-        return false;
-    }
     sessions_[key].username_=name;
     sessions_[key].state_=im::ConnState::Authed;
     userConnMap_[name].insert(key);
@@ -49,6 +46,7 @@ std::vector<im::SessionManager::ConnKey> im::SessionManager::connKeysByUser(cons
     if(it!=userConnMap_.end()){
         std::vector<ConnKey> keys;
         keys.insert(keys.end(),it->second.begin(),it->second.end());
+        return keys;
     }
     return {};
 }
@@ -61,10 +59,10 @@ std::optional<std::string> im::SessionManager::usernameByConn(ConnKey key)const{
 }
 bool im::SessionManager::isOnLine(const std::string& username)const{
     auto it=userConnMap_.find(username);
-    if(it==userConnMap_.end()&&it->second.empty()){
+    if(it==userConnMap_.end()){
         return false;
     }
-    return true;
+    return !it->second.empty();
 }
 std::vector<std::string> im::SessionManager::onLineUsers()const{
     std::vector<std::string> usernames;

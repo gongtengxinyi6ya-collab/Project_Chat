@@ -157,7 +157,7 @@ im::Response im::Imservice::handleListUsers(const im::Request& req,ConnKey key,S
     if(err.has_value()){
         return err.value();
     }
-    const std::vector<std::string>& users=sessionManager_.onLineUsers();
+    std::vector<std::string>users=sessionManager_.onLineUsers();
     return makeOk(req,im::MsgType::LIST_USERS_RESP,nlohmann::json{{"users",users}});
 }
 
@@ -199,7 +199,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,ConnKey key,Ses
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing from name");
     }
     std::string groupName=req.body["name"];
-    std::string owner=req.to;
+    std::string owner=req.from;
     auto [success,groupIdOrErr]=groupManager_.createGroup(owner,groupName);
     if(!success){
         return makeErr(req,im::ErrorCode::INTERNAL,"Failed to create group:"+groupIdOrErr);
@@ -298,7 +298,7 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,S
     if(!groupManager_.isMember(groupId,user.value())){
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"The user is not in the group");
     }
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId},{"content",content}}};
+    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId},{"content",content}}};
     size_t fanout=broadcastToGroup(groupId,user.value(),key,pushMsg);
     return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId},{"fanout",fanout}});
 
@@ -330,5 +330,5 @@ im::Response im::Imservice::handleListGroups(const Request& req,ConnKey key,Sess
         return err.value();
     }
     std::vector<std::string> groups=groupManager_.groupsOfUser(session.username_);
-    return makeOk(req,MsgType::LIST_GROUPS_RESP,nlohmann::json{{"groupsIds",groups},{"count"},groups.size()});
+    return makeOk(req,MsgType::LIST_GROUPS_RESP,nlohmann::json{{"groupsIds",groups},{"count",groups.size()}});
 }

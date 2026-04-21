@@ -71,7 +71,7 @@ public:
     std::string buildJoinReq(ClientState& state,std::string room){
         nlohmann::json body;
         body["ver"]=1;
-        body["type"]=im::msgTypeToInt(im::MsgType::JOIN_REQ);
+        body["type"]=im::msgTypeToInt(im::MsgType::JOIN_GROUP_REQ);
         body["req_id"]=state.allocReqId();
         body["from"]=state.username;
         body["to"]="";
@@ -82,7 +82,7 @@ public:
     std::string buildLeaveReq(ClientState& state,std::optional<std::string> room){
         nlohmann::json body;
         body["ver"]=1;
-        body["type"]=im::msgTypeToInt(im::MsgType::LEAVE_REQ);
+        body["type"]=im::msgTypeToInt(im::MsgType::LEAVE_GROUP_REQ);
         body["req_id"]=state.allocReqId();
         body["from"]=state.username;
         body["to"]="";
@@ -95,7 +95,7 @@ public:
     std::string buildRoomMsgReq(ClientState& state,std::string content,std::optional<std::string> room){
         nlohmann::json body;
         body["ver"]=1;
-        body["type"]=im::msgTypeToInt(im::MsgType::ROOM_MSG_REQ);
+        body["type"]=im::msgTypeToInt(im::MsgType::GROUP_MSG_REQ);
         body["req_id"]=state.allocReqId();
         body["from"]=state.username;
         body["to"]="";
@@ -109,7 +109,7 @@ public:
     std::string buildRoomMembers(ClientState& state,std::optional<std::string> room){
         nlohmann::json body;
         body["ver"]=1;
-        body["type"]=im::msgTypeToInt(im::MsgType::ROOM_MEMBERS_REQ);
+        body["type"]=im::msgTypeToInt(im::MsgType::GROUP_MEMBERS_REQ);
         body["req_id"]=state.allocReqId();
         body["from"]=state.username;
         body["to"]="";
@@ -233,7 +233,7 @@ void printPretty(const std::string& payload,ClientState& state){
                 std::cout<<std::endl;
                 break;
             }
-            case im::MsgType::JOIN_RESP:{
+            case im::MsgType::JOIN_GROUP_RESP:{
                 std::cout<<"JOIN_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 if(json["ok"].get<bool>()){
                     if(json["data"].contains("room")&&json["data"]["room"].is_string()&&json["data"].contains("active_room")&&json["data"]["active_room"].is_string()){
@@ -243,7 +243,7 @@ void printPretty(const std::string& payload,ClientState& state){
                 }
                 break;
             }
-            case im::MsgType::LEAVE_RESP:{
+            case im::MsgType::LEAVE_GROUP_RESP:{
                 std::cout<<"LEAVE_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 if(json["ok"].get<bool>()){
                     if(json["data"].contains("room")&&json["data"]["room"].is_string()&&json["data"].contains("active_room")&&json["data"]["active_room"].is_string()){
@@ -253,20 +253,20 @@ void printPretty(const std::string& payload,ClientState& state){
                 }
                 break;
             }
-            case im::MsgType::ROOM_MSG_RESP:
+            case im::MsgType::GROUP_MSG_RESP:
                 std::cout<<"ROOM_MSG_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
-            case im::MsgType::ROOM_MSG_PUSH:
+            case im::MsgType::GROUP_MSG_PUSH:
                 std::cout<<"[Room: "<<json["data"]["room"].get<std::string>()<<"] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
                 break;
-            case im::MsgType::ROOM_MEMBERS_RESP:{
+            case im::MsgType::GROUP_MEMBERS_RESP:{
                 std::cout<<"Room members ("<<json["data"]["count"]<<" members in total) :"<<std::endl;
                 for(const auto& member:json["data"]["members"]){
                     std::cout<<member.get<std::string>()<<" ";
                 }
                 break;
             }
-            case im::MsgType::ROOM_EVENT_PUSH:
+            case im::MsgType::GROUP_EVENT_PUSH:
                 std::cout<<"[ROOM EVENT] "<<json["data"]["user"].get<std::string>()<<" "<<json["data"]["event"].get<std::string>()<<" "<<json["data"]["room"].get<std::string>()<<std::endl;
                 break;
             default:
