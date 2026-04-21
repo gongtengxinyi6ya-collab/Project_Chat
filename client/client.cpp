@@ -21,8 +21,7 @@
 #include "third_party/json.hpp"
 struct ClientState{
     std::string username;
-    std::unordered_set<std::string> rooms;
-    std::string activeRoom;
+    std::unordered_set<std::string> groupIds;
     uint64_t nextReqId{1};
     uint64_t nextSeq{1};
 
@@ -68,7 +67,18 @@ public:
         body["seq"]=state.allocSeq();
         return body.dump();
     }
-    std::string buildJoinReq(ClientState& state,std::string room){
+    std::string buildCreateGroupReq(ClientState& state,std::string groupName){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::CREATE_GROUP_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["name"]=groupName;
+        return body.dump();
+    }
+    std::string buildJoinReq(ClientState& state,std::string groupId){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::JOIN_GROUP_REQ);
@@ -76,10 +86,10 @@ public:
         body["from"]=state.username;
         body["to"]="";
         body["seq"]=state.allocSeq();
-        body["room"]=room;
+        body["groupId"]=groupId;
         return body.dump();
     }
-    std::string buildLeaveReq(ClientState& state,std::optional<std::string> room){
+    std::string buildLeaveReq(ClientState& state,std::optional<std::string> groupId){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::LEAVE_GROUP_REQ);
@@ -87,12 +97,12 @@ public:
         body["from"]=state.username;
         body["to"]="";
         body["seq"]=state.allocSeq();
-        if(room.has_value()){
-            body["room"]=room.value();
+        if(groupId.has_value()){
+            body["groupId"]=groupId.value();
         }
         return body.dump();
     }
-    std::string buildRoomMsgReq(ClientState& state,std::string content,std::optional<std::string> room){
+    std::string buildGroupMsgReq(ClientState& state,std::string content,std::optional<std::string> groupId){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::GROUP_MSG_REQ);
@@ -101,12 +111,12 @@ public:
         body["to"]="";
         body["seq"]=state.allocSeq();
         body["content"]=content;
-        if(room.has_value()){
-            body["room"]=room.value();
+        if(groupId.has_value()){
+            body["groupId"]=groupId.value();
         }
         return body.dump();
     }
-    std::string buildRoomMembers(ClientState& state,std::optional<std::string> room){
+    std::string buildGroupMembers(ClientState& state,std::optional<std::string> groupId){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::GROUP_MEMBERS_REQ);
@@ -114,13 +124,23 @@ public:
         body["from"]=state.username;
         body["to"]="";
         body["seq"]=state.allocSeq();
-        if(room.has_value()){
-            body["room"]=room.value();
+        if(groupId.has_value()){
+            body["groupId"]=groupId.value();
         }
         return body.dump();
     }
+    std::string buildListGroupsReq(ClientState& state){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::LIST_GROUPS_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        return body.dump();
+    }
 };
-//把/auth jason,/dm tom hello,/list,/join room,/leave ,/say 转为payload字符串，返回nullopt表示解析失败
+//把/auth jason,/dm tom hello,/list,/gjoin room,/gleave ,/gmembers,/gls,/gsay 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
     if(line.empty()) return std::nullopt;
     if(line[0]!='/'){
@@ -147,54 +167,57 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     if(line=="/list"){
         return builder.buildListUsersReq(state);
     }
-    if(line.rfind("/join ",0)==0){
+    if(line.rfind("/gjoin ",0)==0){
         if(state.username.empty()){
             std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
             return std::nullopt;
         }
-        std::string room=line.substr(6);
-        return builder.buildJoinReq(state,room);
+        std::string groupId=line.substr(7);
+        return builder.buildJoinReq(state,groupId);
     }
-    if(line=="/leave"){
+    if(line=="/gleave"){
         if(state.username.empty()){
             std::cerr<<"please authenticate first"<<std::endl;
             return std::nullopt;
         }
         return builder.buildLeaveReq(state,std::nullopt);
     }
-    if(line.rfind("/leave ",0)==0){
+    if(line.rfind("/gleave ",0)==0){
         if(state.username.empty()){
             std::cerr<<"please authenticate first"<<std::endl;
             return std::nullopt;
         }
-        std::string room=line.substr(7);
-        return builder.buildLeaveReq(state,room);
+        std::string groupId=line.substr(8);
+        return builder.buildLeaveReq(state,groupId);
     }
-    if(line.rfind("/say ",0)==0){
+    if(line.rfind("/gsay ",0)==0){
         if(state.username.empty()){
             std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
             return std::nullopt;
         }
-        std::string content=line.substr(5);
-        return builder.buildRoomMsgReq(state,content,std::nullopt);
+        std::string content=line.substr(6);
+        return builder.buildGroupMsgReq(state,content,std::nullopt);
     }
-    if(line.rfind("/sayto ",0)==0){
+    if(line.rfind("/gsayto ",0)==0){
         if(state.username.empty()){
             std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
             return std::nullopt;
         }
-        size_t firstSpace=line.find(' ',7);
+        size_t firstSpace=line.find(' ',8);
         if(firstSpace==std::string::npos) return std::nullopt;
-        std::string room=line.substr(7,firstSpace-7);
+        std::string groupId=line.substr(8,firstSpace-8);
         std::string content=line.substr(firstSpace+1);
-        return builder.buildRoomMsgReq(state,content,room);
+        return builder.buildGroupMsgReq(state,content,groupId);
     }
-    if(line=="/members"){
-        return builder.buildRoomMembers(state,std::nullopt);
+    if(line=="/gmembers"){
+        return builder.buildGroupMembers(state,std::nullopt);
     }
-    if(line.rfind("/members ",0)==0){
-        std::string room=line.substr(9);
-        return builder.buildRoomMembers(state,room);
+    if(line.rfind("/gmembers ",0)==0){
+        std::string groupId=line.substr(10);
+        return builder.buildGroupMembers(state,groupId);
+    }
+    if(line=="gls"){
+        return builder.buildListGroupsReq(state);
     }
 
     return std::nullopt;
@@ -227,18 +250,26 @@ void printPretty(const std::string& payload,ClientState& state){
             case im::MsgType::LIST_USERS_RESP:
             {
                 std::cout<<"Online users: ";
+                if(json.contains("data")&&json["data"].contains("users")&&json["data"]["users"].is_array()){
                 for(const auto& user:json["data"]["users"]){
                     std::cout<<user.get<std::string>()<<" ";
                 }
+            }
                 std::cout<<std::endl;
+                break;
+            }
+            case im::MsgType::CREATE_GROUP_RESP:{
+                
+                std::string groupId=json["data"]["groupId"].get<std::string>();
+                std::cout<<state.username<<" create the group: "<<groupId<<std::endl;
+                state.groupIds.insert(groupId);
                 break;
             }
             case im::MsgType::JOIN_GROUP_RESP:{
                 std::cout<<"JOIN_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 if(json["ok"].get<bool>()){
-                    if(json["data"].contains("room")&&json["data"]["room"].is_string()&&json["data"].contains("active_room")&&json["data"]["active_room"].is_string()){
-                        state.rooms.insert(json["data"]["room"]);
-                        state.activeRoom=json["data"]["active_room"];
+                    if(json["data"].contains("groupId")&&json["data"]["groupId"].is_string()){
+                        state.groupIds.insert(json["data"]["groupId"]);
                     }
                 }
                 break;
@@ -246,9 +277,8 @@ void printPretty(const std::string& payload,ClientState& state){
             case im::MsgType::LEAVE_GROUP_RESP:{
                 std::cout<<"LEAVE_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 if(json["ok"].get<bool>()){
-                    if(json["data"].contains("room")&&json["data"]["room"].is_string()&&json["data"].contains("active_room")&&json["data"]["active_room"].is_string()){
-                        state.rooms.erase(json["data"]["room"]);
-                        state.activeRoom=json["data"]["active_room"];
+                    if(json["data"].contains("groupId")&&json["data"]["groupId"].is_string()){
+                        state.groupIds.erase(json["data"]["groupId"]);
                     }
                 }
                 break;
@@ -257,18 +287,26 @@ void printPretty(const std::string& payload,ClientState& state){
                 std::cout<<"ROOM_MSG_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             case im::MsgType::GROUP_MSG_PUSH:
-                std::cout<<"[Room: "<<json["data"]["room"].get<std::string>()<<"] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
+                std::cout<<"[Group: "<<json["data"]["groupId"].get<std::string>()<<"] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
                 break;
             case im::MsgType::GROUP_MEMBERS_RESP:{
-                std::cout<<"Room members ("<<json["data"]["count"]<<" members in total) :"<<std::endl;
+                std::cout<<"Group members ("<<json["data"]["count"]<<" members in total) :"<<std::endl;
                 for(const auto& member:json["data"]["members"]){
                     std::cout<<member.get<std::string>()<<" ";
                 }
                 break;
             }
             case im::MsgType::GROUP_EVENT_PUSH:
-                std::cout<<"[ROOM EVENT] "<<json["data"]["user"].get<std::string>()<<" "<<json["data"]["event"].get<std::string>()<<" "<<json["data"]["room"].get<std::string>()<<std::endl;
+                std::cout<<"[GROUP EVENT] "<<json["data"]["user"].get<std::string>()<<" "<<json["data"]["event"].get<std::string>()<<" "<<json["data"]["groupId"].get<std::string>()<<std::endl;
                 break;
+            case im::MsgType::LIST_GROUPS_RESP:{
+                std::cout<<"Groups you joined (total "<<json["data"]["count"].get<int>()<<" groups): "<<std::endl;
+                for(const auto& groupId:json["data"]["groupsIds"]){
+                    state.groupIds.insert(groupId.get<std::string>());
+                }
+                std::cout<<std::endl;
+                break;
+            }
             default:
                 std::cout<<payload<<std::endl;
                 break;
@@ -387,10 +425,10 @@ int main(int argc, char** argv) {
 
     while (running.load() && std::getline(std::cin, line)) {
         if (line == "/quit") break;
-        if(line=="/rooms"){
-        std::cout<<"Room Lists: "<<std::endl;
-        for(const auto& room:state.rooms){
-            std::cout<<room<<std::endl;
+        if(line=="/gls"){
+        std::cout<<"Group Lists: "<<std::endl;
+        for(const auto& group:state.groupIds){
+            std::cout<<group<<std::endl;
         }
         continue;
     }
