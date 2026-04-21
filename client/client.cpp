@@ -190,14 +190,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         std::string groupId=line.substr(8);
         return builder.buildLeaveReq(state,groupId);
     }
-    if(line.rfind("/gsay ",0)==0){
-        if(state.username.empty()){
-            std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
-            return std::nullopt;
-        }
-        std::string content=line.substr(6);
-        return builder.buildGroupMsgReq(state,content,std::nullopt);
-    }
+    
     if(line.rfind("/gsayto ",0)==0){
         if(state.username.empty()){
             std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
@@ -209,14 +202,11 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         std::string content=line.substr(firstSpace+1);
         return builder.buildGroupMsgReq(state,content,groupId);
     }
-    if(line=="/gmembers"){
-        return builder.buildGroupMembers(state,std::nullopt);
-    }
     if(line.rfind("/gmembers ",0)==0){
         std::string groupId=line.substr(10);
         return builder.buildGroupMembers(state,groupId);
     }
-    if(line=="gls"){
+    if(line=="/gls"){
         return builder.buildListGroupsReq(state);
     }
 
@@ -251,6 +241,7 @@ void printPretty(const std::string& payload,ClientState& state){
             {
                 std::cout<<"Online users: ";
                 if(json.contains("data")&&json["data"].contains("users")&&json["data"]["users"].is_array()){
+                    state.groupIds.clear();
                 for(const auto& user:json["data"]["users"]){
                     std::cout<<user.get<std::string>()<<" ";
                 }
@@ -259,7 +250,7 @@ void printPretty(const std::string& payload,ClientState& state){
                 break;
             }
             case im::MsgType::CREATE_GROUP_RESP:{
-                
+
                 std::string groupId=json["data"]["groupId"].get<std::string>();
                 std::cout<<state.username<<" create the group: "<<groupId<<std::endl;
                 state.groupIds.insert(groupId);
@@ -430,7 +421,6 @@ int main(int argc, char** argv) {
         for(const auto& group:state.groupIds){
             std::cout<<group<<std::endl;
         }
-        continue;
     }
         auto payloadOpt = tryParseCommandLine(line, state);
         if (!payloadOpt) {

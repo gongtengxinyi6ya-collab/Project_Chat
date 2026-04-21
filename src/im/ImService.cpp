@@ -42,10 +42,10 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             case im::MsgType::JOIN_GROUP_REQ:
             {
                 resp=handleJoin(*req_ptr,key,session);
-                if(resp.ok){
-                std::string groupId=resp.data["groupId"];
-                im::Response event=makeOk(*req_ptr,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"groupId",groupId}});
-                broadcastToGroup(groupId,session.username_,key,event);
+                if(resp.ok&&resp.data.contains("alreadyIn")&&resp.data["alreadyIn"].get<bool>()==false){
+                    std::string groupId=resp.data["groupId"];
+                    im::Response event=makeOk(*req_ptr,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"groupId",groupId}});
+                    broadcastToGroup(groupId,session.username_,key,event);
                 }
                 break;
             }
@@ -199,7 +199,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,ConnKey key,Ses
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing from name");
     }
     std::string groupName=req.body["name"];
-    std::string owner=req.from;
+    std::string owner=session.username_;
     auto [success,groupIdOrErr]=groupManager_.createGroup(owner,groupName);
     if(!success){
         return makeErr(req,im::ErrorCode::INTERNAL,"Failed to create group:"+groupIdOrErr);
@@ -246,10 +246,10 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
         return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"no such group");
     }
     if(joinResult==JoinResult::OK_ALREADY_IN){
-        return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
+        return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"alreadyIn",true}});
     }
     session.joinedGroupIds_.insert(groupId);
-    return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
+    return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"alreadyIn",false}});
 }
 
 im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Session& session){
