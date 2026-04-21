@@ -110,7 +110,7 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
 }
 
 std::optional<im::Response> im::Imservice::guardAuthenticated(const Request& req,const Session& session){
-    if(session.state_==im::ConnState::Authed||!session.joinedGroupIds_.empty()){
+    if(session.state_==im::ConnState::Authed){
         return std::nullopt;
     }
     return makeErr(req,im::ErrorCode::NOT_AUTHED,"Unauthed, please authenticate first");
@@ -296,7 +296,7 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,S
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");
     }
     if(!groupManager_.isMember(groupId,user.value())){
-        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"The user is not in the group");
+        return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId},{"content",content}}};
     size_t fanout=broadcastToGroup(groupId,user.value(),key,pushMsg);
@@ -330,5 +330,5 @@ im::Response im::Imservice::handleListGroups(const Request& req,ConnKey key,Sess
         return err.value();
     }
     std::vector<std::string> groups=groupManager_.groupsOfUser(session.username_);
-    return makeOk(req,MsgType::LIST_GROUPS_RESP,nlohmann::json{{"groupsIds",groups},{"count",groups.size()}});
+    return makeOk(req,MsgType::LIST_GROUPS_RESP,nlohmann::json{{"groupIds",groups},{"count",groups.size()}});
 }

@@ -209,6 +209,10 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     if(line=="/gls"){
         return builder.buildListGroupsReq(state);
     }
+    if(line.rfind("/gcreate ",0)==0){
+        std::string groupName=line.substr(9);
+        return builder.buildCreateGroupReq(state,groupName);
+    }
 
     return std::nullopt;
 }
@@ -241,7 +245,6 @@ void printPretty(const std::string& payload,ClientState& state){
             {
                 std::cout<<"Online users: ";
                 if(json.contains("data")&&json["data"].contains("users")&&json["data"]["users"].is_array()){
-                    state.groupIds.clear();
                 for(const auto& user:json["data"]["users"]){
                     std::cout<<user.get<std::string>()<<" ";
                 }
@@ -292,8 +295,10 @@ void printPretty(const std::string& payload,ClientState& state){
                 break;
             case im::MsgType::LIST_GROUPS_RESP:{
                 std::cout<<"Groups you joined (total "<<json["data"]["count"].get<int>()<<" groups): "<<std::endl;
-                for(const auto& groupId:json["data"]["groupsIds"]){
+                state.groupIds.clear();
+                for(const auto& groupId:json["data"]["groupIds"]){
                     state.groupIds.insert(groupId.get<std::string>());
+                    std::cout<<groupId.get<std::string>()<<" ";
                 }
                 std::cout<<std::endl;
                 break;
@@ -416,12 +421,6 @@ int main(int argc, char** argv) {
 
     while (running.load() && std::getline(std::cin, line)) {
         if (line == "/quit") break;
-        if(line=="/gls"){
-        std::cout<<"Group Lists: "<<std::endl;
-        for(const auto& group:state.groupIds){
-            std::cout<<group<<std::endl;
-        }
-    }
         auto payloadOpt = tryParseCommandLine(line, state);
         if (!payloadOpt) {
             std::cerr << "invalid command\n";

@@ -53,7 +53,6 @@ private:
 
     //群聊接口
     Response handleCreateGroup(const Request&,ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
-    void removeFromGroup(ConnKey,Session& session,const std::string&);//退房清理（断连/换房/leave)
     size_t broadcastToGroup(const std::string&,const std::string&,ConnKey,const im::Response&push);//对房间内其他成员推送事件；
     im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入群
     im::Response handleLeave(const im::Request&,ConnKey,Session&);//退出群
