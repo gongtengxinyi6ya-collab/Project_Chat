@@ -36,29 +36,36 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             case im::MsgType::LIST_USERS_REQ:
                 resp=handleListUsers(*req_ptr,key,session);
                 break;
-            case im::MsgType::JOIN_REQ:
+            case im::MsgType::CREATE_GROUP_REQ:
+                resp=handleCreateGroup(*req_ptr,key,session);
+                break;
+            case im::MsgType::JOIN_GROUP_REQ:
             {
                 resp=handleJoin(*req_ptr,key,session);
                 if(resp.ok){
-                im::Response event=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"room",session.activeRoom_}});
-                broadcastToRoom(session.activeRoom_,key,event);
+                std::string groupId=resp.data["groupId"];
+                im::Response event=makeOk(*req_ptr,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"groupId",groupId}});
+                broadcastToGroup(groupId,session.username_,key,event);
                 }
                 break;
             }
-            case im::MsgType::LEAVE_REQ:{
-                std::string oldRoom=session.activeRoom_;
+            case im::MsgType::LEAVE_GROUP_REQ:{
                 resp=handleLeave(*req_ptr,key,session);
                 if(resp.ok){
-                    im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::ROOM_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"room",oldRoom}});
-                    broadcastToRoom(oldRoom,key,leaveEvent);
+                    std::string groupId=resp.data["groupId"];
+                    im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"groupId",groupId}});
+                    broadcastToGroup(groupId,session.username_,key,leaveEvent);
                 }
                 break;
             }
-            case im::MsgType::ROOM_MSG_REQ:
-                resp=handleRoomMsg(*req_ptr,key,session);
+            case im::MsgType::GROUP_MSG_REQ:
+                resp=handleGroupMsg(*req_ptr,key,session);
                 break;
-            case im::MsgType::ROOM_MEMBERS_REQ:
-                resp=handleRoomMembers(*req_ptr,key,session);
+            case im::MsgType::GROUP_MEMBERS_REQ:
+                resp=handleGroupMembers(*req_ptr,key,session);
+                break;
+            case im::MsgType::LIST_GROUPS_REQ:
+                resp=handleListGroups(*req_ptr,key,session);
                 break;
             default:
                 resp=im::makeErr(*req_ptr,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
@@ -75,8 +82,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
 void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     ConnKey key=conn->fd();
     if(auto it=sessionManager_.find(key)){
-        roomManager_.removeKeyEverywhere(key);
-        sessionManager_.unbindUser(key);
+        sessionManager_.unbindConn(key);
         sessionManager_.erase(key);
     }
 }
@@ -104,25 +110,16 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
 }
 
 std::optional<im::Response> im::Imservice::guardAuthenticated(const Request& req,const Session& session){
-    if(session.state_==im::ConnState::Authed||!session.activeRoom_.empty()||!session.rooms_.empty()){
+    if(session.state_==im::ConnState::Authed||!session.joinedGroupIds_.empty()){
         return std::nullopt;
     }
     return makeErr(req,im::ErrorCode::NOT_AUTHED,"Unauthed, please authenticate first");
 }
-std::optional<im::Response> im::Imservice::guardInRoom(const Request& req,const Session& session){
-    if(!session.activeRoom_.empty()){
+std::optional<im::Response> im::Imservice::guardInGroup(const Request& req,const Session& session,const std::string& groupId){
+    if(!groupId.empty()&&session.joinedGroupIds_.count(groupId)){
         return std::nullopt;
     }
-    return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room,please join the room first");
-}
-std::string im::Imservice::resolveRoomOrActive(const Request& req,const Session& session,const char* fieldName){
-    if(req.body.contains(fieldName)&&req.body[fieldName].is_string()){
-        return req.body[fieldName];
-    }
-    if(!session.activeRoom_.empty()){
-        return session.activeRoom_;
-    }
-    return "";
+    return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"Not in group,please join the group first");
 }
 
 im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session& session){
@@ -135,11 +132,10 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
     }
-    auto it=sessionManager_.connKeyByUser(req.to);
-    if(!it.has_value()){
-        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"Recipient user does not exist");
+    auto keys=sessionManager_.connKeysByUser(req.to);
+    if(keys.empty()){
+        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"Recipient user is not online");
     }
-    ConnKey targetKey=it.value();
     //取文本
     if(!req.body.contains("content")||!req.body["content"].is_string()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
@@ -147,9 +143,10 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
     std::string content=req.body["content"].get<std::string>();
     //构造推送消息
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"from",session.username_},{"to",req.to},{"content",content}}};
-    
-    if(!sendPush(targetKey,pushMsg,req.req_id)){
-        return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"to","..."},{"delivered",false}});
+    for(const auto& targetKey:keys){
+        if(!sendPush(targetKey,pushMsg,req.req_id)){
+            return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"to","..."},{"delivered",false}});
+        }
     }
     return makeOk(req,im::MsgType::DM_RESP);
 
@@ -194,17 +191,37 @@ bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t
 
 //房间接口
 
-
-void im::Imservice::broadcastToGroup(const std::string& groupId,const std::string& fromUser,ConnKey senderkey,const im::Response& push){
+im::Response im::Imservice::handleCreateGroup(const Request& req,ConnKey key,Session& session){
+    if(!req.body.contains("name")||!req.body["name"].is_string()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupName");
+    }
+    if(req.from.empty()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing from name");
+    }
+    std::string groupName=req.body["name"];
+    std::string owner=req.to;
+    auto [success,groupIdOrErr]=groupManager_.createGroup(owner,groupName);
+    if(!success){
+        return makeErr(req,im::ErrorCode::INTERNAL,"Failed to create group:"+groupIdOrErr);
+    }
+    std::string groupId=groupIdOrErr;
+    session.joinedGroupIds_.insert(groupId);
+    return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
+}
+size_t im::Imservice::broadcastToGroup(const std::string& groupId,const std::string& fromUser,ConnKey senderkey,const im::Response& push){
     const auto& users=groupManager_.members(groupId);//根据群id取成员用户名列表
+    size_t fanout=0;
     for(const auto& user:users){
         const auto& keys=sessionManager_.connKeysByUser(user);
         for(const auto& key:keys){
             if(key!=senderkey){
                 sendPush(key,push);
+                fanout++;
+
             }
         }
     }
+    return fanout;
    
 }
 
@@ -240,16 +257,33 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     if(err.has_value()){
         return err.value();
     }
-    std::string room=resolveRoomOrActive(req,session,"room");
-    if(room.empty()||!session.rooms_.count(room)){
-        return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in the room");
+    if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
     }
-    removeFromRoom(key,session,room);
-
-    return makeOk(req,im::MsgType::LEAVE_RESP,nlohmann::json{{"room",room},{"active_room",session.activeRoom_}});
+    std::string groupId=req.body["groupId"];
+    if(groupId.empty()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"GroupId is empty");
+    }
+    auto user=sessionManager_.usernameByConn(key);
+    if(!user.has_value()){
+        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");
+    }
+    QuitResult quitResult=groupManager_.leaveGroup(groupId,user.value());
+    if(quitResult==QuitResult::ERR_NO_SUCH_GROUP){
+        return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"No such group");
+    }
+    if(quitResult==QuitResult::ERR_NOT_IN_GROUP){
+        return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
+    }
+    session.joinedGroupIds_.erase(groupId);
+    return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
 }
-im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Session& session){
-    auto err=guardInRoom(req,session);
+im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,Session& session){
+    if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
+    }
+    std::string groupId=req.body["groupId"];
+    auto err=guardInGroup(req,session,groupId);
     if(err.has_value()){
         return err.value();
     }
@@ -257,45 +291,29 @@ im::Response im::Imservice::handleRoomMsg(const im::Request &req ,ConnKey key,Se
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
     }
     std::string content=req.body["content"].get<std::string>();
-    std::string room=resolveRoomOrActive(req,session,"room");
-    if(!room.empty()&&!session.rooms_.count(room)){
-        return makeErr(req,im::ErrorCode::NOT_IN_ROOM,"Not in room");
+    auto user=sessionManager_.usernameByConn(key);
+    if(!user.has_value()){
+        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");
     }
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::ROOM_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"room",room},{"content",content}}};
-    decorate(pushMsg,req.req_id);
-    std::string pushStr=im::encodeResponse(pushMsg);
-    auto members=roomManager_.members(room);
-    size_t fanout=0;
-    if(members.size()>0){
-        fanout=members.size()-1;
+    if(!groupManager_.isMember(groupId,user.value())){
+        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"The user is not in the group");
     }
-    for(const ConnKey& memberKey:members){
-        if(memberKey!=key){
-            sendToConnKey_(memberKey,pushStr);
-        }
-    }
-    return makeOk(req,im::MsgType::ROOM_MSG_RESP,nlohmann::json{{"room",room},{"fanout",fanout}});
+    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId},{"content",content}}};
+    size_t fanout=broadcastToGroup(groupId,user.value(),key,pushMsg);
+    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId},{"fanout",fanout}});
 
 }
-im::Response im::Imservice::handleRoomMembers(const im::Request& req,ConnKey key,Session& session){
-    auto err=guardInRoom(req,session);
+im::Response im::Imservice::handleGroupMembers(const im::Request& req,ConnKey key,Session& session){
+    if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
+    }
+    std::string groupId=req.body["groupId"];
+    auto err=guardInGroup(req,session,groupId);
     if(err.has_value()){
         return err.value();
     }
-    std::string room=resolveRoomOrActive(req,session,"room");
-    
-    auto keys=roomManager_.members(room);
-    if(keys.size()>0){
-        std::vector<std::string> usernames;
-        for(const auto& it:keys){
-            auto name=usernameByKey(it);
-            if(name.has_value()){
-                usernames.push_back(name.value());
-            }
-        }
-        return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"count",keys.size()},{"members",usernames}});
-    }
-    return makeOk(req,im::MsgType::ROOM_MEMBERS_RESP,nlohmann::json{{"room",room},{"count",0},{"members",std::vector<std::string>{}}});
+    std::vector<std::string> members=groupManager_.members(groupId);
+    return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId},{"count",members.size()},{"members",members}});
 
 }
 
@@ -305,4 +323,12 @@ std::optional<std::string> im::Imservice::usernameByKey(ConnKey key)const{
         return it->username_;
     }
     return std::nullopt;
+}
+im::Response im::Imservice::handleListGroups(const Request& req,ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err.has_value()){
+        return err.value();
+    }
+    std::vector<std::string> groups=groupManager_.groupsOfUser(session.username_);
+    return makeOk(req,MsgType::LIST_GROUPS_RESP,nlohmann::json{{"groupsIds",groups},{"count"},groups.size()});
 }

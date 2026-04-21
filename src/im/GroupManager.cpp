@@ -31,13 +31,17 @@ im::QuitResult im::GroupManager::leaveGroup(const std::string& groupId,const std
     if(it==groupsById_.end()){
         return QuitResult::ERR_NO_SUCH_GROUP;
     }
-    if(!isMember(groupId,user)){
-        return QuitResult::ERR_NOT_IN_GROUP;
-    }
     if(!it->second.removeMember(user)){
         return QuitResult::ERR_NOT_IN_GROUP;
     }
-    userGroups_[user].erase(groupId);
+    auto userIt=userGroups_.find(user);
+    if(userIt!=userGroups_.end()){
+        userGroups_[user].erase(groupId);
+        if(userGroups_[user].empty()){
+            userGroups_.erase(user);
+        }
+    }
+    
     return QuitResult::OK_LEFT;
 }
 std::vector<std::string> im::GroupManager::members(const std::string & groupId) const{
