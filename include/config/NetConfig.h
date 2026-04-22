@@ -1,3 +1,4 @@
+#pragma once
 #include <cstdint>
 #include "third_party/json.hpp"
 

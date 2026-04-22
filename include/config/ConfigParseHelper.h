@@ -61,11 +61,11 @@ public:
     //环境变量文本转无符号整数,检查非负与上限
     static uint32_t parseEnvUInt(const std::string& value,const std::string& envName,uint32_t maxValue=UINT32_MAX){
         try{
-            int intValue = std::stoi(value);
-            if(intValue<0||static_cast<uint32_t>(intValue)>maxValue){
+            uint32_t intValue = static_cast<uint32_t>(std::stoul(value));
+            if(intValue<0||intValue>maxValue){
                 throw std::runtime_error("Integer value out of range for environment variable "+envName+": "+value);
             }
-            return static_cast<uint32_t>(intValue);
+            return intValue;
         }catch(const std::exception& e){
             throw std::runtime_error("Invalid unsigned integer value for environment variable "+envName+": "+value);
         }

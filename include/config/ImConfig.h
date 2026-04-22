@@ -1,3 +1,4 @@
+#pragma once
 #include <cstddef>
 #include "third_party/json.hpp"
 /*协议约束参数化，避免ImService里写死常量*/

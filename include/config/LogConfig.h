@@ -1,3 +1,4 @@
+#pragma once
 #include <string>
 #include "third_party/json.hpp"
 /*决定输出目标和格式*/

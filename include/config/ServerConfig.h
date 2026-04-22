@@ -1,3 +1,4 @@
+#pragma once
 #include <cstdint>
 #include <string>
 #include "third_party/json.hpp"
@@ -8,7 +9,7 @@
 class ServerConfig{
 public:
     static ServerConfig fromJson(const nlohmann::json&);//解析server节点
-    void applyEnvOverriders();//
+    void applyEnvOverrides();//
     void validateOrThrow()const;//校验端口范围，线程数非负
 private:
     std::string host{"0.0.0.0"};
