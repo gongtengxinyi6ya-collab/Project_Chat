@@ -1,7 +1,7 @@
 #include "TcpServer.h"
-#include "Logger.h"
-#include "FileSink.h"
-#include "StderrSink.h"
+#include "logger/Logger.h"
+#include "logger/FileSink.h"
+#include "logger/StderrSink.h"
 #include <iostream>
 int main()
 {

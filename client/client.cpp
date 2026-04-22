@@ -286,7 +286,7 @@ void printPretty(const std::string& payload,ClientState& state){
             case im::MsgType::GROUP_MEMBERS_RESP:{
                 std::cout<<"Group members ("<<json["data"]["count"]<<" members in total) :"<<std::endl;
                 for(const auto& member:json["data"]["members"]){
-                    std::cout<<member.get<std::string>()<<" ";
+                    std::cout<<member.get<std::string>()<<std::endl;
                 }
                 break;
             }
