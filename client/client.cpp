@@ -16,7 +16,7 @@
 #include <thread>
 #include <unordered_set>
 
-#include "LogMacros.h"
+#include "logger/LogMacros.h"
 #include "im/ImMessage.h"
 #include "third_party/json.hpp"
 struct ClientState{
