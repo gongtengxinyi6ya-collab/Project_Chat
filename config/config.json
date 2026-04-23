@@ -1,0 +1,28 @@
+{
+    
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "io_threads": 2,
+    "backlog": 1024
+  },
+  "net": {
+    "heartbeat_ms": 5000,
+    "idle_timeout_ms": 120000,
+    "max_frame_len": 65536
+  },
+  "log": {
+    "level": "INFO",
+    "to_console": true,
+    "to_file": false,
+    "file_path": "logs/chat.log",
+    "json_format": false
+  },
+  "im": {
+    "require_group_id_for_send": true,
+    "max_group_name_len": 64,
+    "max_message_len": 4096
+  }
+
+
+}

@@ -1,0 +1,26 @@
+#include "config/ImConfig.h"
+ImConfig ImConfig::fromJson(const nlohmann::json& j){
+    ImConfig imConfig;
+    imConfig.requireGroupIdForSend=ConfigParseHelper::getOrDefault(j,"require_group_id_for_send",imConfig.requireGroupIdForSend);
+    imConfig.maxGroupNameLen=ConfigParseHelper::getOrDefault(j,"max_group_game_len",imConfig.maxGroupNameLen);
+    imConfig.maxMessageLen=ConfigParseHelper::getOrDefault(j,"max_message_len",imConfig.maxMessageLen);
+    return imConfig;
+}
+void ImConfig::applyEnvOverrides(){
+    auto envRequireGroupIdForSend=ConfigParseHelper::getEnv("IM_REQUIRE_GROUP_ID_FOR_SEND");
+    if(envRequireGroupIdForSend.has_value()){
+        requireGroupIdForSend=ConfigParseHelper::parseEnvBool(envRequireGroupIdForSend.value(), "IM_REQUIRE_GROUP_ID_FOR_SEND");
+    }
+    auto envMaxGroupNameLen=ConfigParseHelper::getEnv("IM_MAX_GROUP_NAME_LEN");
+    if(envMaxGroupNameLen.has_value()){
+        maxGroupNameLen=ConfigParseHelper::parseEnvUInt(envMaxGroupNameLen.value(), "IM_MAX_GROUP_NAME_LEN", 1024);
+    }
+    auto envMaxMessageLen=ConfigParseHelper::getEnv("IM_MAX_MESSAGE_LEN");
+    if(envMaxMessageLen.has_value()){
+        maxMessageLen=ConfigParseHelper::parseEnvUInt(envMaxMessageLen.value(), "IM_MAX_MESSAGE_LEN", 1024*1024);
+    }
+}
+void ImConfig::validateOrThrow() const{
+    ConfigParseHelper::checkRange("maxGroupNameLen", maxGroupNameLen, 1, 128);
+    ConfigParseHelper::checkRange("maxMessageLen", maxMessageLen, 1, 1024*1024);
+}
