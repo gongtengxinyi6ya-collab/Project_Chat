@@ -17,6 +17,12 @@ public:
     void applyEnvOverriders();//允许环境变量覆盖配置
     void validateOrThrow()const;//启动前一次性校验，避免运行期隐患
     std::string dumpSummary()const;//返回一行可读摘要用于启动日志
+
+    //访问器
+    const ServerConfig& server()const{return server_;}//只读访问server_
+    const NetConfig& net()const{return net_;};//只读访问net_
+    const LogConfig& log()const{return log_;}//只读访问log_
+    const ImConfig& im()const{return im_;};//只读访问im_
 private:
     ServerConfig server_;
     NetConfig net_;

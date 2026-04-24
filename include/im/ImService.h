@@ -16,6 +16,7 @@
 #include "im/Group.h"
 #include "im/GroupManager.h"
 #include "im/SessionManager.h"
+#include "config/ImConfig.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -26,7 +27,7 @@ public:
     using ConnKey=int;//连接标识
     using SendToConnKeyFn=std::function<bool (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
 
-    explicit Imservice(uint32_t supportedVer=1);
+    explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig());
     void setSendToConnKey(SendToConnKeyFn fn);
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
@@ -41,6 +42,7 @@ private:
     uint64_t nextMsgId_{1};//全局递增消息id，用于推送消息唯一标识
 
     GroupManager groupManager_;//房间管理
+    ImConfig imConfig_;//IM相关配置
 
     im::Response handleEcho(const im::Request& req,ConnKey key,Session& session);//回显
     im::Response handleAuth(const im::Request& req,ConnKey key,Session& session);//登录，把session状态改为Authed,绑定身份

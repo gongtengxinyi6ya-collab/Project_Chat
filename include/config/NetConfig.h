@@ -12,6 +12,7 @@ public:
 
     //属性
     uint32_t heartBeatMs{50000};//心跳间隔，单位毫秒
+    uint32_t heartbeatTimeoutMs{120000};//心跳超时时间，单位毫秒，建议设置为heartbeatInterval的2-3倍
     uint32_t idleTimeoutMs{60000};//连接空闲超时时间，单位毫秒
     uint32_t maxFrameLen{65536};//最大帧长度，单位字节
 };

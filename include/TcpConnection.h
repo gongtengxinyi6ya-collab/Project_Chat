@@ -6,6 +6,7 @@
 #include "Channel.h"
 #include "Buffer.h"
 #include "logger/LogMacros.h"
+#include "config/AppConfig.h"
 class ThreadPool;
 class TcpServer;
 
@@ -18,7 +19,7 @@ class TcpConnection
     using CloseCallback=std::function<void(const std::shared_ptr<TcpConnection>&)>;//连接关闭回调，参数为当前连接对象的shared_ptr
     using MessageCallback=std::function<void(const std::shared_ptr<TcpConnection>&,const std::string&)>;//消息回调，参数为fd和消息内容
 public:
-    TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server);
+    TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config);
     ~TcpConnection();
     void handleRead();//读取客户端数据；
     void handleWrite();//发送outputBuffer数据
@@ -63,13 +64,13 @@ private:
     std::chrono::steady_clock::time_point lastPong_;//最近收到Pong的时间
     std::chrono::steady_clock::time_point lastActiveTime_;//最近收到业务帧
     std::chrono::steady_clock::time_point lastHeartbeeatTime_;//最近收到心跳帧
-    std::chrono::milliseconds heartbeatInterval_{5000};
-    std::chrono::milliseconds heartbeatTimeout_{30000};
+    std::chrono::milliseconds heartbeatInterval_;
+    std::chrono::milliseconds heartbeatTimeout_;
     void onHeartbeatTick();//每次心跳定时器触发时执行，检测超时并发送ping
 
     //空闲超时：一段时间内没有收到任何业务帧
     TimerId idleTimerId_;//
     std::chrono::milliseconds idleTimeout_{120000};//超时时间
-
+    size_t maxFrameLen;//最大消息长度，超过认为协议错误，关闭连接
 
 };

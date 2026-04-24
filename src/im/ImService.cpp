@@ -2,7 +2,7 @@
 #include "third_party/json.hpp"
 #include "TcpConnection.h"
 
-im::Imservice::Imservice(uint32_t supportedVer):supportedVer_(supportedVer){}
+im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
     sendToConnKey_=std::move(fn);
@@ -13,10 +13,11 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
     auto req_or_resp=im::tryParse(payload);
     if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
         //请求解析失败，直接返回错误响应
-        if(resp_ptr->ok==false){
+        if(resp_ptr->ok==false){//解析失败的响应
+             decorate(*resp_ptr);
             decorate(*resp_ptr);
             std::string resp_str=im::encodeResponse(*resp_ptr);
-            if(sendToConnKey_){
+            if(sendToConnKey_){//发送错误响应
                 sendToConnKey_(key,resp_str);
             }
         }
@@ -199,6 +200,9 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,ConnKey key,Ses
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing from name");
     }
     std::string groupName=req.body["name"];
+    if(groupName.size()>imConfig_.maxGroupNameLen){
+        return makeErr(req,im::ErrorCode::GROUP_NAME_INVALID,"Group name is too long");
+    }
     std::string owner=session.username_;
     auto [success,groupIdOrErr]=groupManager_.createGroup(owner,groupName);
     if(!success){
@@ -291,6 +295,9 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,S
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
     }
     std::string content=req.body["content"].get<std::string>();
+    if(content.size()>imConfig_.maxMessageLen){
+        return makeErr(req,im::ErrorCode::BAD_REQUEST,"Message content is too long");
+    }
     auto user=sessionManager_.usernameByConn(key);
     if(!user.has_value()){
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");

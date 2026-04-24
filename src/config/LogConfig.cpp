@@ -4,7 +4,7 @@ LogConfig LogConfig::fromJson(const nlohmann::json& j){
     LogConfig logConfig;
     logConfig.level=ConfigParseHelper::getOrDefault(j,"level",logConfig.level);
     logConfig.toConsole=ConfigParseHelper::getOrDefault(j,"to_console",logConfig.toConsole);
-    logConfig.toFile=ConfigParseHelper::getOrDefault(j,"to_ile",logConfig.toFile);
+    logConfig.toFile=ConfigParseHelper::getOrDefault(j,"to_file",logConfig.toFile);
     logConfig.filePath=ConfigParseHelper::getOrDefault(j,"file_path",logConfig.filePath);
     logConfig.jsonFormat=ConfigParseHelper::getOrDefault(j,"json_format",logConfig.jsonFormat);
     return logConfig;
@@ -12,7 +12,7 @@ LogConfig LogConfig::fromJson(const nlohmann::json& j){
 void LogConfig::applyEnvOverrides(){
     auto envLevel=ConfigParseHelper::getEnv("LOG_LEVEL"); 
     if(envLevel.has_value()){
-        level=envLevel.value();
+        level=ConfigParseHelper::getOrThrow<LogLevel>(nlohmann::json{{"level",envLevel.value()}}, "level");
     }
     auto envToConsole=ConfigParseHelper::getEnv("LOG_TO_CONSOLE");
     if(envToConsole.has_value()){
@@ -32,9 +32,9 @@ void LogConfig::applyEnvOverrides(){
     }
 }
 void LogConfig::validateOrThrow() const{
-    static const std::set<std::string> validLevels{"TRACE","DEBUG","INFO","WARN","ERROR"};
+    static const std::set<LogLevel> validLevels{LogLevel::TRACE, LogLevel::DEBUG, LogLevel::INFO, LogLevel::WARN, LogLevel::ERROR};
     if(validLevels.find(level)==validLevels.end()){
-        throw std::runtime_error("Invalid log level: "+level);
+        throw std::runtime_error("Invalid log level: " + std::to_string(static_cast<int>(level)));
     }
     if(toFile&&!filePath.empty()){
         //简单校验路径合法性，不能包含非法字符

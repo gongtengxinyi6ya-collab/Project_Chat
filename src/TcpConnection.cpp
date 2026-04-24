@@ -2,8 +2,8 @@
 #include "TcpServer.h"
 #include "ThreadPool.h"
 
-TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server)
-:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true){
+TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config)
+:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),maxFrameLen(config.net().maxFrameLen),idleTimeout_(config.net().idleTimeoutMs){
 
 }
 
@@ -35,7 +35,7 @@ void TcpConnection::handleRead(){
                         messageCallback_(shared_from_this(),"");
                     continue;   
                 }
-                if(len>kMaxFrameLen){//超过长度认为非法协议
+                if(len>maxFrameLen){//超过长度认为非法协议
                     handleClose();
                     return; 
                 }
@@ -149,7 +149,7 @@ void TcpConnection::send(const std::string &msg){//
 void TcpConnection::sendInLoop(const std::string& msg){
 
     uint32_t len=msg.size();
-    if(len>kMaxFrameLen){
+    if(len>maxFrameLen){
         LOG_WARN("Message length " + std::to_string(len) + " exceeds maximum frame length, message discarded"+" to send, fd="+std::to_string(fd_));
         return;
     }

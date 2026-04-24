@@ -8,6 +8,7 @@
   },
   "net": {
     "heartbeat_ms": 5000,
+    "heartbeat_timeout_ms": 30000,
     "idle_timeout_ms": 120000,
     "max_frame_len": 65536
   },

@@ -2,7 +2,7 @@
 ImConfig ImConfig::fromJson(const nlohmann::json& j){
     ImConfig imConfig;
     imConfig.requireGroupIdForSend=ConfigParseHelper::getOrDefault(j,"require_group_id_for_send",imConfig.requireGroupIdForSend);
-    imConfig.maxGroupNameLen=ConfigParseHelper::getOrDefault(j,"max_group_game_len",imConfig.maxGroupNameLen);
+    imConfig.maxGroupNameLen=ConfigParseHelper::getOrDefault(j,"max_group_name_len",imConfig.maxGroupNameLen);
     imConfig.maxMessageLen=ConfigParseHelper::getOrDefault(j,"max_message_len",imConfig.maxMessageLen);
     return imConfig;
 }

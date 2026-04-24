@@ -3,6 +3,7 @@
 #include <set>
 #include "third_party/json.hpp"
 #include "ConfigParseHelper.h"
+#include "logger/LogLevel.h"
 /*决定输出目标和格式*/
 class LogConfig{
 public:
@@ -11,9 +12,9 @@ public:
     void validateOrThrow() const;
 
     //属性
-    std::string level{"INFO"};
-    bool toConsole{true};
-    bool toFile{false};
-    std::string filePath{"build/chat.log"};
-    bool jsonFormat{false};
+    LogLevel level{LogLevel::INFO};//默认日志级别INFO，合法值TRACE,DEBUG,INFO,WARN,ERROR
+    bool toConsole{true};//默认输出到控制台
+    bool toFile{false};//默认不输出到文件
+    std::string filePath{"build/chat.log"};//默认日志文件路径，只有toFile为true时有效
+    bool jsonFormat{false};//默认文本格式，设置为true时输出JSON格式日志，便于日志收集系统解析
 };
