@@ -14,7 +14,7 @@
 class AppConfig{
 public:
     static AppConfig loadFromFile(const std::string& path);//从JSON文件加载配置
-    void applyEnvOverriders();//允许环境变量覆盖配置
+    void applyEnvOverrides();//允许环境变量覆盖配置
     void validateOrThrow()const;//启动前一次性校验，避免运行期隐患
     std::string dumpSummary()const;//返回一行可读摘要用于启动日志
 

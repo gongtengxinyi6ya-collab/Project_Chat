@@ -14,7 +14,6 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
     if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
         //请求解析失败，直接返回错误响应
         if(resp_ptr->ok==false){//解析失败的响应
-             decorate(*resp_ptr);
             decorate(*resp_ptr);
             std::string resp_str=im::encodeResponse(*resp_ptr);
             if(sendToConnKey_){//发送错误响应

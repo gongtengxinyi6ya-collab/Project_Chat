@@ -22,7 +22,7 @@ AppConfig AppConfig::loadFromFile(const std::string& path){
     }
 
 }
-void AppConfig::applyEnvOverriders(){
+void AppConfig::applyEnvOverrides(){
     server_.applyEnvOverrides();
     net_.applyEnvOverrides();
     log_.applyEnvOverrides();
@@ -38,7 +38,7 @@ std::string AppConfig::dumpSummary() const{
     std::stringstream ss;
     ss<<"Server(host="<<server_.host<<",port="<<server_.port<<",ioThreads="<<server_.ioThreads<<",backlog="<<server_.backlog<<"); "
       <<"Net(heartBeatMs="<<net_.heartBeatMs<<",idleTimeoutMs="<<net_.idleTimeoutMs<<",maxFrameLen="<<net_.maxFrameLen<<"); "
-      <<"Log(level="<<log_.level<<",toConsole="<<log_.toConsole<<",toFile="<<log_.toFile<<",filePath="<<log_.filePath<<",jsonFormat="<<log_.jsonFormat<<"); "
+      <<"Log(level="<<logLevelToString(log_.level)<<",toConsole="<<log_.toConsole<<",toFile="<<log_.toFile<<",filePath="<<log_.filePath<<",jsonFormat="<<log_.jsonFormat<<"); "
       <<"IM(requireGroupIdForSend="<<im_.requireGroupIdForSend<<",maxGroupNameLen="<<im_.maxGroupNameLen<<",maxMessageLen="<<im_.maxMessageLen<<");";
     return ss.str();
 }

@@ -6,8 +6,8 @@
 #include <iostream>
 int main()
 {
-    AppConfig config=AppConfig::loadFromFile("config.json");
-    config.applyEnvOverriders();
+    AppConfig config=AppConfig::loadFromFile("config/config.json");
+    config.applyEnvOverrides();
     config.validateOrThrow();
     std::cout<<config.dumpSummary()<<std::endl;
     //根据配置设置日志系统

@@ -2,6 +2,11 @@
 #include <string>
 #include<optional>
 #include <stdexcept>
+#include <cstdlib>
+#include <algorithm>
+#include <iterator>
+#include <typeinfo>
+#include <climits>
 #include "third_party/json.hpp"
 /*工具类，统一容错和类型检查，减少配置类重复代码；报错信息带完整键名*/
 
@@ -62,11 +67,11 @@ public:
     //环境变量文本转无符号整数,检查非负与上限
     static uint32_t parseEnvUInt(const std::string& value,const std::string& envName,uint32_t maxValue=UINT32_MAX){
         try{
-            uint32_t uintValue = static_cast<uint32_t>(std::stoul(value));
-            if(uintValue<0||uintValue>maxValue){
+            int Value=std::stoi(value);
+            if(Value<0||Value>static_cast<int>(maxValue)){
                 throw std::runtime_error("Integer value out of range for environment variable "+envName+": "+value);
             }
-            return uintValue;
+            return static_cast<uint32_t>(Value);
         }catch(const std::exception& e){
             throw std::runtime_error("Invalid unsigned integer value for environment variable "+envName+": "+value);
         }
