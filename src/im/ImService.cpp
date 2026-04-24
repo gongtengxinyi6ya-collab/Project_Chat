@@ -203,6 +203,10 @@ std::optional<std::string> im::Imservice::resolveTargetGroupId(const Request& re
 //房间接口
 
 im::Response im::Imservice::handleCreateGroup(const Request& req,ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err.has_value()){
+        return err.value();
+    }
     if(!req.body.contains("name")||!req.body["name"].is_string()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupName");
     }
@@ -293,6 +297,10 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
 }
 im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err.has_value()){
+        return err.value();
+    }
     if(imConfig_.requireGroupIdForSend){//如果配置要求必须提供groupId字段
         if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
             return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
@@ -326,6 +334,10 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,S
 
 }
 im::Response im::Imservice::handleGroupMembers(const im::Request& req,ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err.has_value()){
+        return err.value();
+    }
     if(imConfig_.requireGroupIdForSend){
         if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
             return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
