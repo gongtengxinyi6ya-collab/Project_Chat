@@ -293,7 +293,7 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
 }
 im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,Session& session){
-    if(imConfig_.requireGroupIdForSend){
+    if(imConfig_.requireGroupIdForSend){//如果配置要求必须提供groupId字段
         if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
             return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
         }

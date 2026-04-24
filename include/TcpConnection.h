@@ -51,7 +51,7 @@ private:
     int fd_;//客户端socket
     ThreadPool* threadPool_;//线程池，处理消息转发等耗时操作
     TcpServer* server_;//服务器对象指针，调用服务器的消息转发函数
-    Channel* channel_;//事件监听
+    std::unique_ptr<Channel> channel_;//事件监听
     
     Buffer outputBuffer_;//待发送数据
     Buffer inputBuffer_;//读入缓存

@@ -8,13 +8,6 @@ TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpSe
 }
 
 TcpConnection::~TcpConnection(){
-    int fd = fd_;
-    if(fd >= 0){
-        loop_->removeChannel(fd);
-        ::close(fd);
-        fd_ = -1;
-    }
-    delete channel_;
 }
 
 void TcpConnection::handleRead(){
@@ -160,7 +153,7 @@ void TcpConnection::sendInLoop(const std::string& msg){
 }
 //连接建立，创建Channel，绑定回调，注册到EventLoop
 void TcpConnection::connectionEstablished(){
-    channel_=new Channel(loop_,fd_);
+    channel_=std::make_unique<Channel>(loop_,fd_);
     //绑定回调
     channel_->setReadCallback([this](){handleRead();});
     channel_->setWriteCallback([this](){handleWrite();});
@@ -177,7 +170,6 @@ void TcpConnection::connectionDestroyed(){
         connection_=false;
         channel_->disableAll();
         loop_->removeChannel(fd_);
-        delete channel_;
     }
 }
 

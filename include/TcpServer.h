@@ -20,7 +20,7 @@ public:
     ~TcpServer();
 
     void start();//启动服务器
-    void newConnection(int clientfd,const AppConfig& config);//在baseLoop线程中处理新连接，创建TcpConnection对象，并保存到connections_中
+    void newConnection(int clientfd);//在baseLoop线程中处理新连接，创建TcpConnection对象，并保存到connections_中
     void removeConnectionInBaseLoop(const std::shared_ptr<TcpConnection>& conn);//在baseLoop线程中删除连接，供TcpConnection调用
     void onMessage(const std::shared_ptr<TcpConnection>& conn, const std::string& msg);//处理消息，转发给其他客户端
 
@@ -41,4 +41,6 @@ private:
     //IM系统
     std::unique_ptr<im::Imservice> imService_;//IM业务对象，处理消息逻辑
     
+    //配置
+    AppConfig config_;//服务器配置，传递给TcpConnection使用
 };
