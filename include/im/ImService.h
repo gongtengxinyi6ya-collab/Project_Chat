@@ -52,7 +52,7 @@ private:
     void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
     std::optional<std::string> usernameByKey(ConnKey key) const;//把connKey映射为username
     bool sendPush(ConnKey,Response,std::optional<uint64_t> clientReqid=std::nullopt);//统一对push做decorate,encode,sendToConnKey
-
+    std::optional<std::string> resolveTargetGroupId(const Request&,Session&);//群id获取辅助方法
     //群聊接口
     Response handleCreateGroup(const Request&,ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
     size_t broadcastToGroup(const std::string&,const std::string&,ConnKey,const im::Response&push);//对房间内其他成员推送事件；

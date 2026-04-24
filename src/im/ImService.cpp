@@ -187,7 +187,18 @@ bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t
     }
     return false;
 }
-
+std::optional<std::string> im::Imservice::resolveTargetGroupId(const Request& req,Session& session){
+    if(req.body.contains("groupId")&&req.body["groupId"].is_string()){
+        std::string groupId=req.body["groupId"];
+        if(!groupId.empty()){
+            return groupId;
+        }
+    }
+    if(session.joinedGroupIds_.size()==1){
+        return *session.joinedGroupIds_.begin();
+    }
+    return std::nullopt;
+}
 
 //房间接口
 
@@ -282,11 +293,16 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
 }
 im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,Session& session){
-    if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
+    if(imConfig_.requireGroupIdForSend){
+        if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
+        }
     }
-    std::string groupId=req.body["groupId"];
-    auto err=guardInGroup(req,session,groupId);
+    auto groupId=resolveTargetGroupId(req,session);
+    if(!groupId.has_value()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupId field and no active group");
+    }
+    auto err=guardInGroup(req,session,groupId.value());
     if(err.has_value()){
         return err.value();
     }
@@ -301,25 +317,30 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,S
     if(!user.has_value()){
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");
     }
-    if(!groupManager_.isMember(groupId,user.value())){
+    if(!groupManager_.isMember(groupId.value(),user.value())){
         return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId},{"content",content}}};
-    size_t fanout=broadcastToGroup(groupId,user.value(),key,pushMsg);
-    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId},{"fanout",fanout}});
+    size_t fanout=broadcastToGroup(groupId.value(),user.value(),key,pushMsg);
+    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"fanout",fanout}});
 
 }
 im::Response im::Imservice::handleGroupMembers(const im::Request& req,ConnKey key,Session& session){
-    if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
+    if(imConfig_.requireGroupIdForSend){
+        if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
+        }
     }
-    std::string groupId=req.body["groupId"];
-    auto err=guardInGroup(req,session,groupId);
+    auto groupId=resolveTargetGroupId(req,session);
+    if(!groupId.has_value()){
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupId field and no active group");
+    }
+    auto err=guardInGroup(req,session,groupId.value());
     if(err.has_value()){
         return err.value();
     }
-    std::vector<std::string> members=groupManager_.members(groupId);
-    return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId},{"count",members.size()},{"members",members}});
+    std::vector<std::string> members=groupManager_.members(groupId.value());
+    return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId.value()},{"count",members.size()},{"members",members}});
 
 }
 
