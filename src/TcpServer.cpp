@@ -61,7 +61,7 @@ void TcpServer::newConnection(int fd){
             addConnectionInBaseLoop(conn);
         });
     });
-    LOG_INFO("New connection fd: " + std::to_string(fd)+"assigned to ioloop" );
+    LOG_INFO("New connection fd: " + std::to_string(fd)+" assigned to ioloop" );
 }
 
 void TcpServer::removeConnectionInBaseLoop(const std::shared_ptr<TcpConnection>& conn){

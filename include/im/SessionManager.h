@@ -21,8 +21,8 @@ public:
     std::vector<std::string> onLineUsers()const;//返回成员列表
     void erase(ConnKey);//删除session
 private:
-    std::unordered_map<ConnKey,Session> sessions_;
+    std::unordered_map<ConnKey,Session> sessions_;//连接到Session的映射
     std::unordered_map<std::string,std::unordered_set<ConnKey>> userConnMap_;//一个用户多连接，支持多端登录
-    std::unordered_map<ConnKey,std::string> connUserMap_;
+    std::unordered_map<ConnKey,std::string> connUserMap_;//连接到用户的映射，方便根据连接获取用户信息
 };
 }

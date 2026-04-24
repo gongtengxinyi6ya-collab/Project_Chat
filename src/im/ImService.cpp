@@ -103,9 +103,6 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
         return makeErr(req,im::ErrorCode::USER_EXISTS,"User already authenticated with a different username");
     }
     
-    if(!sessionManager_.bindUser(key,username)){
-        return makeErr(req,im::ErrorCode::USER_EXISTS,"User already exist");
-    }
     return makeOk(req,im::MsgType::AUTH_RESP);
 }
 

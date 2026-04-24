@@ -192,7 +192,6 @@ void TcpConnection::stopHeartbeat(){
 }
 
 bool TcpConnection::handleControlFrame(const std::string& payload){
-    lastHeartbeeatTime_=std::chrono::steady_clock::now();
     if(payload=="PONG"){
         lastHeartbeeatTime_=std::chrono::steady_clock::now();
         LOG_INFO("Received PONG from connection " + std::to_string(fd_));
