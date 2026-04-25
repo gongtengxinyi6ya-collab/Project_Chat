@@ -28,6 +28,19 @@ errno友好宏
 #define LOG_FATAL(msg) \
     do{Logger::instance().log(LogLevel::FATAL,msg,__FILE__,__LINE__,__func__);} while(0)
 
+#define LOG_INFO_CTX(msg,ctx) \
+    do{\
+        Logger::instance().logWithContext(LogLevel::INFO,msg,ctx,__FILE__,__LINE__,__func__);\
+    }while(0)
+
+#define LOG_WARN_CTX(msg,ctx) \
+    do{\
+        Logger::instance().logWithContext(LogLevel::WARN,msg,ctx,__FILE__,__LINE__,__func__);\
+    }while(0)
+#define LOG_ERROR_CTX(msg,ctx) \
+    do{\
+        Logger::instance().logWithContext(LogLevel::ERROR,msg,ctx,__FILE__,__LINE__,__func__);\
+    }while(0)
 //errno友好宏
 #define LOG_SYSERR(msg) \
     do{\

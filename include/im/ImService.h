@@ -17,6 +17,7 @@
 #include "im/GroupManager.h"
 #include "im/SessionManager.h"
 #include "config/ImConfig.h"
+#include "logger/LogContext.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -52,7 +53,7 @@ private:
     void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
     std::optional<std::string> usernameByKey(ConnKey key) const;//把connKey映射为username
     bool sendPush(ConnKey,Response,std::optional<uint64_t> clientReqid=std::nullopt);//统一对push做decorate,encode,sendToConnKey
-    std::optional<std::string> resolveTargetGroupId(const Request&,Session&);//群id获取辅助方法
+    std::optional<std::string> resolveTargetGroupId(const Request&,const Session&);//群id获取辅助方法
     //群聊接口
     Response handleCreateGroup(const Request&,ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
     size_t broadcastToGroup(const std::string&,const std::string&,ConnKey,const im::Response&push);//对房间内其他成员推送事件；
@@ -62,5 +63,9 @@ private:
     im::Response handleGroupMembers(const im::Request&,ConnKey,Session&);//获取群聊成员列表
     Response handleListGroups(const Request&,ConnKey,Session&);//返回当前用户加入的群列表
 
-    };
+    LogContext makeReqCtx(ConnKey,const Request&,const Session&,const std::string& )const;//生成请求入口日志上下文
+    LogContext makeRespCtx(ConnKey,const Request&,const Response&,const Session&,const std::string&)const;//生成响应出口日志上下文
+    std::optional<std::string> tryExtractGroupId(const Request& req)const;
+    std::optional<uint64_t> tryExtractMsgId(const Response& resp)const;
+};
 }

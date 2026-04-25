@@ -11,13 +11,17 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
     ConnKey key=conn->fd();
     auto &session=sessionManager_.getOrCreate(key);
     auto req_or_resp=im::tryParse(payload);
+    LOG_INFO_CTX("im request in",makeReqCtx(key,std::get_if<im::Request>(&req_or_resp)?*std::get_if<im::Request>(&req_or_resp):im::Request{},session,"REQ_IN"));
     if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
         //请求解析失败，直接返回错误响应
         if(resp_ptr->ok==false){//解析失败的响应
             decorate(*resp_ptr);
+            LOG_WARN_CTX("im parse failed",makeRespCtx(key,im::Request{},*resp_ptr,session,"PARSE_ERR"));
             std::string resp_str=im::encodeResponse(*resp_ptr);
             if(sendToConnKey_){//发送错误响应
-                sendToConnKey_(key,resp_str);
+                if(!sendToConnKey_(key,resp_str)){
+                    LOG_ERROR_CTX("Failed to send parse error response",makeRespCtx(key,im::Request{},*resp_ptr,session,"PARSE_ERR_SEND_FAIL"));
+                }
             }
         }
     }
@@ -44,6 +48,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
                 resp=handleJoin(*req_ptr,key,session);
                 if(resp.ok&&resp.data.contains("alreadyIn")&&resp.data["alreadyIn"].get<bool>()==false){
                     std::string groupId=resp.data["groupId"];
+                    LOG_INFO_CTX("user joined group",makeReqCtx(key,*req_ptr,session,"JOIN_GROUP"));
                     im::Response event=makeOk(*req_ptr,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"groupId",groupId}});
                     broadcastToGroup(groupId,session.username_,key,event);
                 }
@@ -53,6 +58,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
                 resp=handleLeave(*req_ptr,key,session);
                 if(resp.ok){
                     std::string groupId=resp.data["groupId"];
+                    LOG_INFO_CTX("im leave group",makeRespCtx(key,*req_ptr,resp,session,"LEAVE_GROUP"));
                     im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"groupId",groupId}});
                     broadcastToGroup(groupId,session.username_,key,leaveEvent);
                 }
@@ -60,6 +66,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             }
             case im::MsgType::GROUP_MSG_REQ:
                 resp=handleGroupMsg(*req_ptr,key,session);
+                LOG_INFO_CTX("im group msg req",makeReqCtx(key,*req_ptr,session,"GROUP_MSG_REQ"));
                 break;
             case im::MsgType::GROUP_MEMBERS_REQ:
                 resp=handleGroupMembers(*req_ptr,key,session);
@@ -72,6 +79,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
                 break;
         }
         decorate(resp,req_ptr->req_id);
+        LOG_INFO_CTX("im request out",makeRespCtx(key,*req_ptr,resp,session,"RESP_OUT"));
         std::string resp_str=im::encodeResponse(resp);
         if(sendToConnKey_ ){
             sendToConnKey_(key,resp_str);
@@ -184,7 +192,7 @@ bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t
     }
     return false;
 }
-std::optional<std::string> im::Imservice::resolveTargetGroupId(const Request& req,Session& session){
+std::optional<std::string> im::Imservice::resolveTargetGroupId(const Request& req,const Session& session){
     if(req.body.contains("groupId")&&req.body["groupId"].is_string()){
         std::string groupId=req.body["groupId"];
         if(!groupId.empty()){
@@ -367,4 +375,64 @@ im::Response im::Imservice::handleListGroups(const Request& req,ConnKey key,Sess
     }
     std::vector<std::string> groups=groupManager_.groupsOfUser(session.username_);
     return makeOk(req,MsgType::LIST_GROUPS_RESP,nlohmann::json{{"groupIds",groups},{"count",groups.size()}});
+}
+
+LogContext im::Imservice::makeReqCtx(ConnKey key,const Request& req,const Session& session,const std::string& event)const{
+    LogContext ctx;
+    ctx.connFd=static_cast<int>(key);
+    ctx.event=event;
+    ctx.reqId=static_cast<uint64_t>(req.req_id);
+    ctx.msgType=static_cast<uint32_t>(im::msgTypeToInt(req.type));
+    if(!session.username_.empty()){
+        ctx.user=session.username_;
+    }
+    else if(!req.from.empty()){
+        ctx.user=req.from;
+    }
+    ctx.groupId=tryExtractGroupId(req);
+    return ctx;
+}
+LogContext im::Imservice::makeRespCtx(ConnKey key,const Request& req,const Response& resp,const Session& session,const std::string& event)const{
+    LogContext ctx;
+    ctx.connFd=static_cast<int>(key);
+    ctx.event=event;
+    ctx.reqId=static_cast<uint64_t>(req.req_id);
+    ctx.msgType=static_cast<uint32_t>(im::msgTypeToInt(req.type));
+    ctx.errCode=static_cast<uint32_t>(resp.code);
+    ctx.msgId=tryExtractMsgId(resp);
+    if(!session.username_.empty()){
+        ctx.user=session.username_;
+    }
+    else if(!req.from.empty()){
+        ctx.user=req.from;
+    }
+    if(resp.data.contains("groupId")&&resp.data["groupId"].is_string()){
+        ctx.groupId=resp.data["groupId"];
+    }
+    else{
+        ctx.groupId=tryExtractGroupId(req);
+    }
+    if(resp.data.contains("fanout")&&resp.data["fanout"].is_number_unsigned()){
+        ctx.fanout=resp.data["fanout"];
+    }
+    return ctx;
+}
+std::optional<std::string> im::Imservice::tryExtractGroupId(const Request& req)const{
+    if(req.body.contains("groupId")&&req.body["groupId"].is_string()){
+        std::string groupId=req.body["groupId"];
+        if(!groupId.empty())
+            return groupId;
+    }
+    return std::nullopt;
+}
+std::optional<uint64_t> im::Imservice::tryExtractMsgId(const Response& resp)const{
+    if(resp.data.contains("msg_id")){
+        if(resp.data["msg_id"].is_number_unsigned()){
+            return resp.data["msg_id"].get<uint64_t>();
+        }
+        if(resp.data["msg_id"].is_number_integer()&&resp.data["msg_id"].get<int64_t>()>=0){
+            return static_cast<uint64_t>(resp.data["msg_id"].get<int64_t>());
+        }
+    }
+    return std::nullopt;
 }
