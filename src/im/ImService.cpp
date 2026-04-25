@@ -11,7 +11,6 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
     ConnKey key=conn->fd();
     auto &session=sessionManager_.getOrCreate(key);
     auto req_or_resp=im::tryParse(payload);
-    LOG_INFO_CTX("im request in",makeReqCtx(key,std::get_if<im::Request>(&req_or_resp)?*std::get_if<im::Request>(&req_or_resp):im::Request{},session,"REQ_IN"));
     if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
         //请求解析失败，直接返回错误响应
         if(resp_ptr->ok==false){//解析失败的响应
@@ -26,6 +25,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
         }
     }
     else if(auto req_ptr=std::get_if<im::Request>(&req_or_resp)){
+        LOG_INFO_CTX("im request in",makeReqCtx(key,*req_ptr,session,"REQ_IN"));
         im::Response resp;
         switch(req_ptr->type){
             case im::MsgType::AUTH_REQ:
@@ -397,7 +397,7 @@ LogContext im::Imservice::makeRespCtx(ConnKey key,const Request& req,const Respo
     ctx.connFd=static_cast<int>(key);
     ctx.event=event;
     ctx.reqId=static_cast<uint64_t>(req.req_id);
-    ctx.msgType=static_cast<uint32_t>(im::msgTypeToInt(req.type));
+    ctx.msgType=static_cast<uint32_t>(im::msgTypeToInt(resp.type));
     ctx.errCode=static_cast<uint32_t>(resp.code);
     ctx.msgId=tryExtractMsgId(resp);
     if(!session.username_.empty()){

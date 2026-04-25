@@ -81,7 +81,7 @@ void Logger::logWithContext(LogLevel level,std::string_view msg,const LogContext
     logLine.append(timeBuffer);
     logLine.append("."+std::to_string(ms));
     logLine.append(" ["+std::string(logLevelToString(level))+"] ");
-    logLine.append("[pid= "+std::to_string(tid)+"] ");
+    logLine.append("[tid= "+std::to_string(tid)+"] ");
     logLine.append(msg);
     if(!ctx.empty()){
         logLine.append(" "+ctx.toKvString());
@@ -98,7 +98,7 @@ void Logger::logWithContext(LogLevel level,std::string_view msg,const LogContext
         }
         logLine.append(")");
     }
-    logLine.append("/n");
+    logLine.append("\n");
     std::lock_guard lk(mutex_);
     {
         if(sink_){
