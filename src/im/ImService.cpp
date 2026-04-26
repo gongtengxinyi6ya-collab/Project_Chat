@@ -11,80 +11,24 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
     ConnKey key=conn->fd();
     auto &session=sessionManager_.getOrCreate(key);
     auto req_or_resp=im::tryParse(payload);
-    if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
-        //请求解析失败，直接返回错误响应
-        if(resp_ptr->ok==false){//解析失败的响应
-            decorate(*resp_ptr);
-            LOG_WARN_CTX("im parse failed",makeRespCtx(key,im::Request{},*resp_ptr,session,"PARSE_ERR"));
-            std::string resp_str=im::encodeResponse(*resp_ptr);
-            if(sendToConnKey_){//发送错误响应
-                if(!sendToConnKey_(key,resp_str)){
-                    LOG_ERROR_CTX("Failed to send parse error response",makeRespCtx(key,im::Request{},*resp_ptr,session,"PARSE_ERR_SEND_FAIL"));
-                }
-            }
-        }
-    }
-    else if(auto req_ptr=std::get_if<im::Request>(&req_or_resp)){
+    if(auto req_ptr=std::get_if<im::Request>(&req_or_resp)){
         LOG_INFO_CTX("im request in",makeReqCtx(key,*req_ptr,session,"REQ_IN"));
-        im::Response resp;
-        switch(req_ptr->type){
-            case im::MsgType::AUTH_REQ:
-                resp=handleAuth(*req_ptr,key,session);
-                break;
-            case im::MsgType::ECHO_REQ:
-                resp=handleEcho(*req_ptr,key,session);
-                break;
-            case im::MsgType::DM_REQ:
-                resp=handleDm(*req_ptr,key,session);
-                break;
-            case im::MsgType::LIST_USERS_REQ:
-                resp=handleListUsers(*req_ptr,key,session);
-                break;
-            case im::MsgType::CREATE_GROUP_REQ:
-                resp=handleCreateGroup(*req_ptr,key,session);
-                break;
-            case im::MsgType::JOIN_GROUP_REQ:
-            {
-                resp=handleJoin(*req_ptr,key,session);
-                if(resp.ok&&resp.data.contains("alreadyIn")&&resp.data["alreadyIn"].get<bool>()==false){
-                    std::string groupId=resp.data["groupId"];
-                    LOG_INFO_CTX("user joined group",makeReqCtx(key,*req_ptr,session,"JOIN_GROUP"));
-                    im::Response event=makeOk(*req_ptr,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"groupId",groupId}});
-                    broadcastToGroup(groupId,session.username_,key,event);
-                }
-                break;
-            }
-            case im::MsgType::LEAVE_GROUP_REQ:{
-                resp=handleLeave(*req_ptr,key,session);
-                if(resp.ok){
-                    std::string groupId=resp.data["groupId"];
-                    LOG_INFO_CTX("im leave group",makeRespCtx(key,*req_ptr,resp,session,"LEAVE_GROUP"));
-                    im::Response leaveEvent=makeOk(*req_ptr,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"groupId",groupId}});
-                    broadcastToGroup(groupId,session.username_,key,leaveEvent);
-                }
-                break;
-            }
-            case im::MsgType::GROUP_MSG_REQ:
-                resp=handleGroupMsg(*req_ptr,key,session);
-                LOG_INFO_CTX("im group msg req",makeReqCtx(key,*req_ptr,session,"GROUP_MSG_REQ"));
-                break;
-            case im::MsgType::GROUP_MEMBERS_REQ:
-                resp=handleGroupMembers(*req_ptr,key,session);
-                break;
-            case im::MsgType::LIST_GROUPS_REQ:
-                resp=handleListGroups(*req_ptr,key,session);
-                break;
-            default:
-                resp=im::makeErr(*req_ptr,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
-                break;
+        Response resp;
+        try{
+            resp=dispatcResqest(*req_ptr,key,session);
+        }catch(const std::exception& e){
+            resp=makeErr(*req_ptr,im::ErrorCode::INTERNAL,"Internal server error:"+std::string(e.what()));
+            return;
         }
-        decorate(resp,req_ptr->req_id);
-        LOG_INFO_CTX("im request out",makeRespCtx(key,*req_ptr,resp,session,"RESP_OUT"));
-        std::string resp_str=im::encodeResponse(resp);
-        if(sendToConnKey_ ){
-            sendToConnKey_(key,resp_str);
+        if(!sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT")){
+            LOG_ERROR_CTX("Failed to send response",makeRespCtx(key,*req_ptr,resp,session,"RESP_OUT"));
         }
+
     }
+    else if(std::get_if<im::Response>(&req_or_resp)){
+        sendParseErrorWithLod(key,std::get<im::Response>(req_or_resp),session);
+    }
+    
 
 }
 void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
@@ -435,4 +379,104 @@ std::optional<uint64_t> im::Imservice::tryExtractMsgId(const Response& resp)cons
         }
     }
     return std::nullopt;
+}
+
+//统一错误处理
+LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
+    switch(code){
+        case im::ErrorCode::BAD_JSON:
+        case im::ErrorCode::MISSING_FIELD:
+        case im::ErrorCode::UNSUPPORTED_VER:
+        case im::ErrorCode::UNKNOWN_TYPE:
+        case im::ErrorCode::BAD_REQUEST:
+        case im::ErrorCode::GROUP_NAME_INVALID:
+        case im::ErrorCode::NO_SUCH_USER:
+        case im::ErrorCode::NO_SUCH_GROUP:
+        case im::ErrorCode::ALREADY_IN_GROUP:
+        case im::ErrorCode::NOT_IN_GROUP:
+        case im::ErrorCode::NOT_AUTHED:
+            return LogLevel::WARN;
+        case im::ErrorCode::INTERNAL:
+            return LogLevel::ERROR;
+        default:
+            return LogLevel::ERROR;
+    }
+}
+bool im::Imservice::sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet){
+    decorate(resp,req.req_id);
+    auto payload=im::encodeResponse(resp);
+    bool ok=sendToConnKey_&&sendToConnKey_(key,payload);
+    auto ctx=makeRespCtx(key,req,resp,session,outEvet);
+    if(!resp.ok){
+        LogLevel level=mapErrorToLogLevel(resp.code);
+        if(level==LogLevel::ERROR){
+            LOG_ERROR_CTX("im response error",ctx);
+        }
+        else if(level==LogLevel::WARN){
+            LOG_WARN_CTX("im response warn",ctx);
+        }
+    }
+    return ok;
+}
+bool im::Imservice::sendParseErrorWithLod(ConnKey key,Response& resp,const Session& session){
+    decorate(resp);
+    auto payload=im::encodeResponse(resp);
+    bool ok=sendToConnKey_&&sendToConnKey_(key,payload);
+    auto ctx=makeRespCtx(key,Request{},resp,session,"PARSE_ERR_RESP");
+    LogLevel level=mapErrorToLogLevel(resp.code);
+    if(level==LogLevel::ERROR){
+        LOG_ERROR_CTX("im parse error",ctx);
+    }
+    else if(level==LogLevel::WARN){
+        LOG_WARN_CTX("im parse warn",ctx);
+    }
+    if(!ok){
+        LOG_ERROR_CTX("Failed to send parse error response",ctx);
+    }
+    return ok;
+}
+im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Session& session){
+    switch(req.type){
+        case im::MsgType::AUTH_REQ:
+            return handleAuth(req,key,session);
+        case im::MsgType::ECHO_REQ:
+            return handleEcho(req,key,session);
+        case im::MsgType::DM_REQ:
+            return handleDm(req,key,session);
+        case im::MsgType::LIST_USERS_REQ:
+            return handleListUsers(req,key,session);
+        case im::MsgType::CREATE_GROUP_REQ:
+            return handleCreateGroup(req,key,session);
+        case im::MsgType::JOIN_GROUP_REQ:
+        {
+            im::Response resp=handleJoin(req,key,session);
+            if(resp.ok&&resp.data.contains("alreadyIn")&&resp.data["alreadyIn"].get<bool>()==false){
+                    std::string groupId=resp.data["groupId"];
+                    LOG_INFO_CTX("user joined group",makeReqCtx(key,req,session,"JOIN_GROUP"));
+                    im::Response event=makeOk(req,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"groupId",groupId}});
+                    broadcastToGroup(groupId,session.username_,key,event);
+                }
+            return resp;
+        }
+        
+        case im::MsgType::LEAVE_GROUP_REQ:
+        {
+            im::Response resp=handleLeave(req,key,session);
+            if(resp.ok){
+                    std::string groupId=resp.data["groupId"];
+                    LOG_INFO_CTX("im leave group",makeRespCtx(key,req,resp,session,"LEAVE_GROUP"));
+                    im::Response leaveEvent=makeOk(req,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"groupId",groupId}});
+                    broadcastToGroup(groupId,session.username_,key,leaveEvent);
+                }
+            return resp;
+        }
+        case im::MsgType::GROUP_MSG_REQ:
+            return handleGroupMsg(req,key,session);
+        case im::MsgType::GROUP_MEMBERS_REQ:
+            return handleGroupMembers(req,key,session);
+        case im::MsgType::LIST_GROUPS_REQ:
+            return handleListGroups(req,key,session);
+        default:
+            return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
+    }
 }

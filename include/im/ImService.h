@@ -63,9 +63,17 @@ private:
     im::Response handleGroupMembers(const im::Request&,ConnKey,Session&);//获取群聊成员列表
     Response handleListGroups(const Request&,ConnKey,Session&);//返回当前用户加入的群列表
 
+    //日志上下文生成辅助方法
     LogContext makeReqCtx(ConnKey,const Request&,const Session&,const std::string& )const;//生成请求入口日志上下文
     LogContext makeRespCtx(ConnKey,const Request&,const Response&,const Session&,const std::string&)const;//生成响应出口日志上下文
     std::optional<std::string> tryExtractGroupId(const Request& req)const;
     std::optional<uint64_t> tryExtractMsgId(const Response& resp)const;
+
+    //统一错误处理
+    LogLevel mapErrorToLogLevel(im::ErrorCode code) const;//错误映射
+    bool sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet);//统一回包出口函数，处理日志，错误
+    bool sendParseErrorWithLod( ConnKey key,Response& resp,const Session& session);//统一解析错误回包函数
+    im::Response dispatcResqest(const Request&req,ConnKey key,Session& ssession);//分发并返回resp
+
 };
 }
