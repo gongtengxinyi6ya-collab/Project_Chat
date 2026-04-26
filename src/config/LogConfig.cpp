@@ -2,7 +2,9 @@
 
 LogConfig LogConfig::fromJson(const nlohmann::json& j){
     LogConfig logConfig;
-    logConfig.level=ConfigParseHelper::getOrDefault(j,"level",logConfig.level);
+    if(j.contains("level")){
+        logConfig.level=logConfig.parseLogLevel(j,"level");
+    }
     logConfig.toConsole=ConfigParseHelper::getOrDefault(j,"to_console",logConfig.toConsole);
     logConfig.toFile=ConfigParseHelper::getOrDefault(j,"to_file",logConfig.toFile);
     logConfig.filePath=ConfigParseHelper::getOrDefault(j,"file_path",logConfig.filePath);
@@ -12,7 +14,7 @@ LogConfig LogConfig::fromJson(const nlohmann::json& j){
 void LogConfig::applyEnvOverrides(){
     auto envLevel=ConfigParseHelper::getEnv("LOG_LEVEL"); 
     if(envLevel.has_value()){
-        level=ConfigParseHelper::getOrThrow<LogLevel>(nlohmann::json{{"level",envLevel.value()}}, "level");
+        level=parseLogLevel(nlohmann::json{{"level", envLevel.value()}}, "LOG_LEVEL");
     }
     auto envToConsole=ConfigParseHelper::getEnv("LOG_TO_CONSOLE");
     if(envToConsole.has_value()){
@@ -32,7 +34,7 @@ void LogConfig::applyEnvOverrides(){
     }
 }
 void LogConfig::validateOrThrow() const{
-    static const std::set<LogLevel> validLevels{LogLevel::TRACE, LogLevel::DEBUG, LogLevel::INFO, LogLevel::WARN, LogLevel::ERROR};
+    static const std::set<LogLevel> validLevels{LogLevel::TRACE, LogLevel::DEBUG, LogLevel::INFO, LogLevel::WARN, LogLevel::ERROR, LogLevel::FATAL};
     if(validLevels.find(level)==validLevels.end()){
         throw std::runtime_error("Invalid log level: " + std::to_string(static_cast<int>(level)));
     }
@@ -41,5 +43,24 @@ void LogConfig::validateOrThrow() const{
         if(filePath.find_first_of("<>:\"|?*")!=std::string::npos){
             throw std::runtime_error("Invalid log file path: "+filePath);
         }
+    }
+}
+LogLevel LogConfig::parseLogLevel(const nlohmann::json& j,const std::string& key){
+    std::string levelStr=ConfigParseHelper::getOrThrow<std::string>(j,key);
+    if(levelStr=="TRACE"){
+        return LogLevel::TRACE;
+    }else if(levelStr=="DEBUG"){
+        return LogLevel::DEBUG;
+    }else if(levelStr=="INFO"){
+        return LogLevel::INFO; 
+    }else if(levelStr=="WARN"){
+        return LogLevel::WARN;
+    }else if(levelStr=="ERROR"){
+        return LogLevel::ERROR;
+    }else if(levelStr=="FATAL"){
+        return LogLevel::FATAL;
+    }
+    else{
+        throw std::runtime_error("Invalid log level string for config key "+key+": "+levelStr);
     }
 }

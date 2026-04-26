@@ -10,7 +10,7 @@ public:
     static LogConfig fromJson(const nlohmann::json&);
     void applyEnvOverrides();
     void validateOrThrow() const;
-
+    LogLevel parseLogLevel(const nlohmann::json&,const std::string&);//映射字符串
     //属性
     LogLevel level{LogLevel::INFO};//默认日志级别INFO，合法值TRACE,DEBUG,INFO,WARN,ERROR
     bool toConsole{true};//默认输出到控制台
