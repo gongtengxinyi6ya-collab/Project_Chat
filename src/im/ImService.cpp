@@ -18,18 +18,22 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             resp=dispatcResqest(*req_ptr,key,session);
         }catch(const std::exception& e){
             resp=makeErr(*req_ptr,im::ErrorCode::INTERNAL,"Internal server error:"+std::string(e.what()));
-            return;
+            //记录DISPATCH_EXCEPTION日志，包含请求上下文和异常信息
+            LOG_ERROR_CTX("Exception occurred while dispatching request",makeReqCtx(key,*req_ptr,session,"DISPATCH_EXCEPTION"));
+
+        }catch(...){
+            resp=makeErr(*req_ptr,im::ErrorCode::INTERNAL,"Internal server error");
+            LOG_ERROR_CTX("Unknown exception occurred while dispatching request",makeReqCtx(key,*req_ptr,session,"DISPATCH_EXCEPTION"));
         }
         if(!sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT")){
             LOG_ERROR_CTX("Failed to send response",makeRespCtx(key,*req_ptr,resp,session,"RESP_OUT"));
         }
 
     }
-    else if(std::get_if<im::Response>(&req_or_resp)){
-        sendParseErrorWithLod(key,std::get<im::Response>(req_or_resp),session);
+    else if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
+        sendParseErrorWithLog(key,*resp_ptr,session);
     }
     
-
 }
 void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     ConnKey key=conn->fd();
@@ -48,13 +52,15 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
     if(username.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"username cannot be empty");
     }
-    if(session.state_==im::ConnState::Authed&&session.username_==username){//返回幂等OK
+    if(session.state_==im::ConnState::Authed&&session.username_==username){//同一连接上已经认证过且用户名相同，幂等处理直接返回成功
         return makeOk(req,im::MsgType::AUTH_RESP);
     }
-    if(session.state_==im::ConnState::Authed&&session.username_!=username){
+    if(session.state_==im::ConnState::Authed&&session.username_!=username){//同一连接上已经认证过但用户名不同，拒绝
         return makeErr(req,im::ErrorCode::USER_EXISTS,"User already authenticated with a different username");
     }
-    
+    if(!sessionManager_.bindUser(key,username)){
+        makeErr(req,im::ErrorCode::INTERNAL,"Failed to bind user to session");
+    }
     return makeOk(req,im::MsgType::AUTH_RESP);
 }
 
@@ -416,9 +422,15 @@ bool im::Imservice::sendResponseWithLog(ConnKey key,const Request& req,Response&
             LOG_WARN_CTX("im response warn",ctx);
         }
     }
+    else{
+        LOG_INFO_CTX("im response success",ctx);
+    }
+    if(!ok){
+        LOG_ERROR_CTX("Failed to send response",ctx);
+    }
     return ok;
 }
-bool im::Imservice::sendParseErrorWithLod(ConnKey key,Response& resp,const Session& session){
+bool im::Imservice::sendParseErrorWithLog(ConnKey key,Response& resp,const Session& session){
     decorate(resp);
     auto payload=im::encodeResponse(resp);
     bool ok=sendToConnKey_&&sendToConnKey_(key,payload);

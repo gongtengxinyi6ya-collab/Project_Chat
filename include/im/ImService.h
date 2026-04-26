@@ -18,6 +18,7 @@
 #include "im/SessionManager.h"
 #include "config/ImConfig.h"
 #include "logger/LogContext.h"
+#include "logger/LogLevel.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -72,7 +73,7 @@ private:
     //统一错误处理
     LogLevel mapErrorToLogLevel(im::ErrorCode code) const;//错误映射
     bool sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet);//统一回包出口函数，处理日志，错误
-    bool sendParseErrorWithLod( ConnKey key,Response& resp,const Session& session);//统一解析错误回包函数
+    bool sendParseErrorWithLog( ConnKey key,Response& resp,const Session& session);//统一解析错误回包函数
     im::Response dispatcResqest(const Request&req,ConnKey key,Session& ssession);//分发并返回resp
 
 };
