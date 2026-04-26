@@ -1,6 +1,6 @@
 #include "Acceptor.h"
 
-Acceptor::Acceptor(EventLoop* loop,int port):loop_(loop),listenSocket_(),channel_(nullptr),port_(port)
+Acceptor::Acceptor(EventLoop* loop,int port):port_(port),listenSocket_(),loop_(loop),channel_(nullptr)
 {   
     
 }

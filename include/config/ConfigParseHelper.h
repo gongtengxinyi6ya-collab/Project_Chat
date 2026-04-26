@@ -7,6 +7,7 @@
 #include <iterator>
 #include <typeinfo>
 #include <climits>
+#include "logger/LogLevel.h"
 #include "third_party/json.hpp"
 /*工具类，统一容错和类型检查，减少配置类重复代码；报错信息带完整键名*/
 

@@ -51,7 +51,6 @@ void TcpServer::newConnection(int fd){
             });
         });
         conn->setCloseCallback([this](std::shared_ptr<TcpConnection> conn){
-                int fd=conn->fd();
                 baseloop_->runInLoop([this,conn](){
                     removeConnectionInBaseLoop(conn);
                 });

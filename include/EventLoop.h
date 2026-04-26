@@ -63,9 +63,9 @@ public:
 
     bool looping;
     bool quit_;
+    int epollfd_;//epoll文件描述符
     std::vector<struct epoll_event> activeEvents_;//epoll事件列表
     std::unordered_map<int,Channel*> channels_;
-    int epollfd_;//epoll文件描述符
     
 
     std::vector<std::unique_ptr<TaskBase>> pendingFunctors_;//存放其他线程提交的任务，IO线程在loop中执行这些任务

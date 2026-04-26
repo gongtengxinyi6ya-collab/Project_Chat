@@ -3,7 +3,7 @@
 #include "ThreadPool.h"
 
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config)
-:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),maxFrameLen(config.net().maxFrameLen),idleTimeout_(config.net().idleTimeoutMs){
+:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen){
 
 }
 

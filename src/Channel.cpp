@@ -1,6 +1,6 @@
 #include "Channel.h"
 #include "EventLoop.h"
-Channel::Channel(EventLoop* loop,int fd):loop_(loop),fd_(fd),events_(0),revents_(0),inEpoll_(false)
+Channel::Channel(EventLoop* loop,int fd):fd_(fd),events_(0),revents_(0),inEpoll_(false),loop_(loop)
 {
 
 }

@@ -7,15 +7,16 @@
 //继承LogSink,实现write方法，将日志输出到文件
 class FileSink:public LogSink{
 public:
-    FileSink(std::string filepath);//
+    FileSink(std::string filepath,bool jsonFormat);//
     void write(std::string_view line) override;
     ~FileSink();
 private:
     int fd_{-1};//文件描述符
     std::string path_;
+    bool jsonFormat_{false};
 };
 
-FileSink::FileSink(std::string filepath):path_(std::move(filepath)){
+FileSink::FileSink(std::string filepath,bool jsonFormat):path_(std::move(filepath)),jsonFormat_(jsonFormat){
     fd_ = open(path_.c_str(),O_WRONLY|O_CREAT|O_APPEND,0644);
     if(fd_==-1){
         throw std::runtime_error("Failed to open log file: "+path_);

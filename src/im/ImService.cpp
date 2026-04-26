@@ -37,10 +37,8 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
 }
 void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     ConnKey key=conn->fd();
-    if(auto it=sessionManager_.find(key)){
-        sessionManager_.unbindConn(key);
-        sessionManager_.erase(key);
-    }
+    sessionManager_.unbindConn(key);
+    sessionManager_.erase(key);
 }
 
 
@@ -59,7 +57,7 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
         return makeErr(req,im::ErrorCode::USER_EXISTS,"User already authenticated with a different username");
     }
     if(!sessionManager_.bindUser(key,username)){
-        makeErr(req,im::ErrorCode::INTERNAL,"Failed to bind user to session");
+        return makeErr(req,im::ErrorCode::INTERNAL,"Failed to bind user to session");
     }
     return makeOk(req,im::MsgType::AUTH_RESP);
 }
@@ -82,7 +80,6 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
     if(err.has_value()){
         return err.value();
     }
-
     //取目标
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
@@ -265,9 +262,9 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,S
     if(!groupId.has_value()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupId field and no active group");
     }
-    auto err=guardInGroup(req,session,groupId.value());
-    if(err.has_value()){
-        return err.value();
+    auto errInGroup=guardInGroup(req,session,groupId.value());
+    if(errInGroup.has_value()){
+        return errInGroup.value();
     }
     if(!req.body.contains("content")||!req.body["content"].is_string()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
@@ -302,9 +299,9 @@ im::Response im::Imservice::handleGroupMembers(const im::Request& req,ConnKey ke
     if(!groupId.has_value()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupId field and no active group");
     }
-    auto err=guardInGroup(req,session,groupId.value());
-    if(err.has_value()){
-        return err.value();
+    auto errInGroup=guardInGroup(req,session,groupId.value());
+    if(errInGroup.has_value()){
+        return errInGroup.value();
     }
     std::vector<std::string> members=groupManager_.members(groupId.value());
     return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId.value()},{"count",members.size()},{"members",members}});

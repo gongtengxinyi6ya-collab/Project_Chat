@@ -29,11 +29,11 @@ public:
     
 private:
     EventLoop* baseloop_;
+    Acceptor acceptor_;//监听客户端连接
     std::unique_ptr<EventLoopThreadPool> iothreadPool_;//线程池，分发IO线程
     int threadNum_;//IO线程数量
     bool started_;//服务器是否已经启动
 
-    Acceptor acceptor_;//监听客户端连接
     // 使用 unique_ptr 让连接自动释放，避免手动 delete
     std::unordered_map<int,std::shared_ptr<TcpConnection>> connections_;//管理所有连接，key为fd，value为TcpConnection对象指针
     std::unique_ptr<ThreadPool> threadPool_;//线程池，处理消息转发等耗时操作

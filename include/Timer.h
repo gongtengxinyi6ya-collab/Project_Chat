@@ -22,8 +22,8 @@ public:
 
 
 private:
-    TimePoint expiration_;//下次到期时间点
     TimerCallback callback_;//到期执行的函数
+    TimePoint expiration_;//下次到期时间点
     Duration interval_;//重复间隔
     bool repeat_;//是否重复
     uint64_t sequence_;//全局唯一id
