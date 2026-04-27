@@ -17,4 +17,8 @@ public:
     bool toFile{false};//默认不输出到文件
     std::string filePath{"build/chat.log"};//默认日志文件路径，只有toFile为true时有效
     bool jsonFormat{false};//默认文本格式，设置为true时输出JSON格式日志，便于日志收集系统解析
+
+    bool asyncEnabled{false};//默认同步日志，设置为true启用异步日志
+    uint32_t asyncQueueSize{10000};//异步日志队列上限，默认10000条
+    uint32_t asyncFlushIntervalMs{100};//异步日志周期刷盘间隔，默认100ms
 };

@@ -9,8 +9,13 @@ void Logger::setLevel(LogLevel level){
     minLevel_.store(level,std::memory_order_relaxed);
 }
 void Logger::setSink(std::unique_ptr<LogSink> sink){
-    std::lock_guard lk(mutex_);
-    {
+    if(asyncEnabled_){
+        asynclogger_->stop();
+        asynclogger_=std::make_unique<AsyncLogger>(std::move(sink),asyncQueueSize_,asyncFlushInterval_);
+        asynclogger_->start();
+    }
+    else{
+        std::lock_guard lk(mutex_);
         sink_=std::move(sink);
     }
 }
@@ -51,11 +56,7 @@ void Logger::log(LogLevel level,std::string_view msg,const char* file,int line,c
     }
     logLine.append("\n");
     //输出
-    std::lock_guard lk(mutex_);
-    if(sink_){
-        sink_->write(logLine);
-        sink_->flush();
-    }
+    writeLine(std::move(logLine));
 
 
 }
@@ -99,12 +100,42 @@ void Logger::logWithContext(LogLevel level,std::string_view msg,const LogContext
         logLine.append(")");
     }
     logLine.append("\n");
-    std::lock_guard lk(mutex_);
-    {
+    writeLine(std::move(logLine));
+
+}
+//异步日志接口
+void Logger::setAsync(bool enable){
+    asyncEnabled_=enable;
+}
+void Logger::setAsyncOptions(size_t queueSize,std::chrono::milliseconds flushInterval){
+    asyncQueueSize_=queueSize;
+    asyncFlushInterval_=flushInterval;
+    if(asyncEnabled_){
+        asynclogger_->stop();
+        asynclogger_=std::make_unique<AsyncLogger>(std::move(sink_),asyncQueueSize_,asyncFlushInterval_);
+        asynclogger_->start();
+    }
+}
+void Logger::shutdown(){
+    if(asyncEnabled_&&asynclogger_){
+        asynclogger_->stop();
+    }
+    else{
+        std::lock_guard lk(mutex_);
         if(sink_){
-            sink_->write(logLine);
             sink_->flush();
         }
     }
-
+}
+void Logger::writeLine(std::string&& line){
+    if(asyncEnabled_&&asynclogger_){
+        asynclogger_->append(std::move(line));
+    }
+    else{
+        std::lock_guard lk(mutex_);
+        if(sink_){
+            sink_->write(std::move(line));
+            sink_->flush();
+        }
+    }
 }

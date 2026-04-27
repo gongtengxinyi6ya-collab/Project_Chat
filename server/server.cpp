@@ -12,6 +12,8 @@ int main()
     std::cout<<config.dumpSummary()<<std::endl;
     //根据配置设置日志系统
     Logger::instance().setLevel(config.log().level);
+    Logger::instance().setAsyncOptions(config.log().asyncQueueSize,std::chrono::milliseconds(config.log().asyncFlushIntervalMs));
+    Logger::instance().setAsync(config.log().asyncEnabled);
     if(config.log().toFile){
         try{
             Logger::instance().setSink(std::make_unique<FileSink>(config.log().filePath,config.log().jsonFormat));
@@ -29,6 +31,7 @@ int main()
     server.start();
     LOG_INFO("Server started on port " + std::to_string(config.server().port));
     loop.loop();
+    Logger::instance().shutdown();
     return 0;
 }
     
