@@ -9,7 +9,7 @@ void Logger::setLevel(LogLevel level){
     minLevel_.store(level,std::memory_order_relaxed);
 }
 void Logger::setSink(std::unique_ptr<LogSink> sink){
-    if(asyncEnabled_){
+    if(asyncEnabled_&&asynclogger_){
         asynclogger_->stop();
         asynclogger_=std::make_unique<AsyncLogger>(std::move(sink),asyncQueueSize_,asyncFlushInterval_);
         asynclogger_->start();
@@ -110,7 +110,7 @@ void Logger::setAsync(bool enable){
 void Logger::setAsyncOptions(size_t queueSize,std::chrono::milliseconds flushInterval){
     asyncQueueSize_=queueSize;
     asyncFlushInterval_=flushInterval;
-    if(asyncEnabled_){
+    if(asyncEnabled_&&asynclogger_){
         asynclogger_->stop();
         asynclogger_=std::make_unique<AsyncLogger>(std::move(sink_),asyncQueueSize_,asyncFlushInterval_);
         asynclogger_->start();
@@ -134,7 +134,7 @@ void Logger::writeLine(std::string&& line){
     else{
         std::lock_guard lk(mutex_);
         if(sink_){
-            sink_->write(std::move(line));
+            sink_->write(line);
             sink_->flush();
         }
     }

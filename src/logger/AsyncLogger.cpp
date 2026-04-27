@@ -11,8 +11,8 @@ void AsyncLogger::start(){
     if(running_){
         return;
     }
-    worker_=std::thread(&AsyncLogger::run,this);
     running_=true;
+    worker_=std::thread(&AsyncLogger::run,this);
 }
 void AsyncLogger::stop(){
     if(!running_){
@@ -41,11 +41,14 @@ void AsyncLogger::run(){
             std::unique_lock lk(mutex_);
             cv_.wait_for(lk,flushInterval_,[this]{return !queue_.empty()||!running_;});
             if(queue_.empty()){
+                if(!running_){
+                    break;
+                }
                 continue;
             }
             buffer_.swap(queue_);
         }
-        for(auto& line:buffer_){
+        for(auto& line:buffer_){//异步线程无需加锁
             sink_->write(line);
         }
         sink_->flush();
