@@ -19,6 +19,7 @@ public:
     std::optional<uint32_t> errCode;//错误码
     std::optional<std::string> event;//事件名
     std::optional<size_t> fanout;//广播扇出数
+    std::optional<size_t> dropped;//丢弃数，主要用于异步日志
 
     bool empty()const;//判断上下文字段是否全空
     std::string toKvString() const;//把上下文转换为key=value格式的字符串，便于日志输出

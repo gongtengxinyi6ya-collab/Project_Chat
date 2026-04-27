@@ -49,5 +49,5 @@ void NetConfig::validateOrThrow() const{
     ConfigParseHelper::checkRange("max_frame_len", maxFrameLen, 1024, 10*1024*1024);
     ConfigParseHelper::checkRange("conn_high_water_mark", connHighWaterMark, 1024, 100*1024*1024);
     ConfigParseHelper::checkRange("conn_low_water_mark", connLowWaterMark, 512, connHighWaterMark);
-    ConfigParseHelper::checkRange("conn_hard_limit", connHardLimit, 1024, 100*1024*1024);
+    ConfigParseHelper::checkRange("conn_hard_limit", connHardLimit, connHighWaterMark, 100*1024*1024);
 }

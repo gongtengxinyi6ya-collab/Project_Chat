@@ -9,8 +9,10 @@ void Logger::setLevel(LogLevel level){
     minLevel_.store(level,std::memory_order_relaxed);
 }
 void Logger::setSink(std::unique_ptr<LogSink> sink){
-    if(asyncEnabled_&&asynclogger_){
-        asynclogger_->stop();
+    if(asyncEnabled_){
+        if(asynclogger_){//如果已经启用异步日志，先停止旧的异步日志器，再创建新的
+            asynclogger_->stop();
+        }
         asynclogger_=std::make_unique<AsyncLogger>(std::move(sink),asyncQueueSize_,asyncFlushInterval_);
         asynclogger_->start();
     }
@@ -112,7 +114,7 @@ void Logger::setAsyncOptions(size_t queueSize,std::chrono::milliseconds flushInt
     asyncFlushInterval_=flushInterval;
     if(asyncEnabled_&&asynclogger_){
         asynclogger_->stop();
-        asynclogger_=std::make_unique<AsyncLogger>(std::move(sink_),asyncQueueSize_,asyncFlushInterval_);
+        asynclogger_=std::make_unique<AsyncLogger>(asyncQueueSize_,asyncFlushInterval_);
         asynclogger_->start();
     }
 }

@@ -365,7 +365,7 @@ LogContext im::Imservice::makeRespCtx(ConnKey key,const Request& req,const Respo
         ctx.fanout=resp.data["sent"].get<size_t>();
     }
     if(resp.data.contains("dropped")&&resp.data["dropped"].is_number_unsigned()){
-        ctx.fanout=resp.data["dropped"].get<size_t>();
+        ctx.dropped=resp.data["dropped"].get<size_t>();
     }
     return ctx;
 }

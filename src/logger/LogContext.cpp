@@ -1,7 +1,7 @@
 #include "logger/LogContext.h"
 
 bool LogContext::empty()const{
-    if(connFd||user||groupId||msgId||reqId||msgType||errCode||event||fanout){
+    if(connFd||user||groupId||msgId||reqId||msgType||errCode||event||fanout||dropped){
         return false;
     }
     return true;
@@ -48,5 +48,9 @@ std::string LogContext::toKvString()const{
     if(fanout){
         appendKvNum("fanout",*fanout);
     }
+    if(dropped){
+        appendKvNum("dropped",*dropped);
+    }
+    
     return out;
 }
