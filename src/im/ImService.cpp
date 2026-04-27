@@ -361,8 +361,11 @@ LogContext im::Imservice::makeRespCtx(ConnKey key,const Request& req,const Respo
     else{
         ctx.groupId=tryExtractGroupId(req);
     }
-    if(resp.data.contains("fanout")&&resp.data["fanout"].is_number_unsigned()){
-        ctx.fanout=resp.data["fanout"];
+    if(resp.data.contains("sent")&&resp.data["sent"].is_number_unsigned()){
+        ctx.fanout=resp.data["sent"].get<size_t>();
+    }
+    if(resp.data.contains("dropped")&&resp.data["dropped"].is_number_unsigned()){
+        ctx.fanout=resp.data["dropped"].get<size_t>();
     }
     return ctx;
 }

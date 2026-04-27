@@ -69,12 +69,12 @@ void TcpConnection::handleRead(){
 void TcpConnection::handleWrite(){
     while(outputBuffer_.readableBytes()>0){
         ssize_t n=::write(fd_,outputBuffer_.peek(),outputBuffer_.readableBytes());//发送数据
-        if(overloaded_&&pendingBytes()<lowWaterMark_){//如果之前过载且已降到低水位，记录日志并恢复正常状态
+        if(n>0){//发送成功，清除outputBuffer_中字节
+            outputBuffer_.retrieve(n);
+            if(overloaded_&&pendingBytes()<lowWaterMark_){//如果之前过载且已降到低水位，记录日志并恢复正常状态
             overloaded_=false;
             LOG_INFO("Connection " + std::to_string(fd_) + " is recovered, pending bytes: " + std::to_string(pendingBytes()));
         }
-        if(n>0){//发送成功，清除outputBuffer_中字节
-            outputBuffer_.retrieve(n);
         }
         else if(n==-1){
         if(errno==EAGAIN||errno==EWOULDBLOCK)//缓冲区满需等待下一次
