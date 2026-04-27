@@ -3,7 +3,7 @@
 #include "ThreadPool.h"
 
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config)
-:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen){
+:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit){
 
 }
 
@@ -68,7 +68,11 @@ void TcpConnection::handleRead(){
 
 void TcpConnection::handleWrite(){
     while(outputBuffer_.readableBytes()>0){
-        ssize_t n=::write(fd_,outputBuffer_.peek(),outputBuffer_.readableBytes());
+        ssize_t n=::write(fd_,outputBuffer_.peek(),outputBuffer_.readableBytes());//发送数据
+        if(overloaded_&&pendingBytes()<lowWaterMark_){//如果之前过载且已降到低水位，记录日志并恢复正常状态
+            overloaded_=false;
+            LOG_INFO("Connection " + std::to_string(fd_) + " is recovered, pending bytes: " + std::to_string(pendingBytes()));
+        }
         if(n>0){//发送成功，清除outputBuffer_中字节
             outputBuffer_.retrieve(n);
         }
@@ -146,9 +150,17 @@ void TcpConnection::sendInLoop(const std::string& msg){
         LOG_WARN("Message length " + std::to_string(len) + " exceeds maximum frame length, message discarded"+" to send, fd="+std::to_string(fd_));
         return;
     }
-    
+    size_t frameBytes=4+len;
+    if(!canAccept(frameBytes)){//如果超过硬限制直接丢弃
+        markDrop(frameBytes);
+        return;
+    }
     outputBuffer_.appendUint32(len);
     outputBuffer_.append(msg.data(),len);
+    if(pendingBytes()>=highWaterMark_&&!overloaded_){//若超过高水位且之前未过载，记录日志并标记过载状态
+        overloaded_=true;
+        LOG_WARN("Connection " + std::to_string(fd_) + " is overloaded, pending bytes: " + std::to_string(pendingBytes()));
+    }
     channel_->enableWriting();//注册写事件，等待发送机会
 }
 //连接建立，创建Channel，绑定回调，注册到EventLoop
@@ -231,4 +243,18 @@ void TcpConnection::refreshIdleTimer(){
 void TcpConnection::onIdTimerout(){
     LOG_WARN("Connection " + std::to_string(fd_) + " idle timeout, no data received for " + std::to_string(idleTimeout_.count()) + " ms, closing connection");
     handleClose();
+}
+
+size_t TcpConnection::pendingBytes() const{
+    return outputBuffer_.readableBytes();
+}
+bool TcpConnection::isOverloaded() const{
+    return overloaded_;
+}
+bool TcpConnection::canAccept(size_t nextBytes) const{
+    return pendingBytes()+nextBytes<=hardLimit_;//如果超过hardLimit_则拒绝接收新消息，直接丢弃
+}
+void TcpConnection::markDrop(size_t bytes){
+    droppedMessage_+=bytes;
+    LOG_WARN("Connection " + std::to_string(fd_) + " is overloaded, dropped message of size " + std::to_string(bytes) + " bytes, total dropped: " + std::to_string(droppedMessage_) + " bytes");
 }

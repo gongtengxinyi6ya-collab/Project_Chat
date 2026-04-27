@@ -178,20 +178,22 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,ConnKey key,Ses
     session.joinedGroupIds_.insert(groupId);
     return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
 }
-size_t im::Imservice::broadcastToGroup(const std::string& groupId,const std::string& fromUser,ConnKey senderkey,const im::Response& push){
+im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,const std::string& fromUser,ConnKey senderkey,const im::Response& push){
+    BroadcastResult result;
     const auto& users=groupManager_.members(groupId);//根据群id取成员用户名列表
-    size_t fanout=0;
     for(const auto& user:users){
         const auto& keys=sessionManager_.connKeysByUser(user);
         for(const auto& key:keys){
             if(key!=senderkey){
-                sendPush(key,push);
-                fanout++;
-
+                if(sendPush(key,push)){
+                    result.sent++;
+                } else {
+                    result.dropped++;
+                }
             }
         }
     }
-    return fanout;
+    return result;
    
 }
 
@@ -281,8 +283,8 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,S
         return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId},{"content",content}}};
-    size_t fanout=broadcastToGroup(groupId.value(),user.value(),key,pushMsg);
-    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"fanout",fanout}});
+    BroadcastResult result=broadcastToGroup(groupId.value(),user.value(),key,pushMsg);
+    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped}});
 
 }
 im::Response im::Imservice::handleGroupMembers(const im::Request& req,ConnKey key,Session& session){

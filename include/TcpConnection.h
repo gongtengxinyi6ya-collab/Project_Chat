@@ -46,6 +46,12 @@ public:
     //空闲超时接口
     void refreshIdleTimer();//重置idle计时
     void onIdTimerout();//到期处理
+
+    //背压接口
+    size_t pendingBytes() const;//返回outputBuffer_可读字节数
+    bool isOverloaded()const;//返回是否过载
+    bool canAccept(size_t nextBytes)const;//返回是否能接受下一条消息，判断条件是pendingBytes()+nextBytes<=hardLimit_
+    void markDrop(size_t bytes);//限频警告
 private:
     EventLoop* loop_;//
     int fd_;//客户端socket
@@ -73,4 +79,10 @@ private:
     std::chrono::milliseconds idleTimeout_{120000};//超时时间
     size_t maxFrameLen;//最大消息长度，超过认为协议错误，关闭连接
 
+    //广播背压
+    size_t highWaterMark_;//高水位限制,超过该值认为过载，触发限频措施，如丢弃消息、降低服务质量等
+    size_t hardLimit_;//硬限制，超过直接丢弃消息不予接受
+    size_t lowWaterMark_;//低水位限制,从过载恢复到正常的阈值
+    bool overloaded_{false};//是否过载
+    uint64_t droppedMessage_{0};//已丢弃消息计数，用于日志记录和监控
 };

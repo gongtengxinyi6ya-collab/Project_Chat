@@ -14,7 +14,7 @@ LogConfig LogConfig::fromJson(const nlohmann::json& j){
 void LogConfig::applyEnvOverrides(){
     auto envLevel=ConfigParseHelper::getEnv("LOG_LEVEL"); 
     if(envLevel.has_value()){
-        level=parseLogLevel(nlohmann::json{{"level", envLevel.value()}}, "LOG_LEVEL");
+        level=parseLogLevel(nlohmann::json{{"level", envLevel.value()}}, "level");
     }
     auto envToConsole=ConfigParseHelper::getEnv("LOG_TO_CONSOLE");
     if(envToConsole.has_value()){
