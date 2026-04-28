@@ -19,7 +19,7 @@
     "level": "INFO",
     "to_console": false,
     "to_file": true,
-    "file_path": "logs/chat.log",
+    "file_path": "chat.log",
     "json_format": false,
     "async_enabled": true,
     "async_queue_size": 10000,
