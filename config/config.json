@@ -17,8 +17,8 @@
   },
   "log": {
     "level": "INFO",
-    "to_console": true,
-    "to_file": false,
+    "to_console": false,
+    "to_file": true,
     "file_path": "logs/chat.log",
     "json_format": false,
     "async_enabled": true,

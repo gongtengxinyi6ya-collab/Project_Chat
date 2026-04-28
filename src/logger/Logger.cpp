@@ -112,9 +112,17 @@ void Logger::setAsync(bool enable){
 void Logger::setAsyncOptions(size_t queueSize,std::chrono::milliseconds flushInterval){
     asyncQueueSize_=queueSize;
     asyncFlushInterval_=flushInterval;
-    if(asyncEnabled_&&asynclogger_){
-        asynclogger_->stop();
-        asynclogger_=std::make_unique<AsyncLogger>(std::move(sink_),asyncQueueSize_,asyncFlushInterval_);
+    //若asynclogger_已在运行，重建它，保留当前sink_配置
+    if(asyncEnabled_){
+        std::unique_ptr<LogSink> currentSink;
+        {
+            std::lock_guard lk(mutex_);
+            currentSink=std::move(sink_);
+        }
+        if(asynclogger_){
+            asynclogger_->stop();
+        }
+        asynclogger_=std::make_unique<AsyncLogger>(std::move(currentSink),asyncQueueSize_,asyncFlushInterval_);
         asynclogger_->start();
     }
 }

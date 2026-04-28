@@ -75,7 +75,7 @@ std::optional<im::Response> im::Imservice::guardInGroup(const Request& req,const
     return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"Not in group,please join the group first");
 }
 
-im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -104,7 +104,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,ConnKey key,Session&
 
 }
 
-im::Response im::Imservice::handleListUsers(const im::Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleListUsers(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -113,7 +113,7 @@ im::Response im::Imservice::handleListUsers(const im::Request& req,ConnKey key,S
     return makeOk(req,im::MsgType::LIST_USERS_RESP,nlohmann::json{{"users",users}});
 }
 
-im::Response im::Imservice::handleEcho(const im::Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleEcho(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -154,7 +154,7 @@ std::optional<std::string> im::Imservice::resolveTargetGroupId(const Request& re
 
 //房间接口
 
-im::Response im::Imservice::handleCreateGroup(const Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -178,7 +178,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,ConnKey key,Ses
     session.joinedGroupIds_.insert(groupId);
     return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
 }
-im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,const std::string& fromUser,ConnKey senderkey,const im::Response& push){
+im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,[[maybe_unused]]const std::string& fromUser,ConnKey senderkey,const im::Response& push){
     BroadcastResult result;
     const auto& users=groupManager_.members(groupId);//根据群id取成员用户名列表
     for(const auto& user:users){
@@ -250,7 +250,7 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     session.joinedGroupIds_.erase(groupId);
     return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
 }
-im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,Session& session){
+im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -287,7 +287,7 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,ConnKey key,S
     return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped}});
 
 }
-im::Response im::Imservice::handleGroupMembers(const im::Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -317,7 +317,7 @@ std::optional<std::string> im::Imservice::usernameByKey(ConnKey key)const{
     }
     return std::nullopt;
 }
-im::Response im::Imservice::handleListGroups(const Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleListGroups(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
