@@ -114,7 +114,7 @@ void Logger::setAsyncOptions(size_t queueSize,std::chrono::milliseconds flushInt
     asyncFlushInterval_=flushInterval;
     if(asyncEnabled_&&asynclogger_){
         asynclogger_->stop();
-        asynclogger_=std::make_unique<AsyncLogger>(asyncQueueSize_,asyncFlushInterval_);
+        asynclogger_=std::make_unique<AsyncLogger>(std::move(sink_),asyncQueueSize_,asyncFlushInterval_);
         asynclogger_->start();
     }
 }

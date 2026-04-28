@@ -81,8 +81,8 @@ private:
 
     //广播背压
     size_t highWaterMark_;//高水位限制,超过该值认为过载，触发限频措施，如丢弃消息、降低服务质量等
-    size_t hardLimit_;//硬限制，超过直接丢弃消息不予接受
     size_t lowWaterMark_;//低水位限制,从过载恢复到正常的阈值
+    size_t hardLimit_;//硬限制，超过直接丢弃消息不予接受
     bool overloaded_{false};//是否过载
     uint64_t droppedMessage_{0};//已丢弃消息计数，用于日志记录和监控
 };
