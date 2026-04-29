@@ -95,8 +95,10 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     std::string content=req.body["content"].get<std::string>();
     //构造推送消息
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"from",session.username_},{"to",req.to},{"content",content}}};
+    decorate(pushMsg,req.req_id);//推送消息也携带client_req_id，方便客户端关联请求和推送
+    std::string payload=encodeResponse(pushMsg);
     for(const auto& targetKey:keys){
-        if(!sendPush(targetKey,pushMsg,req.req_id)){
+        if(!sendPush(targetKey,payload)){
             return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"to","..."},{"delivered",false}});
         }
     }
@@ -130,10 +132,8 @@ void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> clientRe
         resp.data["client_req_id"]=*clientReqId;
     }
 }
-bool im::Imservice::sendPush(ConnKey target,Response push,std::optional<uint64_t> clientReqid){
-    push.req_id=0;
-    decorate(push,clientReqid);
-    auto payload=encodeResponse(push);
+bool im::Imservice::sendPush(ConnKey target,const std::string& payload){
+    
     if(sendToConnKey_&&sendToConnKey_(target,payload)){
         return true;
     }
@@ -178,14 +178,17 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
     session.joinedGroupIds_.insert(groupId);
     return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
 }
-im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,[[maybe_unused]]const std::string& fromUser,ConnKey senderkey,const im::Response& push){
+im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,[[maybe_unused]]const std::string& fromUser,ConnKey senderkey,im::Response& push){
     BroadcastResult result;
+    push.req_id=0;//群推送消息不需要req_id，由服务器生成唯一msg_id
+    decorate(push);//群推送消息也需要decorate添加msg_id和server_ts_ms等字段
+    auto payload=encodeResponse(push);
     const auto& users=groupManager_.members(groupId);//根据群id取成员用户名列表
     for(const auto& user:users){
         const auto& keys=sessionManager_.connKeysByUser(user);
         for(const auto& key:keys){
             if(key!=senderkey){
-                if(sendPush(key,push)){
+                if(sendPush(key,payload)){
                     result.sent++;
                 } else {
                     result.dropped++;

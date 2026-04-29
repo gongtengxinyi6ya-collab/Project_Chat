@@ -58,11 +58,11 @@ private:
     uint64_t nowMs() const;//获取当前时间戳
     void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
     std::optional<std::string> usernameByKey(ConnKey key) const;//把connKey映射为username
-    bool sendPush(ConnKey,Response,std::optional<uint64_t> clientReqid=std::nullopt);//统一对push做decorate,encode,sendToConnKey
+    bool sendPush(ConnKey,const std::string &);//统一对push做decorate,encode,sendToConnKey
     std::optional<std::string> resolveTargetGroupId(const Request&,const Session&);//群id获取辅助方法
     //群聊接口
     Response handleCreateGroup(const Request&,[[maybe_unused]]ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
-    BroadcastResult broadcastToGroup(const std::string&,const std::string&,[[maybe_unused]]ConnKey,const im::Response&push);//对房间内其他成员推送事件；
+    BroadcastResult broadcastToGroup(const std::string&,const std::string&,[[maybe_unused]]ConnKey,im::Response&push);//对房间内其他成员推送事件；
     im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入群
     im::Response handleLeave(const im::Request&,ConnKey,Session&);//退出群
     im::Response handleGroupMsg(const im::Request&,ConnKey,Session&);//提交房间消息

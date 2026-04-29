@@ -206,7 +206,7 @@ void TcpConnection::stopHeartbeat(){
 bool TcpConnection::handleControlFrame(const std::string& payload){
     if(payload=="PONG"){
         lastHeartbeeatTime_=std::chrono::steady_clock::now();
-        LOG_INFO("Received PONG from connection " + std::to_string(fd_));
+        LOG_DEBUG("Received PONG from connection " + std::to_string(fd_));
         return true;
     }
     if(payload=="PING"){
