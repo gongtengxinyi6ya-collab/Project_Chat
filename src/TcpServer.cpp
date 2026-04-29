@@ -59,9 +59,11 @@ void TcpServer::newConnection(int fd){
                     removeConnectionInBaseLoop(conn);
                 });
         });
-        conn->connectionEstablished();
         baseloop_->runInLoop([this,conn](){
             addConnectionInBaseLoop(conn);
+            conn->getLoop()->runInLoop([conn](){//确保connectionEstablished在IO线程中执行，注册事件 
+                conn->connectionEstablished();
+            });
         });
     });
     LOG_INFO("New connection fd: " + std::to_string(fd)+" assigned to ioloop" );

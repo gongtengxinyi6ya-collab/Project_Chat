@@ -31,7 +31,7 @@ public:
     void setCloseCallback(CloseCallback cb);
     void setMessageCallback(MessageCallback cb);
 
-    EventLoop* getLoop() const;
+    EventLoop* getLoop() const;//返回所属的EventLoop，供服务器转发消息时调用
     int fd() const;
     
     void connectionEstablished();//连接建立，注册事件
