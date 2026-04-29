@@ -6,34 +6,35 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <cstring>
-#include <iomanip>
 #include <iostream>
 #include <map>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
+
 #include "third_party/json.hpp"
+
 using json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
 
 enum MsgType {
     AUTH_REQ = 1,
     AUTH_RESP = 2,
-    GROUP_MSG_REQ = 14,
-    GROUP_MSG_RESP = 15,
-    CREATE_GROUP_REQ = 16,
-    CREATE_GROUP_RESP = 17,
-    JOIN_GROUP_REQ = 18,
-    JOIN_GROUP_RESP = 19,
+
+    CREATE_GROUP_REQ = 10,
+    CREATE_GROUP_RESP = 11,
+    JOIN_GROUP_REQ = 12,
+    JOIN_GROUP_RESP = 13,
+
     GROUP_EVENT_PUSH = 20,
-    GROUP_MSG_PUSH = 21,
-    PING = 100,
-    PONG = 101,
-    ERR = 999
+    GROUP_MSG_REQ = 21,
+    GROUP_MSG_RESP = 22,
+    GROUP_MSG_PUSH = 23,
+
+    ERR = 255
 };
 
 struct Args {
@@ -59,60 +60,72 @@ struct Metrics {
     std::atomic<uint64_t> connectFail{0};
     std::atomic<uint64_t> authFail{0};
     std::atomic<uint64_t> joinFail{0};
-    std::atomic<uint64_t> runtimeRecvFail{0};
-    std::atomic<uint64_t> runtimeSendFail{0};
+    std::atomic<uint64_t> recvFail{0};
+    std::atomic<uint64_t> sendFail{0};
     std::atomic<uint64_t> droppedByServer{0};
 
     std::mutex latMu;
     std::vector<double> latenciesMs;
 };
 
-static bool sendAll(int fd, const void* data, size_t len) {
+bool sendAll(int fd, const void* data, size_t len) {
     const char* p = static_cast<const char*>(data);
+
     while (len > 0) {
         ssize_t n = ::send(fd, p, len, 0);
+
         if (n > 0) {
             p += n;
             len -= static_cast<size_t>(n);
             continue;
         }
+
         if (n < 0 && errno == EINTR) {
             continue;
         }
+
         return false;
     }
+
     return true;
 }
 
-static bool recvAll(int fd, void* data, size_t len) {
+bool recvAll(int fd, void* data, size_t len) {
     char* p = static_cast<char*>(data);
+
     while (len > 0) {
         ssize_t n = ::recv(fd, p, len, 0);
+
         if (n > 0) {
             p += n;
             len -= static_cast<size_t>(n);
             continue;
         }
+
         if (n < 0 && errno == EINTR) {
             continue;
         }
+
         return false;
     }
+
     return true;
 }
 
-static bool sendFrame(int fd, const std::string& payload) {
+bool sendFrame(int fd, const std::string& payload) {
     uint32_t len = htonl(static_cast<uint32_t>(payload.size()));
-    return sendAll(fd, &len, 4) && sendAll(fd, payload.data(), payload.size());
+    return sendAll(fd, &len, sizeof(len)) && sendAll(fd, payload.data(), payload.size());
 }
 
-static bool recvFrame(int fd, std::string& payload) {
+bool recvFrame(int fd, std::string& payload) {
     uint32_t netLen = 0;
-    if (!recvAll(fd, &netLen, 4)) {
+
+    if (!recvAll(fd, &netLen, sizeof(netLen))) {
         return false;
     }
 
     uint32_t len = ntohl(netLen);
+
     if (len == 0 || len > 1024 * 1024) {
         return false;
     }
@@ -121,8 +134,9 @@ static bool recvFrame(int fd, std::string& payload) {
     return recvAll(fd, payload.data(), len);
 }
 
-static int connectTo(const Args& args) {
+int connectTo(const Args& args) {
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+
     if (fd < 0) {
         return -1;
     }
@@ -130,6 +144,7 @@ static int connectTo(const Args& args) {
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(args.port);
+
     if (::inet_pton(AF_INET, args.host.c_str(), &addr.sin_addr) != 1) {
         ::close(fd);
         return -1;
@@ -143,7 +158,7 @@ static int connectTo(const Args& args) {
     return fd;
 }
 
-static json makeReq(int type, uint64_t reqId, const std::string& user) {
+json makeReq(int type, uint64_t reqId, const std::string& user) {
     return json{
         {"ver", 1},
         {"type", type},
@@ -151,48 +166,44 @@ static json makeReq(int type, uint64_t reqId, const std::string& user) {
         {"seq", reqId},
         {"from", user},
         {"user", user},
-        {"to", ""},
-        {"content", ""}
+        {"to", ""}
     };
 }
 
-static bool sendReq(int fd, const json& req) {
+bool sendReq(int fd, const json& req) {
     return sendFrame(fd, req.dump());
 }
 
-static bool waitResp(
-    int fd,
-    int expectedType,
-    uint64_t expectedReqId,
-    json& out,
-    int timeoutMs
-) {
+bool waitResp(int fd, int expectedType, uint64_t expectedReqId, json& out, int timeoutMs) {
     auto deadline = Clock::now() + std::chrono::milliseconds(timeoutMs);
 
     while (Clock::now() < deadline) {
         std::string frame;
+
         if (!recvFrame(fd, frame)) {
             return false;
         }
 
+        if (frame == "PING") {
+            sendFrame(fd, "PONG");
+            continue;
+        }
+
         json msg = json::parse(frame, nullptr, false);
+
         if (msg.is_discarded()) {
             continue;
         }
 
         int type = msg.value("type", 0);
-        if (type == PING) {
-            json pong{{"ver", 1}, {"type", PONG}, {"req_id", 0}, {"seq", 0}};
-            sendFrame(fd, pong.dump());
-            continue;
-        }
+        uint64_t reqId = msg.value("req_id", 0ULL);
 
-        if (type == expectedType && msg.value("req_id", 0ULL) == expectedReqId) {
+        if (type == expectedType && reqId == expectedReqId) {
             out = std::move(msg);
             return true;
         }
 
-        if (type == ERR && msg.value("req_id", 0ULL) == expectedReqId) {
+        if (type == ERR && reqId == expectedReqId) {
             out = std::move(msg);
             return true;
         }
@@ -201,9 +212,11 @@ static bool waitResp(
     return false;
 }
 
-static bool setupGroup(Args& args) {
+bool setupGroup(Args& args) {
     int fd = connectTo(args);
+
     if (fd < 0) {
+        std::cerr << "setup connect failed\n";
         return false;
     }
 
@@ -212,31 +225,36 @@ static bool setupGroup(Args& args) {
 
     json auth = makeReq(AUTH_REQ, reqId++, user);
     auth["user"] = user;
+
     if (!sendReq(fd, auth)) {
+        std::cerr << "setup auth send failed\n";
         ::close(fd);
         return false;
     }
 
     json authResp;
-    if (!waitResp(fd, AUTH_RESP, auth["req_id"].get<uint64_t>(), authResp, args.timeoutMs)) {
+
+    if (!waitResp(fd, AUTH_RESP, auth["req_id"].get<uint64_t>(), authResp, args.timeoutMs) ||
+        !authResp.value("ok", false)) {
+        std::cerr << "setup auth failed: " << authResp.dump() << "\n";
         ::close(fd);
         return false;
     }
 
     json create = makeReq(CREATE_GROUP_REQ, reqId++, user);
-    create["groupName"] = args.groupName;
+    create["name"] = args.groupName;
+
     if (!sendReq(fd, create)) {
+        std::cerr << "setup create send failed\n";
         ::close(fd);
         return false;
     }
 
     json createResp;
-    if (!waitResp(fd, CREATE_GROUP_RESP, create["req_id"].get<uint64_t>(), createResp, args.timeoutMs)) {
-        ::close(fd);
-        return false;
-    }
 
-    if (!createResp.value("ok", false)) {
+    if (!waitResp(fd, CREATE_GROUP_RESP, create["req_id"].get<uint64_t>(), createResp, args.timeoutMs) ||
+        !createResp.value("ok", false)) {
+        std::cerr << "setup create failed: " << createResp.dump() << "\n";
         ::close(fd);
         return false;
     }
@@ -244,7 +262,9 @@ static bool setupGroup(Args& args) {
     if (createResp.contains("data") && createResp["data"].contains("groupId")) {
         args.groupId = createResp["data"]["groupId"].get<std::string>();
     } else {
-        args.groupId = args.groupName;
+        std::cerr << "setup create response missing groupId: " << createResp.dump() << "\n";
+        ::close(fd);
+        return false;
     }
 
     ::close(fd);
@@ -260,9 +280,9 @@ struct Worker {
     std::string user;
     std::atomic<bool> running{false};
     std::atomic<bool> closing{false};
-    std::atomic<uint64_t> reqId{1};
+    std::atomic<uint64_t> nextReqId{1};
 
-    std::mutex mu;
+    std::mutex pendingMu;
     std::map<uint64_t, Clock::time_point> pending;
 
     std::thread recvThread;
@@ -271,38 +291,43 @@ struct Worker {
     bool handshake() {
         user = "bench_user_" + std::to_string(id);
         fd = connectTo(args);
+
         if (fd < 0) {
-            metrics.connectFail++;
+            metrics.connectFail.fetch_add(1);
             return false;
         }
 
-        uint64_t authReqId = reqId++;
+        uint64_t authReqId = nextReqId.fetch_add(1);
         json auth = makeReq(AUTH_REQ, authReqId, user);
         auth["user"] = user;
+
         if (!sendReq(fd, auth)) {
-            metrics.authFail++;
+            metrics.authFail.fetch_add(1);
             return false;
         }
 
         json authResp;
+
         if (!waitResp(fd, AUTH_RESP, authReqId, authResp, args.timeoutMs) ||
             !authResp.value("ok", false)) {
-            metrics.authFail++;
+            metrics.authFail.fetch_add(1);
             return false;
         }
 
-        uint64_t joinReqId = reqId++;
+        uint64_t joinReqId = nextReqId.fetch_add(1);
         json join = makeReq(JOIN_GROUP_REQ, joinReqId, user);
         join["groupId"] = args.groupId;
+
         if (!sendReq(fd, join)) {
-            metrics.joinFail++;
+            metrics.joinFail.fetch_add(1);
             return false;
         }
 
         json joinResp;
+
         if (!waitResp(fd, JOIN_GROUP_RESP, joinReqId, joinResp, args.timeoutMs) ||
             !joinResp.value("ok", false)) {
-            metrics.joinFail++;
+            metrics.joinFail.fetch_add(1);
             return false;
         }
 
@@ -312,73 +337,77 @@ struct Worker {
     void recvLoop() {
         while (running.load()) {
             std::string frame;
+
             if (!recvFrame(fd, frame)) {
                 if (!closing.load()) {
-                    metrics.runtimeRecvFail++;
+                    metrics.recvFail.fetch_add(1);
                 }
                 break;
             }
 
+            if (frame == "PING") {
+                if (!sendFrame(fd, "PONG") && !closing.load()) {
+                    metrics.sendFail.fetch_add(1);
+                }
+                continue;
+            }
+
             json msg = json::parse(frame, nullptr, false);
+
             if (msg.is_discarded()) {
-                metrics.parseFail++;
+                metrics.parseFail.fetch_add(1);
                 continue;
             }
 
             int type = msg.value("type", 0);
 
-            if (type == PING) {
-                json pong{{"ver", 1}, {"type", PONG}, {"req_id", 0}, {"seq", 0}};
-                if (!sendFrame(fd, pong.dump()) && !closing.load()) {
-                    metrics.runtimeSendFail++;
-                }
-                continue;
-            }
-
             if (type == GROUP_MSG_PUSH || type == GROUP_EVENT_PUSH) {
-                metrics.pushRecv++;
+                metrics.pushRecv.fetch_add(1);
                 continue;
             }
 
-            if (type == GROUP_MSG_RESP || type == ERR) {
-                uint64_t respReqId = msg.value("req_id", 0ULL);
-                Clock::time_point start;
-                bool found = false;
-
-                {
-                    std::lock_guard<std::mutex> lock(mu);
-                    auto it = pending.find(respReqId);
-                    if (it != pending.end()) {
-                        start = it->second;
-                        pending.erase(it);
-                        found = true;
-                    }
-                }
-
-                if (!found) {
-                    metrics.lateResp++;
-                    continue;
-                }
-
-                if (type == ERR || !msg.value("ok", false)) {
-                    metrics.serverErrResp++;
-                    continue;
-                }
-
-                if (msg.contains("data") && msg["data"].contains("dropped")) {
-                    metrics.droppedByServer += msg["data"]["dropped"].get<uint64_t>();
-                }
-
-                auto end = Clock::now();
-                double ms = std::chrono::duration<double, std::milli>(end - start).count();
-
-                {
-                    std::lock_guard<std::mutex> lock(metrics.latMu);
-                    metrics.latenciesMs.push_back(ms);
-                }
-
-                metrics.ok++;
+            if (type != GROUP_MSG_RESP && type != ERR) {
+                continue;
             }
+
+            uint64_t reqId = msg.value("req_id", 0ULL);
+            Clock::time_point begin;
+            bool matched = false;
+
+            {
+                std::lock_guard<std::mutex> lock(pendingMu);
+                auto it = pending.find(reqId);
+
+                if (it != pending.end()) {
+                    begin = it->second;
+                    pending.erase(it);
+                    matched = true;
+                }
+            }
+
+            if (!matched) {
+                metrics.lateResp.fetch_add(1);
+                continue;
+            }
+
+            if (type == ERR || !msg.value("ok", false)) {
+                metrics.serverErrResp.fetch_add(1);
+                continue;
+            }
+
+            if (msg.contains("data") && msg["data"].contains("dropped")) {
+                metrics.droppedByServer.fetch_add(msg["data"]["dropped"].get<uint64_t>());
+            }
+
+            auto end = Clock::now();
+            double latencyMs = std::chrono::duration<double, std::milli>(end - begin).count();
+
+            {
+                std::lock_guard<std::mutex> lock(metrics.latMu);
+                metrics.latenciesMs.push_back(latencyMs);
+            }
+
+            metrics.ok.fetch_add(1);
         }
     }
 
@@ -392,18 +421,21 @@ struct Worker {
             uint64_t expired = 0;
 
             {
-                std::lock_guard<std::mutex> lock(mu);
+                std::lock_guard<std::mutex> lock(pendingMu);
+
                 for (auto it = pending.begin(); it != pending.end();) {
                     if (now - it->second > timeout) {
                         it = pending.erase(it);
-                        expired++;
+                        ++expired;
                     } else {
                         ++it;
                     }
                 }
             }
 
-            metrics.timeout += expired;
+            if (expired > 0) {
+                metrics.timeout.fetch_add(expired);
+            }
         }
     }
 
@@ -423,34 +455,37 @@ struct Worker {
 
         while (Clock::now() < endAt && running.load()) {
             auto now = Clock::now();
+
             if (now < nextSend) {
                 std::this_thread::sleep_for(nextSend - now);
                 continue;
             }
 
-            uint64_t rid = reqId++;
-            json req = makeReq(GROUP_MSG_REQ, rid, user);
+            uint64_t reqId = nextReqId.fetch_add(1);
+
+            json req = makeReq(GROUP_MSG_REQ, reqId, user);
             req["groupId"] = args.groupId;
-            req["content"] = "hello-" + std::to_string(rid);
+            req["content"] = "hello-" + std::to_string(id) + "-" + std::to_string(reqId);
 
             {
-                std::lock_guard<std::mutex> lock(mu);
-                pending[rid] = Clock::now();
+                std::lock_guard<std::mutex> lock(pendingMu);
+                pending[reqId] = Clock::now();
             }
 
             if (!sendReq(fd, req)) {
                 {
-                    std::lock_guard<std::mutex> lock(mu);
-                    pending.erase(rid);
+                    std::lock_guard<std::mutex> lock(pendingMu);
+                    pending.erase(reqId);
                 }
 
                 if (!closing.load()) {
-                    metrics.runtimeSendFail++;
+                    metrics.sendFail.fetch_add(1);
                 }
+
                 break;
             }
 
-            metrics.sent++;
+            metrics.sent.fetch_add(1);
             nextSend += std::chrono::duration_cast<Clock::duration>(interval);
         }
 
@@ -482,54 +517,42 @@ struct Worker {
     }
 };
 
-static double percentile(std::vector<double>& values, double p) {
+double percentile(std::vector<double>& values, double p) {
     if (values.empty()) {
         return 0.0;
     }
 
     std::sort(values.begin(), values.end());
-    size_t idx = static_cast<size_t>((values.size() - 1) * p);
-    return values[idx];
+    size_t index = static_cast<size_t>((values.size() - 1) * p);
+    return values[index];
 }
 
-static void printUsage(const char* name) {
-    std::cerr
-        << "Usage: " << name
-        << " [--host 127.0.0.1] [--port 8080] [--clients 20]"
-        << " [--duration 60] [--rate 5] [--group Group1]"
-        << " [--timeout_ms 10000] [--drain_ms 3000]\n";
-}
-
-static bool parseArgs(int argc, char** argv, Args& args) {
+bool parseArgs(int argc, char** argv, Args& args) {
     for (int i = 1; i < argc; ++i) {
         std::string key = argv[i];
 
-        auto needValue = [&](const std::string& k) {
-            if (i + 1 >= argc) {
-                std::cerr << "missing value for " << k << "\n";
-                return false;
-            }
-            return true;
+        auto hasValue = [&]() {
+            return i + 1 < argc;
         };
 
-        if (key == "--host" && needValue(key)) {
+        if (key == "--host" && hasValue()) {
             args.host = argv[++i];
-        } else if (key == "--port" && needValue(key)) {
+        } else if (key == "--port" && hasValue()) {
             args.port = std::stoi(argv[++i]);
-        } else if (key == "--clients" && needValue(key)) {
+        } else if (key == "--clients" && hasValue()) {
             args.clients = std::stoi(argv[++i]);
-        } else if (key == "--duration" && needValue(key)) {
+        } else if (key == "--duration" && hasValue()) {
             args.durationSec = std::stoi(argv[++i]);
-        } else if (key == "--rate" && needValue(key)) {
+        } else if (key == "--rate" && hasValue()) {
             args.ratePerClient = std::stod(argv[++i]);
-        } else if (key == "--group" && needValue(key)) {
+        } else if (key == "--group" && hasValue()) {
             args.groupName = argv[++i];
-        } else if (key == "--timeout_ms" && needValue(key)) {
+        } else if (key == "--timeout_ms" && hasValue()) {
             args.timeoutMs = std::stoi(argv[++i]);
-        } else if (key == "--drain_ms" && needValue(key)) {
+        } else if (key == "--drain_ms" && hasValue()) {
             args.drainMs = std::stoi(argv[++i]);
         } else {
-            printUsage(argv[0]);
+            std::cerr << "invalid arg: " << key << "\n";
             return false;
         }
     }
@@ -539,6 +562,7 @@ static bool parseArgs(int argc, char** argv, Args& args) {
 
 int main(int argc, char** argv) {
     Args args;
+
     if (!parseArgs(argc, argv, args)) {
         return 1;
     }
@@ -549,12 +573,12 @@ int main(int argc, char** argv) {
     }
 
     Metrics metrics;
-    std::vector<std::thread> threads;
+    std::vector<std::thread> workers;
 
-    auto start = Clock::now();
+    auto begin = Clock::now();
 
     for (int i = 0; i < args.clients; ++i) {
-        threads.emplace_back([&, i] {
+        workers.emplace_back([&, i] {
             Worker worker{i, args, metrics};
             worker.run();
         });
@@ -562,29 +586,26 @@ int main(int argc, char** argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
-    for (auto& thread : threads) {
-        thread.join();
+    for (auto& worker : workers) {
+        worker.join();
     }
 
     auto end = Clock::now();
-    double elapsed = std::chrono::duration<double>(end - start).count();
+    double elapsedSec = std::chrono::duration<double>(end - begin).count();
 
     std::vector<double> latencies;
+
     {
         std::lock_guard<std::mutex> lock(metrics.latMu);
         latencies = metrics.latenciesMs;
     }
 
-    double p50 = percentile(latencies, 0.50);
-    double p95 = percentile(latencies, 0.95);
-    double p99 = percentile(latencies, 0.99);
-
     uint64_t errTotal =
         metrics.connectFail.load() +
         metrics.authFail.load() +
         metrics.joinFail.load() +
-        metrics.runtimeRecvFail.load() +
-        metrics.runtimeSendFail.load() +
+        metrics.recvFail.load() +
+        metrics.sendFail.load() +
         metrics.timeout.load() +
         metrics.parseFail.load() +
         metrics.serverErrResp.load();
@@ -592,22 +613,22 @@ int main(int argc, char** argv) {
     json result{
         {"clients", args.clients},
         {"duration_s", args.durationSec},
-        {"elapsed_s", elapsed},
+        {"elapsed_s", elapsedSec},
         {"rate_per_client", args.ratePerClient},
         {"group_name", args.groupName},
         {"group_id", args.groupId},
         {"sent", metrics.sent.load()},
         {"ok", metrics.ok.load()},
-        {"qps_ok", elapsed > 0 ? metrics.ok.load() / elapsed : 0.0},
-        {"p50_ms", p50},
-        {"p95_ms", p95},
-        {"p99_ms", p99},
+        {"qps_ok", elapsedSec > 0 ? metrics.ok.load() / elapsedSec : 0.0},
+        {"p50_ms", percentile(latencies, 0.50)},
+        {"p95_ms", percentile(latencies, 0.95)},
+        {"p99_ms", percentile(latencies, 0.99)},
         {"err_total", errTotal},
         {"connect_fail", metrics.connectFail.load()},
         {"auth_fail", metrics.authFail.load()},
         {"join_fail", metrics.joinFail.load()},
-        {"recv_fail", metrics.runtimeRecvFail.load()},
-        {"send_fail", metrics.runtimeSendFail.load()},
+        {"recv_fail", metrics.recvFail.load()},
+        {"send_fail", metrics.sendFail.load()},
         {"timeout", metrics.timeout.load()},
         {"parse_fail", metrics.parseFail.load()},
         {"server_err_resp", metrics.serverErrResp.load()},
