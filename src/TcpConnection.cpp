@@ -133,7 +133,6 @@ int TcpConnection::fd() const{
 
 void TcpConnection::send(const std::string &msg){//
     if(!connection_){//防止对已关闭的fd发送数据，记录日志并返回
-        LOG_WARN("Attempt to send message to closed connection, fd="+std::to_string(fd_));
         return;
     }
     if(loop_->isInLoopThread()){//如果在IO线程中，直接发送
@@ -150,7 +149,6 @@ void TcpConnection::send(const std::string &msg){//
 }
 void TcpConnection::sendInLoop(const std::string& msg){
 if(!connection_||!channel_){//防止连接已关闭但广播任务还在队列里
-        LOG_WARN("Attempt to send message to closed connection in loop, fd="+std::to_string(fd_));
         return;
     }
     uint32_t len=msg.size();
