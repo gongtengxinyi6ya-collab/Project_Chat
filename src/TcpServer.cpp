@@ -16,7 +16,7 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
             if(it==connections_.end()){
                 return false;
             }
-            if(!it->second->isClosed()){
+            if(it->second->isClosed()){
                 return false;
             }
             it->second->send(payload);
