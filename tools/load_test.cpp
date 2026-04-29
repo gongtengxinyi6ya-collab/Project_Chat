@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -19,6 +20,7 @@
 
 using json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
+
 enum MsgType {
     AUTH_REQ = 1,
     AUTH_RESP = 2,
@@ -219,6 +221,7 @@ bool setupGroup(Args& args) {
         std::cerr << "setup connect failed\n";
         return false;
     }
+
     std::string user = "bench_setup_" + args.runId;
     uint64_t reqId = 1;
 
@@ -281,14 +284,24 @@ struct Worker {
     std::atomic<bool> closing{false};
     std::atomic<uint64_t> nextReqId{1};
 
+    std::mutex writeMu;
     std::mutex pendingMu;
     std::map<uint64_t, Clock::time_point> pending;
 
     std::thread recvThread;
     std::thread timeoutThread;
 
+    bool safeSendFrame(const std::string& payload) {
+        std::lock_guard<std::mutex> lock(writeMu);
+        return sendFrame(fd, payload);
+    }
+
+    bool safeSendReq(const json& req) {
+        return safeSendFrame(req.dump());
+    }
+
     bool handshake() {
-        user = "bench_user_" + args.runId+"_"+std::to_string(id);
+        user = "bench_user_" + args.runId + "_" + std::to_string(id);
         fd = connectTo(args);
 
         if (fd < 0) {
@@ -300,7 +313,7 @@ struct Worker {
         json auth = makeReq(AUTH_REQ, authReqId, user);
         auth["user"] = user;
 
-        if (!sendReq(fd, auth)) {
+        if (!safeSendReq(auth)) {
             metrics.authFail.fetch_add(1);
             return false;
         }
@@ -317,7 +330,7 @@ struct Worker {
         json join = makeReq(JOIN_GROUP_REQ, joinReqId, user);
         join["groupId"] = args.groupId;
 
-        if (!sendReq(fd, join)) {
+        if (!safeSendReq(join)) {
             metrics.joinFail.fetch_add(1);
             return false;
         }
@@ -345,7 +358,7 @@ struct Worker {
             }
 
             if (frame == "PING") {
-                if (!sendFrame(fd, "PONG") && !closing.load()) {
+                if (!safeSendFrame("PONG") && !closing.load()) {
                     metrics.sendFail.fetch_add(1);
                 }
                 continue;
@@ -471,7 +484,7 @@ struct Worker {
                 pending[reqId] = Clock::now();
             }
 
-            if (!sendReq(fd, req)) {
+            if (!safeSendReq(req)) {
                 {
                     std::lock_guard<std::mutex> lock(pendingMu);
                     pending.erase(reqId);
@@ -561,7 +574,10 @@ bool parseArgs(int argc, char** argv, Args& args) {
 
 int main(int argc, char** argv) {
     Args args;
-    args.runId=std::to_string(::getpid())+"-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    args.runId =
+        std::to_string(::getpid()) + "-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+
     if (!parseArgs(argc, argv, args)) {
         return 1;
     }
