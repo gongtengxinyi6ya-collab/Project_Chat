@@ -13,11 +13,14 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     imService_ = std::make_unique<im::Imservice>(1,config_.im());
     imService_->setSendToConnKey([this](im::Imservice::ConnKey key,const std::string& payload){
             auto it=connections_.find(key);
-            if(it!=connections_.end()){
-                it->second->send(payload);
-                return true;
+            if(it==connections_.end()){
+                return false;
             }
-            return false;
+            if(!it->second->isClosed()){
+                return false;
+            }
+            it->second->send(payload);
+            return true;
 });
 }
 

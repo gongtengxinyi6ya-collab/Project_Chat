@@ -19,7 +19,6 @@
 
 using json = nlohmann::json;
 using Clock = std::chrono::steady_clock;
-
 enum MsgType {
     AUTH_REQ = 1,
     AUTH_RESP = 2,
@@ -47,6 +46,7 @@ struct Args {
     int drainMs = 3000;
     std::string groupName = "Group1";
     std::string groupId;
+    std::string runId;
 };
 
 struct Metrics {
@@ -219,8 +219,7 @@ bool setupGroup(Args& args) {
         std::cerr << "setup connect failed\n";
         return false;
     }
-
-    std::string user = "bench_setup";
+    std::string user = "bench_setup_" + args.runId;
     uint64_t reqId = 1;
 
     json auth = makeReq(AUTH_REQ, reqId++, user);
@@ -289,7 +288,7 @@ struct Worker {
     std::thread timeoutThread;
 
     bool handshake() {
-        user = "bench_user_" + std::to_string(id);
+        user = "bench_user_" + args.runId+"_"+std::to_string(id);
         fd = connectTo(args);
 
         if (fd < 0) {
@@ -562,7 +561,7 @@ bool parseArgs(int argc, char** argv, Args& args) {
 
 int main(int argc, char** argv) {
     Args args;
-
+    args.runId=std::to_string(::getpid())+"-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
     if (!parseArgs(argc, argv, args)) {
         return 1;
     }

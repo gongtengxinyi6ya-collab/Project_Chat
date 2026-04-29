@@ -8,6 +8,7 @@ TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpSe
 }
 
 TcpConnection::~TcpConnection(){
+    closeFd();
 }
 
 void TcpConnection::handleRead(){
@@ -113,7 +114,8 @@ void TcpConnection::handleError(){
     {
         err = errno;
     }
-    LOG_ERROR("TcpConnection::handleError");
+    LOG_ERROR("TcpConnection::handleError"+std::to_string(fd_)+", error: "+std::to_string(err)+", "+strerror(err));
+    handleClose();//发生错误直接关闭连接
 }
 
 

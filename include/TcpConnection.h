@@ -37,6 +37,7 @@ public:
     void connectionEstablished();//连接建立，注册事件
     void connectionDestroyed();//连接销毁，取消事件,最终释放fd
     void closeFd();
+    bool isClosed() const{return !connection_;}//连接是否已关闭
 
     //心跳检测接口
     
