@@ -101,9 +101,7 @@ void TcpConnection::handleClose(){
     }
     connection_=false;
     channel_->disableAll();
-    
     loop_->removeChannel(fd_);
-    ::close(fd_);
     closeCallback_(shared_from_this());
 }
 
@@ -134,17 +132,27 @@ int TcpConnection::fd() const{
 }
 
 void TcpConnection::send(const std::string &msg){//
+    if(!connection_){//防止对已关闭的fd发送数据，记录日志并返回
+        LOG_WARN("Attempt to send message to closed connection, fd="+std::to_string(fd_));
+        return;
+    }
     if(loop_->isInLoopThread()){//如果在IO线程中，直接发送
         sendInLoop(msg);
     }
     else{//否则转发到IO线程执行发送
-        loop_->runInLoop([self=shared_from_this(),msg](){
-            self->sendInLoop(msg);
+        std::weak_ptr<TcpConnection> weakSelf=shared_from_this();
+        loop_->runInLoop([weakSelf,msg](){
+            if(auto self=weakSelf.lock()){
+                self->sendInLoop(msg);
+            }
         });
     }
 }
 void TcpConnection::sendInLoop(const std::string& msg){
-
+if(!connection_||!channel_){//防止连接已关闭但广播任务还在队列里
+        LOG_WARN("Attempt to send message to closed connection in loop, fd="+std::to_string(fd_));
+        return;
+    }
     uint32_t len=msg.size();
     if(len>maxFrameLen){
         LOG_WARN("Message length " + std::to_string(len) + " exceeds maximum frame length, message discarded"+" to send, fd="+std::to_string(fd_));
@@ -178,10 +186,17 @@ void TcpConnection::connectionEstablished(){
 }
 
 void TcpConnection::connectionDestroyed(){
-    if(connection_){
-        connection_=false;
+    if(connection_&&channel_->inEpoll()){
         channel_->disableAll();
         loop_->removeChannel(fd_);
+    }
+    closeFd();
+}
+void TcpConnection::closeFd(){
+    if(!fdClosed_&&fd_>=0){
+        ::close(fd_);
+        fdClosed_=true;
+        fd_=-1;
     }
 }
 

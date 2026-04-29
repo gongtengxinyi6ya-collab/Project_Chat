@@ -40,6 +40,7 @@ void TcpServer::newConnection(int fd){
     //检测fd重复
     if(connections_.find(fd)!=connections_.end()){
         LOG_ERROR("Duplicate fd "+std::to_string(fd)+" received in newConnection, closing it");
+        ::close(fd);
         return;
     }
     EventLoop* ioloop=iothreadPool_->getNextLoop();

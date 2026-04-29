@@ -35,7 +35,8 @@ public:
     int fd() const;
     
     void connectionEstablished();//连接建立，注册事件
-    void connectionDestroyed();//连接销毁，取消事件
+    void connectionDestroyed();//连接销毁，取消事件,最终释放fd
+    void closeFd();
 
     //心跳检测接口
     
@@ -58,7 +59,7 @@ private:
     ThreadPool* threadPool_;//线程池，处理消息转发等耗时操作
     TcpServer* server_;//服务器对象指针，调用服务器的消息转发函数
     std::unique_ptr<Channel> channel_;//事件监听
-    
+    bool fdClosed_{false};//fd是否已关闭，防止重复关闭和发送数据
     Buffer outputBuffer_;//待发送数据
     Buffer inputBuffer_;//读入缓存
     bool connection_;
