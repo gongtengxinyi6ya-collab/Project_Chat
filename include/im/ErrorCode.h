@@ -6,18 +6,18 @@ namespace im {
 
 enum class ErrorCode: uint16_t{
     OK,//成功
-    BAD_JSON,//
+    BAD_JSON,//JSON格式错误
     MISSING_FIELD,//缺少必要字段
     UNSUPPORTED_VER,//不支持的协议版本
     UNKNOWN_TYPE,//未知的消息类型
-    NOT_AUTHED,//未认证
+    NOT_AUTHED,//未登录
     USER_EXISTS,//用户已存在
     BAD_REQUEST,//字段类型不对
-    NO_SUCH_USER,//
-    NO_SUCH_GROUP,
-    ALREADY_IN_GROUP,
-    NOT_IN_GROUP,
-    GROUP_NAME_INVALID,
+    NO_SUCH_USER,//用户不存在
+    NO_SUCH_GROUP,//群不存在
+    ALREADY_IN_GROUP,//已在群
+    NOT_IN_GROUP,//不在群内
+    GROUP_NAME_INVALID,//群名过长或非法
     INTERNAL//服务器内部错误
 
 };

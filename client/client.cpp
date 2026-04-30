@@ -75,7 +75,7 @@ public:
         body["from"]=state.username;
         body["to"]="";
         body["seq"]=state.allocSeq();
-        body["name"]=groupName;
+        body["groupName"]=groupName;
         return body.dump();
     }
     std::string buildJoinReq(ClientState& state,std::string groupId){

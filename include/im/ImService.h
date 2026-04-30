@@ -41,7 +41,7 @@ public:
 
     std::optional<Response> guardAuthenticated(const Request& ,const Session&);//登录门禁
     std::optional<Response> guardInGroup(const Request&,const Session&,const std::string&);//房间门禁
-
+    std::optional<Response> getStringField(const Request& req,const std::string&field,std::string&out,bool allowEmpty=false);//统一读取JSON字符型字段
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
     SendToConnKeyFn sendToConnKey_;

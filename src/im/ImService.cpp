@@ -74,6 +74,21 @@ std::optional<im::Response> im::Imservice::guardInGroup(const Request& req,const
     }
     return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"Not in group,please join the group first");
 }
+std::optional<im::Response> im::Imservice::getStringField(const Request&req,const std::string& field,std::string& out,bool allowEmpty){
+    if(!req.body.contains(field)){//不包含字段
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing field"+field);
+    }
+    if(!req.body[field].is_string()){//字段非字符串
+        return makeErr(req,im::ErrorCode::BAD_REQUEST,"Bad request");
+    }
+    std::string str=req.body[field].get<std::string>();
+    if(allowEmpty==false&&out.empty()){//字段为空
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Field is empty");
+    }
+    out=str;
+    return std::nullopt;
+}
+
 
 im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
@@ -89,10 +104,10 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"Recipient user is not online");
     }
     //取文本
-    if(!req.body.contains("content")||!req.body["content"].is_string()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
+    std::string content;
+    if(auto errField=getStringField(req,"content",content)){
+        return errField.value();
     }
-    std::string content=req.body["content"].get<std::string>();
     //构造推送消息
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"from",session.username_},{"to",req.to},{"content",content}}};
     decorate(pushMsg,req.req_id);//推送消息也携带client_req_id，方便客户端关联请求和推送
@@ -159,14 +174,14 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
     if(err.has_value()){
         return err.value();
     }
-    if(!req.body.contains("name")||!req.body["name"].is_string()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupName");
-    }
     if(req.from.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing from name");
     }
-    std::string groupName=req.body["name"];
-    if(groupName.size()>imConfig_.maxGroupNameLen){
+    std::string groupName;
+    if(auto errField=getStringField(req,"groupName",groupName)){
+        return errField.value();
+    }
+    if(groupName.size()>imConfig_.maxGroupNameLen){//群名称过长
         return makeErr(req,im::ErrorCode::GROUP_NAME_INVALID,"Group name is too long");
     }
     std::string owner=session.username_;
@@ -176,7 +191,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
     }
     std::string groupId=groupIdOrErr;
     session.joinedGroupIds_.insert(groupId);
-    return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
+    return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"groupName",groupName},{"owner",owner}});
 }
 im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,[[maybe_unused]]const std::string& fromUser,ConnKey senderkey,im::Response& push){
     BroadcastResult result;
@@ -201,16 +216,14 @@ im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string
 }
 
 im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Session& session){
-    auto err=guardAuthenticated(req,session);
+    auto err=guardAuthenticated(req,session);//登录门禁
     if(err.has_value()){
         return err.value();
     }
-    if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupId name");
-    }
-    std::string groupId=req.body["groupId"].get<std::string>();
-    if(groupId.empty()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId cannot be empty");
+    //读取groupId
+    std::string groupId;
+    if(auto errField=getStringField(req,"groupId",groupId)){
+        return errField.value();
     }
     auto user=sessionManager_.usernameByConn(key);
     if(!user.has_value()){
@@ -221,10 +234,10 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
         return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"no such group");
     }
     if(joinResult==JoinResult::OK_ALREADY_IN){
-        return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"alreadyIn",true}});
+        return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",false},{"alreadyIn",true}});
     }
     session.joinedGroupIds_.insert(groupId);
-    return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"alreadyIn",false}});
+    return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",true},{"alreadyIn",false}});
 }
 
 im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Session& session){
@@ -232,12 +245,9 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     if(err.has_value()){
         return err.value();
     }
-    if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
-    }
-    std::string groupId=req.body["groupId"];
-    if(groupId.empty()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"GroupId is empty");
+    std::string groupId;
+    if(auto errField=getStringField(req,"groupId",groupId)){
+        return errField.value();
     }
     auto user=sessionManager_.usernameByConn(key);
     if(!user.has_value()){
@@ -248,10 +258,10 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
         return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"No such group");
     }
     if(quitResult==QuitResult::ERR_NOT_IN_GROUP){
-        return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
+        return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",false},{"alreadyLeft",true}});
     }
     session.joinedGroupIds_.erase(groupId);
-    return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId}});
+    return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",true},{"alreadyLeft",false}});
 }
 im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
@@ -479,7 +489,7 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
         case im::MsgType::LEAVE_GROUP_REQ:
         {
             im::Response resp=handleLeave(req,key,session);
-            if(resp.ok){
+            if(resp.ok&&resp.data.contains("left")&&resp.data["left"].get<bool>()==true){
                     std::string groupId=resp.data["groupId"];
                     LOG_INFO_CTX("im leave group",makeRespCtx(key,req,resp,session,"LEAVE_GROUP"));
                     im::Response leaveEvent=makeOk(req,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"groupId",groupId}});
