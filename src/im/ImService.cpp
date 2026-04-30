@@ -82,7 +82,7 @@ std::optional<im::Response> im::Imservice::getStringField(const Request&req,cons
         return makeErr(req,im::ErrorCode::BAD_REQUEST,"Bad request");
     }
     std::string str=req.body[field].get<std::string>();
-    if(allowEmpty==false&&out.empty()){//字段为空
+    if(allowEmpty==false&&str.empty()){//字段为空
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Field is empty");
     }
     out=str;
@@ -174,9 +174,6 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
     if(err.has_value()){
         return err.value();
     }
-    if(req.from.empty()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing from name");
-    }
     std::string groupName;
     if(auto errField=getStringField(req,"groupName",groupName)){
         return errField.value();
@@ -234,6 +231,7 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
         return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"no such group");
     }
     if(joinResult==JoinResult::OK_ALREADY_IN){
+        session.joinedGroupIds_.insert(groupId);//虽然已经在群里了，但为了防止session状态不一致，还是把群id加入session的joinedGroupIds_里
         return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",false},{"alreadyIn",true}});
     }
     session.joinedGroupIds_.insert(groupId);
@@ -258,6 +256,7 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
         return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"No such group");
     }
     if(quitResult==QuitResult::ERR_NOT_IN_GROUP){
+        session.joinedGroupIds_.erase(groupId);//虽然不在群里了，但为了防止session状态不一致，还是把群id从session的joinedGroupIds_里移除掉
         return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",false},{"alreadyLeft",true}});
     }
     session.joinedGroupIds_.erase(groupId);
