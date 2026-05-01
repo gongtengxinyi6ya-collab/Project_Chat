@@ -9,6 +9,7 @@ NetConfig NetConfig::fromJson(const nlohmann::json& j){
     netConfig.connHighWaterMark=ConfigParseHelper::getOrDefault(j,"conn_high_water_mark",netConfig.connHighWaterMark);
     netConfig.connLowWaterMark=ConfigParseHelper::getOrDefault(j,"conn_low_water_mark",netConfig.connLowWaterMark);
     netConfig.connHardLimit=ConfigParseHelper::getOrDefault(j,"conn_hard_limit",netConfig.connHardLimit);
+    netConfig.maxOverloadDropCount=ConfigParseHelper::getOrDefault(j,"max_overload_drop_count",netConfig.maxOverloadDropCount);
     return netConfig;
 }
 
@@ -41,6 +42,10 @@ void NetConfig::applyEnvOverrides(){
     if(envConnHardLimit.has_value()){
         connHardLimit=ConfigParseHelper::parseEnvUInt(envConnHardLimit.value(),"CHAT_CONN_HARD_LIMIT");
     }
+    auto envMaxOverloadDropCount=ConfigParseHelper::getEnv("CHAT_MAX_OVERLOAD_DROP_COUNT");
+    if(envMaxOverloadDropCount.has_value()){
+        maxOverloadDropCount=ConfigParseHelper::parseEnvUInt(envMaxOverloadDropCount.value(),"CHAT_MAX_OVERLOAD_DROP_COUNT");
+    }
 }
 void NetConfig::validateOrThrow() const{
     ConfigParseHelper::checkRange("heartbeat_ms", heartBeatMs, 1000, 300000);
@@ -50,4 +55,5 @@ void NetConfig::validateOrThrow() const{
     ConfigParseHelper::checkRange("conn_high_water_mark", connHighWaterMark, 1024, 100*1024*1024);
     ConfigParseHelper::checkRange("conn_low_water_mark", connLowWaterMark, 512, connHighWaterMark);
     ConfigParseHelper::checkRange("conn_hard_limit", connHardLimit, connHighWaterMark, 100*1024*1024);
+    ConfigParseHelper::checkRange("max_overload_drop_count", maxOverloadDropCount, 1, 1000000);
 }

@@ -38,7 +38,7 @@ public:
     void connectionDestroyed();//连接销毁，取消事件,最终释放fd
     void closeFd();
     bool isClosed() const{return !connection_;}//连接是否已关闭
-
+    bool canSend(size_t payloadBytes)const;//可发送判断
     //心跳检测接口
     
     void startHeartbeat();//在建立连接后启动心跳周期任务
@@ -87,4 +87,6 @@ private:
     size_t hardLimit_;//硬限制，超过直接丢弃消息不予接受
     bool overloaded_{false};//是否过载
     uint64_t droppedMessage_{0};//已丢弃消息计数，用于日志记录和监控
+    uint32_t overloadDropCount_{0};//过载丢弃次数计数，用于监控过载事件频率
+    uint32_t maxOverloadDropCount_;//过载丢弃次数上限，超过该次数可以考虑关闭连接或触发更严重的限流措施
 };

@@ -25,7 +25,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             resp=makeErr(*req_ptr,im::ErrorCode::INTERNAL,"Internal server error");
             LOG_ERROR_CTX("Unknown exception occurred while dispatching request",makeReqCtx(key,*req_ptr,session,"DISPATCH_EXCEPTION"));
         }
-        if(!sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT")){
+        if(sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT")!=SendResult::Ok){
             LOG_ERROR_CTX("Failed to send response",makeRespCtx(key,*req_ptr,resp,session,"RESP_OUT"));
         }
 
@@ -113,8 +113,9 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     decorate(pushMsg,req.req_id);//推送消息也携带client_req_id，方便客户端关联请求和推送
     std::string payload=encodeResponse(pushMsg);
     for(const auto& targetKey:keys){
-        if(!sendPush(targetKey,payload)){
-            return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"to","..."},{"delivered",false}});
+        SendResult res=sendPush(targetKey,payload);
+        if(res!=SendResult::Ok){
+            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Failed to deliver message, recipient is offline or overloaded");
         }
     }
     return makeOk(req,im::MsgType::DM_RESP);
@@ -147,12 +148,14 @@ void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> clientRe
         resp.data["client_req_id"]=*clientReqId;
     }
 }
-bool im::Imservice::sendPush(ConnKey target,const std::string& payload){
+ im::Imservice::SendResult im::Imservice::sendPush(ConnKey target,const std::string& payload){
     
-    if(sendToConnKey_&&sendToConnKey_(target,payload)){
-        return true;
+    if(sendToConnKey_){
+        SendResult res=sendToConnKey_(target,payload);
+        return res;
     }
-    return false;
+    return SendResult::NoSuchConnection;
+    
 }
 std::optional<std::string> im::Imservice::resolveTargetGroupId(const Request& req,const Session& session){
     if(req.body.contains("groupId")&&req.body["groupId"].is_string()){
@@ -200,10 +203,20 @@ im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string
         const auto& keys=sessionManager_.connKeysByUser(user);
         for(const auto& key:keys){
             if(key!=senderkey){
-                if(sendPush(key,payload)){
-                    result.sent++;
-                } else {
-                    result.dropped++;
+                SendResult res=sendPush(key,payload);
+                switch(res){
+                    case SendResult::Ok:
+                        result.sent++;
+                        break;
+                    case SendResult::NoSuchConnection:
+                        result.noSuchConnection++;
+                        break;
+                    case SendResult::Closed:
+                        result.closed++;
+                        break;
+                    case SendResult::Overloaded:
+                        result.overloaded;
+                        break;
                 }
             }
         }
@@ -296,7 +309,7 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     }
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId},{"content",content}}};
     BroadcastResult result=broadcastToGroup(groupId.value(),user.value(),key,pushMsg);
-    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped}});
+    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.droped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
 }
 im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
@@ -422,10 +435,16 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
             return LogLevel::ERROR;
     }
 }
-bool im::Imservice::sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet){
+im::Imservice::SendResult im::Imservice::sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet){
     decorate(resp,req.req_id);
     auto payload=im::encodeResponse(resp);
-    bool ok=sendToConnKey_&&sendToConnKey_(key,payload);
+    SendResult result;
+    if(sendToConnKey_){
+        result=sendToConnKey_(key,payload);
+    }
+    else{
+        result=SendResult::NoSuchConnection;
+    }
     auto ctx=makeRespCtx(key,req,resp,session,outEvet);
     if(!resp.ok){
         LogLevel level=mapErrorToLogLevel(resp.code);
@@ -439,15 +458,21 @@ bool im::Imservice::sendResponseWithLog(ConnKey key,const Request& req,Response&
     else{
         LOG_INFO_CTX("im response success",ctx);
     }
-    if(!ok){
+    if(result!=SendResult::Ok){
         LOG_ERROR_CTX("Failed to send response",ctx);
     }
-    return ok;
+    return result;
 }
-bool im::Imservice::sendParseErrorWithLog(ConnKey key,Response& resp,const Session& session){
+im::Imservice::SendResult im::Imservice::sendParseErrorWithLog(ConnKey key,Response& resp,const Session& session){
     decorate(resp);
     auto payload=im::encodeResponse(resp);
-    bool ok=sendToConnKey_&&sendToConnKey_(key,payload);
+    SendResult result;
+    if(sendToConnKey_){
+        result=sendToConnKey_(key,payload);
+    }
+    else{
+        result=SendResult::NoSuchConnection;
+    }
     auto ctx=makeRespCtx(key,Request{},resp,session,"PARSE_ERR_RESP");
     LogLevel level=mapErrorToLogLevel(resp.code);
     if(level==LogLevel::ERROR){
@@ -456,10 +481,10 @@ bool im::Imservice::sendParseErrorWithLog(ConnKey key,Response& resp,const Sessi
     else if(level==LogLevel::WARN){
         LOG_WARN_CTX("im parse warn",ctx);
     }
-    if(!ok){
+    if(result!=SendResult::Ok){
         LOG_ERROR_CTX("Failed to send parse error response",ctx);
     }
-    return ok;
+    return result;
 }
 im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Session& session){
     switch(req.type){

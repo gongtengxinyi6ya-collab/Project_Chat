@@ -29,10 +29,23 @@ public:
     class BroadcastResult{
         public:
         size_t sent{0};//成功发送数量
-        size_t dropped{0};//未发送数量，超过背压限制被丢弃的消息数量
+        size_t noSuchConnection{0};//没有连接数量
+        size_t closed{0};//连接已关闭数量
+        size_t overloaded{0};//输出缓冲区过载数量
+        size_t droped()const{
+            return noSuchConnection+closed+overloaded;
+        }
     };
+    //SendResult:区分连接存在，输出缓冲区过载，成功入队
+    enum class SendResult{
+        Ok,//成功入队
+        NoSuchConnection,//连接不存在
+        Closed,//连接关闭
+        Overloaded//输出缓冲区过载
+    };
+
     using ConnKey=int;//连接标识
-    using SendToConnKeyFn=std::function<bool (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
+    using SendToConnKeyFn=std::function<SendResult (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
 
     explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig());
     void setSendToConnKey(SendToConnKeyFn fn);
@@ -58,7 +71,7 @@ private:
     uint64_t nowMs() const;//获取当前时间戳
     void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
     std::optional<std::string> usernameByKey(ConnKey key) const;//把connKey映射为username
-    bool sendPush(ConnKey,const std::string &);//统一对push做decorate,encode,sendToConnKey
+    SendResult sendPush(ConnKey,const std::string &);//统一对push做decorate,encode,sendToConnKey
     std::optional<std::string> resolveTargetGroupId(const Request&,const Session&);//群id获取辅助方法
     //群聊接口
     Response handleCreateGroup(const Request&,[[maybe_unused]]ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
@@ -77,8 +90,8 @@ private:
 
     //统一错误处理
     LogLevel mapErrorToLogLevel(im::ErrorCode code) const;//错误映射
-    bool sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet);//统一回包出口函数，处理日志，错误
-    bool sendParseErrorWithLog( ConnKey key,Response& resp,const Session& session);//统一解析错误回包函数
+    SendResult sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet);//统一回包出口函数，处理日志，错误
+    SendResult sendParseErrorWithLog( ConnKey key,Response& resp,const Session& session);//统一解析错误回包函数
     im::Response dispatcResqest(const Request&req,ConnKey key,Session& ssession);//分发并返回resp
 
 };

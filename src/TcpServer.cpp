@@ -14,13 +14,16 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     imService_->setSendToConnKey([this](im::Imservice::ConnKey key,const std::string& payload){
             auto it=connections_.find(key);
             if(it==connections_.end()){
-                return false;
+                return im::Imservice::SendResult::NoSuchConnection;
             }
             if(it->second->isClosed()){
-                return false;
+                return im::Imservice::SendResult::Closed;
+            }
+            if(!it->second->canSend(payload.size())){
+                return im::Imservice::SendResult::Overloaded;
             }
             it->second->send(payload);
-            return true;
+            return im::Imservice::SendResult::Ok;
 });
 }
 

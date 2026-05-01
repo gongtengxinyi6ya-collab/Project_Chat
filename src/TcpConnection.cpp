@@ -3,7 +3,17 @@
 #include "ThreadPool.h"
 
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config)
-:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit){
+:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
+    channel_=std::make_unique<Channel>(loop_,fd_);
+    channel_->setReadCallback([this](){
+        handleRead();
+    });
+    channel_->setWriteCallback([this](){
+        handleWrite();
+    });
+    channel_->setErrorCallback([this](){
+        handleError();
+    });
 
 }
 
@@ -160,6 +170,10 @@ if(!connection_||!channel_){//防止连接已关闭但广播任务还在队列�
     }
     size_t frameBytes=4+len;
     if(!canAccept(frameBytes)){//如果超过硬限制直接丢弃
+        overloadDropCount_++;
+        if(overloadDropCount_>=maxOverloadDropCount_){
+            LOG_ERROR("Connection " + std::to_string(fd_) + " has dropped " +std::to_string(overloadDropCount_) + " messages due to overload, exceeding max overload drop count of " + std::to_string(maxOverloadDropCount_) + ", closing connection");
+        }
         markDrop(frameBytes);
         return;
     }
@@ -198,6 +212,10 @@ void TcpConnection::closeFd(){
         fdClosed_=true;
         fd_=-1;
     }
+}
+bool TcpConnection::canSend(size_t payloadBytes)const{
+    size_t frameBytes=4+payloadBytes;//4+未加长度头的JSON字符串长度
+    return connection_&&channel_!=nullptr&&pendingBytes()+frameBytes<=hardLimit_;
 }
 
 //心跳检测接口
