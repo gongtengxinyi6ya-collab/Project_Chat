@@ -20,6 +20,7 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
                 return im::Imservice::SendResult::Closed;
             }
             if(!it->second->canSend(payload.size())){
+                it->second->recordDrop(payload.size());
                 return im::Imservice::SendResult::Overloaded;
             }
             it->second->send(payload);
@@ -61,6 +62,12 @@ void TcpServer::newConnection(int fd){
                 baseloop_->runInLoop([this,conn](){
                     removeConnectionInBaseLoop(conn);
                 });
+        });
+        conn->setHighWaterCallback([](const std::shared_ptr<TcpConnection>& conn,size_t pending){
+            LOG_WARN("connection high water fd="+std::to_string(conn->fd())+" pending="+std::to_string(pending));
+        });
+        conn->setLowWaterCallback([](const std::shared_ptr<TcpConnection>& conn,size_t pending){
+            LOG_INFO("connection low water fd="+std::to_string(conn->fd())+" pending="+std::to_string(pending));
         });
         baseloop_->runInLoop([this,conn](){
             addConnectionInBaseLoop(conn);

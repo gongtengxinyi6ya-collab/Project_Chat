@@ -18,6 +18,9 @@ class TcpConnection
 :public std::enable_shared_from_this<TcpConnection>{
     using CloseCallback=std::function<void(const std::shared_ptr<TcpConnection>&)>;//连接关闭回调，参数为当前连接对象的shared_ptr
     using MessageCallback=std::function<void(const std::shared_ptr<TcpConnection>&,const std::string&)>;//消息回调，参数为fd和消息内容
+
+    using HighWaterCallback=std::function<void(const std::shared_ptr<TcpConnection>&,size_t)>;//高水位回调
+    using LowWaterCallback=std::function<void(const std::shared_ptr<TcpConnection>&,size_t)>;//低水位回调
 public:
     TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config);
     ~TcpConnection();
@@ -30,7 +33,9 @@ public:
     void handleError();//socket错误处理
     void setCloseCallback(CloseCallback cb);
     void setMessageCallback(MessageCallback cb);
-
+    void setHighWaterCallback(HighWaterCallback cb);//上层注册高水位事件
+    void setLowWaterCallback(LowWaterCallback cb);//上层注册恢复事件
+    
     EventLoop* getLoop() const;//返回所属的EventLoop，供服务器转发消息时调用
     int fd() const;
     
@@ -52,8 +57,10 @@ public:
     //背压接口
     size_t pendingBytes() const;//返回outputBuffer_可读字节数
     bool isOverloaded()const;//返回是否过载
-    bool canAccept(size_t nextBytes)const;//返回是否能接受下一条消息，判断条件是pendingBytes()+nextBytes<=hardLimit_
-    void markDrop(size_t bytes);//限频警告
+    bool canAccept(size_t nextBytes)const;//返回是否能接受下一条消息，判断条件是pendingBytes()+nextBytes<=hardLimit
+    uint64_t droppedMessage()const;//返回已丢弃消息数
+    uint32_t overloadDropCount()const;//返回脸书过载丢弃次数
+    void recordDrop(size_t payloadByres);//
 private:
     EventLoop* loop_;//
     int fd_;//客户端socket
@@ -82,6 +89,8 @@ private:
     size_t maxFrameLen;//最大消息长度，超过认为协议错误，关闭连接
 
     //广播背压
+    HighWaterCallback highWaterCallback_;//高水位回调
+    LowWaterCallback lowWaterCallback_;
     size_t highWaterMark_;//高水位限制,超过该值认为过载，触发限频措施，如丢弃消息、降低服务质量等
     size_t lowWaterMark_;//低水位限制,从过载恢复到正常的阈值
     size_t hardLimit_;//硬限制，超过直接丢弃消息不予接受
