@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <memory>
-
+#include <atomic>
 #include "EventLoop.h"
 #include "Channel.h"
 #include "Buffer.h"
@@ -61,6 +61,8 @@ public:
     uint64_t droppedMessage()const;//返回已丢弃消息数
     uint32_t overloadDropCount()const;//返回脸书过载丢弃次数
     void recordDrop(size_t payloadByres);//
+    void scheduleCloseInLoop();//保证关闭逻辑一定在连接所属ioloop执行
+    void updatePendingEstimate();//同步获取outputBuffer可读字节
 private:
     EventLoop* loop_;//
     int fd_;//客户端socket
@@ -94,8 +96,10 @@ private:
     size_t highWaterMark_;//高水位限制,超过该值认为过载，触发限频措施，如丢弃消息、降低服务质量等
     size_t lowWaterMark_;//低水位限制,从过载恢复到正常的阈值
     size_t hardLimit_;//硬限制，超过直接丢弃消息不予接受
-    bool overloaded_{false};//是否过载
-    uint64_t droppedMessage_{0};//已丢弃消息计数，用于日志记录和监控
-    uint32_t overloadDropCount_{0};//过载丢弃次数计数，用于监控过载事件频率
-    uint32_t maxOverloadDropCount_;//过载丢弃次数上限，超过该次数可以考虑关闭连接或触发更严重的限流措施
+
+    std::atomic<bool> overloaded_{false};//是否过载
+    std::atomic<uint64_t> droppedMessage_{0};//已丢弃消息计数，用于日志记录和监控
+    std::atomic<uint32_t> overloadDropCount_{0};//过载丢弃次数计数，用于监控过载事件频率
+    uint32_t maxOverloadDropCount_{0};//过载丢弃次数上限，超过该次数可以考虑关闭连接或触发更严重的限流措施
+    std::atomic<size_t> pendingBytesEstimate_{0};//跨线程可读的待发送字节估算值，代替baseloop读取outputBuffer_
 };

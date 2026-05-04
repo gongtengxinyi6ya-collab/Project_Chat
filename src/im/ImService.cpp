@@ -25,9 +25,7 @@ void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const st
             resp=makeErr(*req_ptr,im::ErrorCode::INTERNAL,"Internal server error");
             LOG_ERROR_CTX("Unknown exception occurred while dispatching request",makeReqCtx(key,*req_ptr,session,"DISPATCH_EXCEPTION"));
         }
-        if(sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT")!=SendResult::Ok){
-            LOG_ERROR_CTX("Failed to send response",makeRespCtx(key,*req_ptr,resp,session,"RESP_OUT"));
-        }
+        sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT");
 
     }
     else if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
@@ -307,7 +305,7 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     if(!groupManager_.isMember(groupId.value(),user.value())){
         return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId},{"content",content}}};
+    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId.value()},{"content",content}}};
     BroadcastResult result=broadcastToGroup(groupId.value(),user.value(),key,pushMsg);
     return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.droped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
