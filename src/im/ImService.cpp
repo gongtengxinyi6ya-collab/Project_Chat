@@ -215,7 +215,7 @@ im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string
                         result.closed++;
                         break;
                     case SendResult::Overloaded:
-                        result.overloaded;
+                        result.overloaded++;
                         break;
                 }
             }
@@ -457,9 +457,6 @@ im::Imservice::SendResult im::Imservice::sendResponseWithLog(ConnKey key,const R
     }
     else{
         LOG_INFO_CTX("im response success",ctx);
-    }
-    if(result!=SendResult::Ok){
-        LOG_ERROR_CTX("Failed to send response",ctx);
     }
     return result;
 }

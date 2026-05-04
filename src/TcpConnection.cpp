@@ -4,16 +4,6 @@
 
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config)
 :loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
-    channel_=std::make_unique<Channel>(loop_,fd_);
-    channel_->setReadCallback([this](){
-        handleRead();
-    });
-    channel_->setWriteCallback([this](){
-        handleWrite();
-    });
-    channel_->setErrorCallback([this](){
-        handleError();
-    });
 
 }
 
