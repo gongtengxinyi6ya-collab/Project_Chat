@@ -318,7 +318,7 @@ void TcpConnection::recordDrop(size_t payloadBytes){
     }
     if(drops>=maxOverloadDropCount_){
         scheduleCloseInLoop();
-        LOG_WARN("Connection " + std::to_string(fd_) + " has dropped " +std::to_string(overloadDropCount_) + " messages due to overload, exceeding max overload drop count of " + std::to_string(maxOverloadDropCount_));
+        LOG_WARN("Connection " + std::to_string(fd_) + " has dropped " +std::to_string(overloadDropCount_) + " messages due to overload, exceeding max overload drop count of " + std::to_string(maxOverloadDropCount_)+", closing connection");
     }
 }
 void TcpConnection::scheduleCloseInLoop(){
