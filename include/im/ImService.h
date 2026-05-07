@@ -32,7 +32,7 @@ public:
         size_t noSuchConnection{0};//没有连接数量
         size_t closed{0};//连接已关闭数量
         size_t overloaded{0};//输出缓冲区过载数量
-        size_t droped()const{
+        size_t dropped()const{//返回未成功发送数量，包括连接不存在、已关闭和过载的情况
             return noSuchConnection+closed+overloaded;
         }
     };
@@ -55,6 +55,8 @@ public:
     std::optional<Response> guardAuthenticated(const Request& ,const Session&);//登录门禁
     std::optional<Response> guardInGroup(const Request&,const Session&,const std::string&);//房间门禁
     std::optional<Response> getStringField(const Request& req,const std::string&field,std::string&out,bool allowEmpty=false);//统一读取JSON字符型字段
+
+    std::string_view sendResultToString(SendResult result) const;//发送结果转字符串，便于日志输出
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
     SendToConnKeyFn sendToConnKey_;

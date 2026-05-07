@@ -1,7 +1,7 @@
 #include "logger/LogContext.h"
 
 bool LogContext::empty()const{
-    if(connFd||user||groupId||msgId||reqId||msgType||errCode||event||fanout||dropped){
+    if(connFd||user||groupId||msgId||reqId||msgType||errCode||event||fanout||sent||dropped||closed||overloaded||noSuchConnection||pendingBytes||sendResult){
         return false;
     }
     return true;
@@ -51,6 +51,23 @@ std::string LogContext::toKvString()const{
     if(dropped){
         appendKvNum("dropped",*dropped);
     }
-    
+    if(sent){
+        appendKvNum("sent",*sent);
+    }
+    if(closed){
+        appendKvNum("closed",*closed);
+    }
+    if(overloaded){
+        appendKvNum("overloaded",*overloaded);
+    }
+    if(noSuchConnection){
+        appendKvNum("noSuchConnection",*noSuchConnection);
+    }
+    if(pendingBytes){
+        appendKvNum("pendingBytes",*pendingBytes);
+    }
+    if(sendResult){
+        appendKv("sendResult",*sendResult);
+    }
     return out;
 }

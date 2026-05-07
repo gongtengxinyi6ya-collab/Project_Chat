@@ -86,7 +86,18 @@ std::optional<im::Response> im::Imservice::getStringField(const Request&req,cons
     out=str;
     return std::nullopt;
 }
-
+std::string_view im::Imservice::sendResultToString(SendResult result)const{
+    switch(result){
+        case SendResult::Ok:
+            return "Ok";
+        case SendResult::NoSuchConnection:
+            return "NoSuchConnection";
+        case SendResult::Closed:
+            return "Closed";
+        case SendResult::Overloaded:
+            return "Overloaded";
+    }
+}
 
 im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
@@ -307,7 +318,7 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     }
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId.value()},{"content",content}}};
     BroadcastResult result=broadcastToGroup(groupId.value(),user.value(),key,pushMsg);
-    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.droped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
+    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
 }
 im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
@@ -390,6 +401,21 @@ LogContext im::Imservice::makeRespCtx(ConnKey key,const Request& req,const Respo
     if(resp.data.contains("dropped")&&resp.data["dropped"].is_number_unsigned()){
         ctx.dropped=resp.data["dropped"].get<size_t>();
     }
+    if(resp.data.contains("noSuchConnection")&&resp.data["noSuchConnection"].is_number_unsigned()){
+        ctx.noSuchConnection=resp.data["noSuchConnection"].get<size_t>();
+    }
+    if(resp.data.contains("closed")&&resp.data["closed"].is_number_unsigned()){
+        ctx.closed=resp.data["closed"].get<size_t>();
+    }
+    if(resp.data.contains("overloaded")&&resp.data["overloaded"].is_number_unsigned()){
+        ctx.overloaded=resp.data["overloaded"].get<size_t>();
+    }
+    if(resp.data.contains("pendingBytes")&&resp.data["pendingBytes"].is_number_unsigned()){
+        ctx.pendingBytes=resp.data["pendingBytes"].get<size_t>();
+    }
+    if(resp.data.contains("sendResult")&&resp.data["sendResult"].is_string()){
+        ctx.sendResult=resp.data["sendResult"].get<std::string>();
+    }
     return ctx;
 }
 std::optional<std::string> im::Imservice::tryExtractGroupId(const Request& req)const{
@@ -444,7 +470,19 @@ im::Imservice::SendResult im::Imservice::sendResponseWithLog(ConnKey key,const R
         result=SendResult::NoSuchConnection;
     }
     auto ctx=makeRespCtx(key,req,resp,session,outEvet);
-    if(!resp.ok){
+    if(result!=SendResult::Ok){//发送失败日志
+        if(result==SendResult::NoSuchConnection){
+            LOG_ERROR_CTX("Failed to send response, no such connection",ctx);
+        }
+        else if(result==SendResult::Closed){
+            LOG_ERROR_CTX("Failed to send response, connection closed",ctx);
+        }
+        else if(result==SendResult::Overloaded){
+            LOG_ERROR_CTX("Failed to send response, connection overloaded",ctx);
+        }
+    }
+
+    if(!resp.ok){//响应本身表示处理请求失败，记录错误日志
         LogLevel level=mapErrorToLogLevel(resp.code);
         if(level==LogLevel::ERROR){
             LOG_ERROR_CTX("im response error",ctx);
