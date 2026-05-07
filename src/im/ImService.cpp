@@ -96,6 +96,8 @@ std::string_view im::Imservice::sendResultToString(SendResult result)const{
             return "Closed";
         case SendResult::Overloaded:
             return "Overloaded";
+        default:
+            return "Unknown";
     }
 }
 
@@ -396,7 +398,7 @@ LogContext im::Imservice::makeRespCtx(ConnKey key,const Request& req,const Respo
         ctx.groupId=tryExtractGroupId(req);
     }
     if(resp.data.contains("sent")&&resp.data["sent"].is_number_unsigned()){
-        ctx.fanout=resp.data["sent"].get<size_t>();
+        ctx.sent=resp.data["sent"].get<size_t>();
     }
     if(resp.data.contains("dropped")&&resp.data["dropped"].is_number_unsigned()){
         ctx.dropped=resp.data["dropped"].get<size_t>();
@@ -412,9 +414,6 @@ LogContext im::Imservice::makeRespCtx(ConnKey key,const Request& req,const Respo
     }
     if(resp.data.contains("pendingBytes")&&resp.data["pendingBytes"].is_number_unsigned()){
         ctx.pendingBytes=resp.data["pendingBytes"].get<size_t>();
-    }
-    if(resp.data.contains("sendResult")&&resp.data["sendResult"].is_string()){
-        ctx.sendResult=resp.data["sendResult"].get<std::string>();
     }
     return ctx;
 }
@@ -470,6 +469,7 @@ im::Imservice::SendResult im::Imservice::sendResponseWithLog(ConnKey key,const R
         result=SendResult::NoSuchConnection;
     }
     auto ctx=makeRespCtx(key,req,resp,session,outEvet);
+    ctx.sendResult=std::string(sendResultToString(result));
     if(result!=SendResult::Ok){//发送失败日志
         if(result==SendResult::NoSuchConnection){
             LOG_ERROR_CTX("Failed to send response, no such connection",ctx);
@@ -480,6 +480,7 @@ im::Imservice::SendResult im::Imservice::sendResponseWithLog(ConnKey key,const R
         else if(result==SendResult::Overloaded){
             LOG_ERROR_CTX("Failed to send response, connection overloaded",ctx);
         }
+        return result;
     }
 
     if(!resp.ok){//响应本身表示处理请求失败，记录错误日志

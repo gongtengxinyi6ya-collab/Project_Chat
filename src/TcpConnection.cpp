@@ -3,7 +3,7 @@
 #include "ThreadPool.h"
 
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config)
-:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connection_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
+:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
     connected_.store(true);
 }
 
@@ -101,13 +101,13 @@ void TcpConnection::handleWrite(){
 }
 
 void TcpConnection::handleClose(){
-    if(!connection_)
+    if(!connected_.exchange(false)){//防止重复调用closeCallback_，记录日志并
         return;
+    }
     stopHeartbeat();
     if(idleTimerId_.valid()){
         loop_->cancel(idleTimerId_);
     }
-    connection_=false;
     connected_.store(false);
     channel_->disableAll();
     loop_->removeChannel(fd_);
@@ -148,7 +148,7 @@ int TcpConnection::fd() const{
 }
 
 void TcpConnection::send(const std::string &msg){//
-    if(!connection_){//防止对已关闭的fd发送数据，记录日志并返回
+    if(!connected_.load(std::memory_order_relaxed)){//防止对已关闭的fd发送数据，记录日志并返回
         return;
     }
     if(loop_->isInLoopThread()){//如果在IO线程中，直接发送
@@ -164,7 +164,7 @@ void TcpConnection::send(const std::string &msg){//
     }
 }
 void TcpConnection::sendInLoop(const std::string& msg){
-if(!connection_||!channel_){//防止连接已关闭但广播任务还在队列里
+if(!connected_.load(std::memory_order_relaxed)||!channel_){//防止连接已关闭但广播任务还在队列里
         return;
     }
     uint32_t len=msg.size();
@@ -211,7 +211,7 @@ void TcpConnection::connectionEstablished(){
 }
 
 void TcpConnection::connectionDestroyed(){
-    if(connection_&&channel_->inEpoll()){
+    if(connected_.load(std::memory_order_relaxed)&&channel_->inEpoll()){
         channel_->disableAll();
         loop_->removeChannel(fd_);
     }

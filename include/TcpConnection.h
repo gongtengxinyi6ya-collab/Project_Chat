@@ -70,7 +70,7 @@ private:
     bool fdClosed_{false};//fd是否已关闭，防止重复关闭和发送数据
     Buffer outputBuffer_;//待发送数据
     Buffer inputBuffer_;//读入缓存
-    bool connection_;
+    
     std::atomic<bool> connected_;
     CloseCallback closeCallback_;//删除连接回调
     MessageCallback messageCallback_;//消息回调，保存服务器注册的消息回调函数
