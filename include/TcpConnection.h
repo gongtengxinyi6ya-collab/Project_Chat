@@ -42,7 +42,7 @@ public:
     void connectionEstablished();//连接建立，注册事件
     void connectionDestroyed();//连接销毁，取消事件,最终释放fd
     void closeFd();
-    bool isClosed() const{return !connection_;}//连接是否已关闭
+    bool isClosed() const{return !connected_.load();}//连接是否已关闭
     bool canSend(size_t payloadBytes)const;//可发送判断
     //心跳检测接口
     
@@ -61,8 +61,6 @@ public:
     uint64_t droppedMessage()const;//返回已丢弃消息数
     uint32_t overloadDropCount()const;//返回脸书过载丢弃次数
     void recordDrop(size_t payloadByres);//
-    void scheduleCloseInLoop();//保证关闭逻辑一定在连接所属ioloop执行
-    void updatePendingEstimate();//同步获取outputBuffer可读字节
 private:
     EventLoop* loop_;//
     int fd_;//客户端socket
@@ -73,6 +71,7 @@ private:
     Buffer outputBuffer_;//待发送数据
     Buffer inputBuffer_;//读入缓存
     bool connection_;
+    std::atomic<bool> connected_;
     CloseCallback closeCallback_;//删除连接回调
     MessageCallback messageCallback_;//消息回调，保存服务器注册的消息回调函数
 
@@ -102,4 +101,6 @@ private:
     std::atomic<uint32_t> overloadDropCount_{0};//过载丢弃次数计数，用于监控过载事件频率
     uint32_t maxOverloadDropCount_{0};//过载丢弃次数上限，超过该次数可以考虑关闭连接或触发更严重的限流措施
     std::atomic<size_t> pendingBytesEstimate_{0};//跨线程可读的待发送字节估算值，代替baseloop读取outputBuffer_
+    void scheduleCloseInLoop();//保证关闭逻辑一定在连接所属ioloop执行
+    void updatePendingEstimate();//同步获取outputBuffer可读字节
 };
