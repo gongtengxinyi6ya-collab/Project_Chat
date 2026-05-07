@@ -3,8 +3,7 @@
 #include "ThreadPool.h"
 
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config)
-:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
-    connected_.store(true);
+:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connected_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
 }
 
 TcpConnection::~TcpConnection(){
@@ -108,7 +107,6 @@ void TcpConnection::handleClose(){
     if(idleTimerId_.valid()){
         loop_->cancel(idleTimerId_);
     }
-    connected_.store(false);
     channel_->disableAll();
     loop_->removeChannel(fd_);
     closeCallback_(shared_from_this());
