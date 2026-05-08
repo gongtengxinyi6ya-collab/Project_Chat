@@ -31,6 +31,6 @@ public:
 private:
     std::unordered_map<std::string,std::unordered_set<std::string>>  userGroups_;//user映射groupId
     std::unordered_map<std::string,Group> groupsById_;//groupId映射Group主储存
-    std::atomic<uint64_t> nexxtGroupSeq_{1};//生成groupId的递增序列,用于生成唯一groupId
+    std::atomic<uint64_t> nextGroupSeq_{1};//生成groupId的递增序列,用于生成唯一groupId
 };
 }

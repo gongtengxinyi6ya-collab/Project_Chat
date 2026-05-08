@@ -3,7 +3,7 @@ std::pair<bool,std::string> im::GroupManager::createGroup(const std::string& own
     if(owner.empty()||name.empty()){
         return {false,""};
     }
-    std::string groupId="Group"+std::to_string(nexxtGroupSeq_++);
+    std::string groupId="Group"+std::to_string(nextGroupSeq_++);
     Group g(groupId,name,owner);
     if(!g.addMember(owner)){
         return {false,""};

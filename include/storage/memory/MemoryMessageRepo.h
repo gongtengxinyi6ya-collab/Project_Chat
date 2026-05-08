@@ -1,0 +1,25 @@
+#include <cstdint>
+#include <string>
+#include <mutex>
+#include <vector>
+#include <atomic>
+#include <unordered_map>
+#include "storage/MessageRepo.h"
+/*内存储存实现，后续可替换为数据库实现*/
+namespace{
+class MemoryMessageRepo:public storage::MessageRepo{
+public:
+struct MessageRecord{
+    uint64_t messageId;
+    std::string groupId;
+    std::string from;
+    std::string content;
+    uint64_t serverTsMs;
+};
+    storage::SaveMessageResult saveGroupMessage(const std::string& groupId,const std::string&from,const std::string&content,uint64_t serverTsMs)override;//保存群消息
+private:
+    std::unordered_map<std::string,std::vector<MessageRecord>> groupMessages_;//groupId映射消息列表
+    std::atomic<uint64_t> nextMessageId_{1};//生成messageId的递增序列,用于生成唯一messageId
+    mutable std::mutex mutex_;//保护groupMessages_的读写
+};
+}
