@@ -10,7 +10,7 @@ public:
     bool userExists(const std::string& username)override;//检查用户是否存在
 private:
     std::unordered_set<std::string> users_;//用户集合
-    mutable std::mutex mutex_;//
+    mutable std::mutex mutex_;//保护users_的读写
 
 };
 }

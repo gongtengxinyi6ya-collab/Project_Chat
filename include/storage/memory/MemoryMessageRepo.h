@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include "storage/MessageRepo.h"
 /*内存储存实现，后续可替换为数据库实现*/
-namespace{
+namespace storage{
 class MemoryMessageRepo:public storage::MessageRepo{
 public:
 struct MessageRecord{

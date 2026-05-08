@@ -5,7 +5,7 @@
 #include <mutex>
 #include "GroupRepo.h"
 
-namespace{
+namespace storage{
 class MemoryGroupRepo:public storage::GroupRepo{
 public:
 struct GroupRecord{
