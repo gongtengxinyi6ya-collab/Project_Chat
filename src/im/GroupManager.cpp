@@ -44,6 +44,17 @@ im::QuitResult im::GroupManager::leaveGroup(const std::string& groupId,const std
     
     return QuitResult::OK_LEFT;
 }
+bool im::GroupManager::removeGroup(const std::string& groupId){
+    auto it=groupsById_.find(groupId);
+    if(it==groupsById_.end()){
+        return false;
+    }
+    if(it->second.memberCount()>0){
+        return false;
+    }
+    groupsById_.erase(it);
+    return true;
+}
 std::vector<std::string> im::GroupManager::members(const std::string & groupId) const{
     auto it=groupsById_.find(groupId);
     if(it!=groupsById_.end()){

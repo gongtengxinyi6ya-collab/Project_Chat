@@ -24,6 +24,7 @@ public:
     std::pair<bool,std::string> createGroup(const std::string& owner,const std::string& name);//创建群并让owner自动入群
     JoinResult joinGroup(const std::string &groupId,const std::string& user);//用户入群
     QuitResult leaveGroup(const std::string& groupId,const std::string& user);//用户退群
+    bool removeGroup(const std::string& groupId);//删除群,仅当群不存在成员时成功
     std::vector<std::string> members(const std::string & groupId) const;//获取成员用户名列表
     std::vector<std::string> groupsOfUser(const std::string& user)const;//取用户加入的所有群
     bool isMember(const std::string& groupId,const std::string& user) const;//群存在且成员包含user

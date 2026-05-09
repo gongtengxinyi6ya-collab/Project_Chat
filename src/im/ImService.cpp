@@ -224,6 +224,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
         if(result.status!=storage::RepoStatus::Ok&&result.status!=storage::RepoStatus::AlreadyExists){
             LOG_ERROR_CTX("repo create group failed",makeReqCtx(key,req,session,"Repo failed"));
             groupManager_.leaveGroup(groupId,owner);//回滚内存状态
+            groupManager_.removeGroup(groupId);
             return makeRepoError(req,result.status,"failed to persist group");
         }
     }
@@ -288,7 +289,9 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     if(hasRepositories()){
         auto result=repos_.groupRepo->addMember(groupId,user.value());
         if(result.status!=storage::RepoStatus::Ok&&result.status!=storage::RepoStatus::AlreadyExists){
-            
+
+            groupManager_.leaveGroup(groupId,user.value());//回滚内存状态
+            session.joinedGroupIds_.erase(groupId);
             return makeRepoError(req,result.status,"filed to persist group member");
         }
     }
@@ -323,6 +326,8 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
 
         if (result.status != storage::RepoStatus::Ok &&
             result.status != storage::RepoStatus::NotFound) {
+            groupManager_.joinGroup(groupId, user.value());//回滚内存状态
+            session.joinedGroupIds_.insert(groupId);
             return makeRepoError(req, result.status, "Failed to remove group member");
         }
     }
@@ -629,6 +634,8 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
             return im::ErrorCode::BAD_REQUEST;
         case storage::RepoStatus::SqlError:
             return im::ErrorCode::INTERNAL;
+        case storage::RepoStatus::NotFound:
+            return im::ErrorCode::NO_SUCH_USER;
     }
     return im::ErrorCode::INTERNAL;
 }
@@ -636,7 +643,7 @@ im::Response im::Imservice::makeRepoError(const im::Request& req,storage::RepoSt
     auto code=repoStatusToErrorCode(status);
     std::string msg=fallbackMsg;
     if(status==storage::RepoStatus::SqlError){
-        msg="Storafe internal error";
+        msg="Storage internal error";
     }
     return makeErr(req,code,msg);
 }
