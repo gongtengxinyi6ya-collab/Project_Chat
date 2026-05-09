@@ -19,6 +19,7 @@
 #include "config/ImConfig.h"
 #include "logger/LogContext.h"
 #include "logger/LogLevel.h"
+#include "storage/RepositoryBundle.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -57,6 +58,10 @@ public:
     std::optional<Response> getStringField(const Request& req,const std::string&field,std::string&out,bool allowEmpty=false);//统一读取JSON字符型字段
 
     std::string_view sendResultToString(SendResult result) const;//发送结果转字符串，便于日志输出
+
+    //持久化存储接口
+    void setRepositories(storage::RepositoryBundle repos);//移动保存repos_
+    bool hasRepositories()const;//
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
     SendToConnKeyFn sendToConnKey_;
@@ -96,5 +101,7 @@ private:
     SendResult sendParseErrorWithLog( ConnKey key,Response& resp,const Session& session);//统一解析错误回包函数
     im::Response dispatcResqest(const Request&req,ConnKey key,Session& ssession);//分发并返回resp
 
+    //持久化储存
+    storage::RepositoryBundle repos_;//保存用户，群，消息三个Repo
 };
 }

@@ -1,6 +1,9 @@
 #include "im/ImService.h"
 #include "third_party/json.hpp"
 #include "TcpConnection.h"
+#include "storage/UserRepo.h"
+#include "storage/GroupRepo.h"
+#include "storage/MessageRepo.h"
 
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
@@ -57,6 +60,7 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
     if(!sessionManager_.bindUser(key,username)){
         return makeErr(req,im::ErrorCode::INTERNAL,"Failed to bind user to session");
     }
+    repos_.userRepo->createUser(username);
     return makeOk(req,im::MsgType::AUTH_RESP);
 }
 
@@ -100,6 +104,15 @@ std::string_view im::Imservice::sendResultToString(SendResult result)const{
             return "Unknown";
     }
 }
+
+//持久化存储接口
+void im::Imservice::setRepositories(storage::RepositoryBundle repos){
+    repos_=std::move(repos);
+}
+bool im::Imservice::hasRepositories()const{
+    return repos_.valid();
+}
+
 
 im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
@@ -201,6 +214,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
         return makeErr(req,im::ErrorCode::INTERNAL,"Failed to create group:"+groupIdOrErr);
     }
     std::string groupId=groupIdOrErr;
+    repos_.groupRepo->createGroup(groupId,groupName,owner);
     session.joinedGroupIds_.insert(groupId);
     return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"groupName",groupName},{"owner",owner}});
 }
@@ -259,6 +273,7 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
         return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",false},{"alreadyIn",true}});
     }
     session.joinedGroupIds_.insert(groupId);
+    repos_.groupRepo->addMember(groupId,user.value());
     return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",true},{"alreadyIn",false}});
 }
 
@@ -284,6 +299,7 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
         return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",false},{"alreadyLeft",true}});
     }
     session.joinedGroupIds_.erase(groupId);
+    repos_.groupRepo->removeMember(groupId,user.value());
     return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",true},{"alreadyLeft",false}});
 }
 im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unused]]ConnKey key,Session& session){
@@ -318,6 +334,8 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     if(!groupManager_.isMember(groupId.value(),user.value())){
         return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
+    uint64_t serverTsMs=nowMs();
+    repos_.messageRepo->saveGroupMessage(groupId.value(),user.value(),content,serverTsMs);
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId.value()},{"content",content}}};
     BroadcastResult result=broadcastToGroup(groupId.value(),user.value(),key,pushMsg);
     return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});

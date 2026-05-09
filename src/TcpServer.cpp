@@ -26,6 +26,11 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
             it->second->send(payload);
             return im::Imservice::SendResult::Ok;
 });
+    storage::RepositoryBundle repos;
+    repos.userRepo=std::make_shared<storage::MemoryUserRepo>();
+    repos.groupRepo=std::make_shared<storage::MemoryGroupRepo>();
+    repos.messageRepo=std::make_shared<storage::MemoryMessageRepo>();
+    imService_->setRepositories(repos);
 }
 
 TcpServer::~TcpServer(){

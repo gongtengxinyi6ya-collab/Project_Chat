@@ -6,7 +6,9 @@
 #include "im/ImService.h"
 #include "logger/LogMacros.h"
 #include "config/AppConfig.h"
-
+#include "storage/memory/MemoryUserRepo.h"
+#include "storage/memory/MemoryGroupRepo.h"
+#include "storage/memory/MemoryMessageRepo.h"
 
 class EventLoop;
 class EventLoopThreadPool;
