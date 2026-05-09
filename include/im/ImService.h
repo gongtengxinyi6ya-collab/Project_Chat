@@ -20,6 +20,7 @@
 #include "logger/LogContext.h"
 #include "logger/LogLevel.h"
 #include "storage/RepositoryBundle.h"
+#include "storage/RepoResult.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -103,5 +104,8 @@ private:
 
     //持久化储存
     storage::RepositoryBundle repos_;//保存用户，群，消息三个Repo
+
+    im::ErrorCode repoStatusToErrorCode(storage::RepoStatus status)const;//把存储层错误转换为IM协议错误码
+    im::Response makeRepoError(const im::Request&req,storage::RepoStatus,const std::string&fallbackMsg)const;//把repo错误统一转换为Response
 };
 }
