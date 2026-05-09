@@ -6,10 +6,6 @@ storage::RepoResult storage::MemoryGroupRepo::createGroup(const std::string& gro
         result.status=RepoStatus::InvalidArgument;
         return result;
     }
-    if(groupExists(groupId)){
-        result.status=RepoStatus::AlreadyExists;
-        return result;
-    }
     GroupRecord group;
     group.groupId=groupId;
     group.groupName=groupName;
@@ -17,12 +13,17 @@ storage::RepoResult storage::MemoryGroupRepo::createGroup(const std::string& gro
     group.members.insert(owner);
     {   
         std::lock_guard lk(mutex_);
+        if(groupExists(groupId)){
+        result.status=RepoStatus::AlreadyExists;
+        return result;
+    }
         groups_.emplace(groupId,std::move(group));//emplace插入大对象更快捷
     }
     return result;
 }
 storage::RepoResult storage::MemoryGroupRepo::addMember(const std::string&groupId,const std::string& username){
     RepoResult result;
+    std::lock_guard lk(mutex_);
     if(!groupExists(groupId)){
         result.status=RepoStatus::NotFound;
         return result;
@@ -37,6 +38,7 @@ storage::RepoResult storage::MemoryGroupRepo::addMember(const std::string&groupI
 }
 storage::RepoResult storage::MemoryGroupRepo::removeMember(const std::string& groupId,const std::string& username){
     RepoResult result;
+    std::lock_guard lk(mutex_);
     if(!groupExists(groupId)){
         result.status=RepoStatus::NotFound;
         return result;
@@ -50,6 +52,7 @@ storage::RepoResult storage::MemoryGroupRepo::removeMember(const std::string& gr
     return result;
 }
 std::vector<std::string> storage::MemoryGroupRepo::listMembers(const std::string& groupId){
+    std::lock_guard lk(mutex_);
     if(!groupExists(groupId)){
         return {};
     }

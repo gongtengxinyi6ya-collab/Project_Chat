@@ -6,12 +6,12 @@ storage::RepoResult storage::MemoryUserRepo::createUser(const std::string&userna
         result.status=RepoStatus::InvalidArgument;
         return result;
     }
-    if(userExists(username)){
-        result.status=RepoStatus::AlreadyExists;
-        return result;
-    }
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        if(userExists(username)){
+            result.status=RepoStatus::AlreadyExists;
+            return result;
+        }
         users_.insert(username);
     }
     result.status=RepoStatus::Ok;
@@ -19,7 +19,6 @@ storage::RepoResult storage::MemoryUserRepo::createUser(const std::string&userna
 
 }
 bool storage::MemoryUserRepo::userExists(const std::string& username){
-        std::lock_guard lk(mutex_);
         auto it=users_.find(username);
         if(it!=users_.end()){
             return true;
