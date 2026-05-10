@@ -30,7 +30,16 @@
     "require_group_id_for_send": true,
     "max_group_name_len": 64,
     "max_message_len": 4096
+  },
+  
+  "database": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "",
+    "database": "project_chat",
+    "pool_size": 4,
+    "connect_timeout_ms": 3000
   }
-
 
 }

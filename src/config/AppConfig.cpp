@@ -16,6 +16,7 @@ AppConfig AppConfig::loadFromFile(const std::string& path){
         config.net_=NetConfig::fromJson(j.value("net", nlohmann::json::object()));
         config.log_=LogConfig::fromJson(j.value("log", nlohmann::json::object()));
         config.im_=ImConfig::fromJson(j.value("im", nlohmann::json::object()));
+        config.databaseConfig_=DatabaseConfig::fromJson(j.value("database",nlohmann::json::object()));
         return config;
     }catch(const nlohmann::json::exception& e){
         throw std::runtime_error("Failed to parse config file: "+std::string(e.what()));
@@ -27,18 +28,21 @@ void AppConfig::applyEnvOverrides(){
     net_.applyEnvOverrides();
     log_.applyEnvOverrides();
     im_.applyEnvOverrides();
+    databaseConfig_.loadFromEnv();
 }
 void AppConfig::validateOrThrow() const{
     server_.validateOrThrow();
     net_.validateOrThrow();
     log_.validateOrThrow();
     im_.validateOrThrow();  
+    databaseConfig_.validate();
 }
 std::string AppConfig::dumpSummary() const{
     std::stringstream ss;
     ss<<"Server(host="<<server_.host<<",port="<<server_.port<<",ioThreads="<<server_.ioThreads<<",backlog="<<server_.backlog<<"); "
       <<"Net(heartBeatMs="<<net_.heartBeatMs<<",idleTimeoutMs="<<net_.idleTimeoutMs<<",maxFrameLen="<<net_.maxFrameLen<<"); "
       <<"Log(level="<<logLevelToString(log_.level)<<",toConsole="<<log_.toConsole<<",toFile="<<log_.toFile<<",filePath="<<log_.filePath<<",jsonFormat="<<log_.jsonFormat<<"); "
-      <<"IM(requireGroupIdForSend="<<im_.requireGroupIdForSend<<",maxGroupNameLen="<<im_.maxGroupNameLen<<",maxMessageLen="<<im_.maxMessageLen<<");";
+      <<"IM(requireGroupIdForSend="<<im_.requireGroupIdForSend<<",maxGroupNameLen="<<im_.maxGroupNameLen<<",maxMessageLen="<<im_.maxMessageLen<<");"
+      <<"Database(host="<<databaseConfig_.host()<<",port="<<databaseConfig_.port()<<",user="<<databaseConfig_.user()<<",database="<<databaseConfig_.database()<<",poolSize="<<databaseConfig_.poolSize()<<",connectTimeoutMs="<<databaseConfig_.connectTimeoutMs()<<")";
     return ss.str();
 }

@@ -8,6 +8,7 @@
 #include "ServerConfig.h"
 #include "NetConfig.h"
 #include "LogConfig.h"
+#include "DatabaseConfig.h"
 /*
 总配置聚合：统一承载服务端/网络/日志/IM配置，提供加载，校验，查询
 */
@@ -20,12 +21,14 @@ public:
 
     //访问器
     const ServerConfig& server()const{return server_;}//只读访问server_
-    const NetConfig& net()const{return net_;};//只读访问net_
+    const NetConfig& net()const{return net_;}//只读访问net_
     const LogConfig& log()const{return log_;}//只读访问log_
-    const ImConfig& im()const{return im_;};//只读访问im_
+    const ImConfig& im()const{return im_;}//只读访问im_
+    const DatabaseConfig& database()const{return databaseConfig_;}
 private:
     ServerConfig server_;
     NetConfig net_;
     LogConfig log_;
     ImConfig im_;
+    DatabaseConfig databaseConfig_;
 };
