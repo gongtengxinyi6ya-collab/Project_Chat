@@ -635,7 +635,7 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
         case storage::RepoStatus::SqlError:
             return im::ErrorCode::INTERNAL;
         case storage::RepoStatus::NotFound:
-            return im::ErrorCode::NO_SUCH_USER;
+            return im::ErrorCode::NO_SUCH_GROUP;
     }
     return im::ErrorCode::INTERNAL;
 }

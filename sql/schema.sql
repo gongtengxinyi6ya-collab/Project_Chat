@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXIESTS project_chat
-    DEFAULT CHARACTER SER utf8mb4
+CREATE DATABASE IF NOT EXISTS project_chat
+    DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;
 
 use project_chat;

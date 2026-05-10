@@ -1,3 +1,4 @@
+#pragma once
 #include <string>
 #include <cstdint>
 #include "third_party/json.hpp"
@@ -21,6 +22,6 @@ private:
     std::string user_{"root"};//数据库用户名
     std::string password_;//数据库密码
     std::string database_{"project_chat"};//使用哪个数据库
-    uint32_t poolSize_;//数据库连接池大小
+    uint32_t poolSize_{4};//数据库连接池大小
     uint32_t connectTimeoutMs_{3000};//数据库连接超时时间
 };
