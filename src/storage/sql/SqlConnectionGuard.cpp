@@ -6,7 +6,9 @@ storage::SqlConnectionGuard::SqlConnectionGuard(SqlConnectionPool& pool,std::sha
 
 }
 storage::SqlConnectionGuard::~SqlConnectionGuard(){
-
+    if(pool_&&conn_){
+        pool_->release(std::move(conn_));
+    }
 }
 storage::SqlConnection* storage::SqlConnectionGuard::operator->(){
     return conn_.get();
