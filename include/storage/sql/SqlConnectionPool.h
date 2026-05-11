@@ -4,8 +4,7 @@
 #include <queue>
 #include "SqlConnection.h"
 #include "config/DatabaseConfig.h"
-
-class SqlConnectionGuard;
+#include "SqlConnectionGuard.h"
 
 namespace storage{
 class SqlConnectionPool{

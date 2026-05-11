@@ -1,17 +1,18 @@
 #pragma once
 #include <memory>
 #include "SqlConnection.h"
-#include "SqlConnectionPool.h"
+
+class SqlConnectionPool;
 
 namespace storage{
-class SqlConnetcionGuard{
+class SqlConnectionGuard{
 public:
-    SqlConnetcionGuard(SqlConnectionPool& pool,std::shared_ptr<SqlConnection> conn);
-    ~SqlConnetcionGuard();
+    SqlConnectionGuard(SqlConnectionPool& pool,std::shared_ptr<SqlConnection> conn);
+    ~SqlConnectionGuard();
 
-    SqlConnection* operator->();
-    SqlConnection& operator*();
-    explicit operator bool()const;
+    SqlConnection* operator->();//支持guard->execute()直接调用连接方法
+    SqlConnection& operator*();//支持*guard获取连接对象
+    explicit operator bool()const;//必须显示转换，允许if(guard)判断连接是否有效
 private:
     SqlConnectionPool* pool_{nullptr};
     std::shared_ptr<SqlConnection> conn_;

@@ -1,5 +1,5 @@
 #include "storage/sql/SqlConnectionPool.h"
-#include "storage/sql/SqlConnectionGuard.h"
+
 
 storage::SqlConnectionPool::SqlConnectionPool(const DatabaseConfig& config)
 :config_(config){
@@ -15,8 +15,55 @@ bool storage::SqlConnectionPool::start(){
             return false;
         }
         idle_.push(conn);
+        connections_.push_back(conn);
     }
     started_=true;
+
     return true;
 }
-std::
+void storage::SqlConnectionPool::stop(){
+    std::lock_guard lk(mutex_);
+    for(auto& conn:connections_){
+        conn->close();
+    }
+    while(!idle_.empty()){
+        idle_.pop();
+    }
+    connections_.clear();
+}
+
+storage::SqlConnectionGuard storage::SqlConnectionPool::acquire(){
+    std::unique_lock lk(mutex_);
+    cv_.wait(lk,[this](){return !idle_.empty()||!started_;});
+    if(!started_){
+        return SqlConnectionGuard(*this,nullptr);
+    }
+    auto conn=idle_.front();
+    idle_.pop();
+    SqlConnectionGuard guard(*this,conn);
+    return guard;
+}
+size_t storage::SqlConnectionPool::size()const{
+    return connections_.size();
+}
+bool storage::SqlConnectionPool::healthy(){
+    for(auto& conn:connections_){
+        if(!conn->ping()){
+            return false;
+        }
+    }
+    return true;
+}
+void storage::SqlConnectionPool::release(std::shared_ptr<SqlConnection> conn){
+    if(conn){
+        return;
+    }
+    {
+        std::lock_guard lk(mutex_);
+        if(!started_){
+            return;
+        }
+        idle_.push(std::move(conn));
+    }
+    cv_.notify_one();
+}
