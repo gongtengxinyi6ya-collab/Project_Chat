@@ -19,11 +19,11 @@ storage::SqlConnection& storage::SqlConnectionGuard::operator*(){
 storage::SqlConnectionGuard::operator bool()const{
     return conn_!=nullptr;
 }
-storage::SqlConnectionGuard::SqlConnectionGuard(SqlConnectionGuard&& other)
+storage::SqlConnectionGuard::SqlConnectionGuard(SqlConnectionGuard&& other)noexcept
 :pool_(other.pool_),conn_(std::move(other.conn_)){
     other.pool_=nullptr;
 }
-storage::SqlConnectionGuard& storage::SqlConnectionGuard::operator=(SqlConnectionGuard&& other){
+storage::SqlConnectionGuard& storage::SqlConnectionGuard::operator=(SqlConnectionGuard&& other)noexcept{
     if(this!=&other){
         if(pool_&&conn_){//先释放当前资源防止泄露
             pool_->release(std::move(conn_));
