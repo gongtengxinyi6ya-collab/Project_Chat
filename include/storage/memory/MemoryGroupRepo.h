@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <vector>
-#include "GroupRepo.h"
+#include "storage/GroupRepo.h"
 
 namespace storage{
 class MemoryGroupRepo:public storage::GroupRepo{

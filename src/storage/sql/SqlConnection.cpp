@@ -15,14 +15,17 @@ void storage::SqlConnection::close(){
 bool storage::SqlConnection::ping(){
     return connected_;
 }
-SqlResult storage::SqlConnection::execute(const std::string& sql){
-    return SqlResult{true};
-}
-SqlResult storage::SqlConnection::query(const std::string& sql){
+storage::SqlResult storage::SqlConnection::execute(const std::string& sql){
     if(!connected_){
         return SqlResult{.success=false,.error="not connected"};
     }
-    return SqlResult{true};
+    return SqlResult{.success=true};
+}
+storage::SqlResult storage::SqlConnection::query(const std::string& sql){
+    if(!connected_){
+        return SqlResult{.success=false,.error="not connected"};
+    }
+    return SqlResult{.success=true};
 }
 bool storage::SqlConnection::connected()const{
     return connected_;

@@ -30,6 +30,8 @@ void storage::SqlConnectionPool::stop(){
         idle_.pop();
     }
     connections_.clear();
+    started_=false;
+    cv_.notify_all();
 }
 
 storage::SqlConnectionGuard storage::SqlConnectionPool::acquire(){
@@ -44,9 +46,11 @@ storage::SqlConnectionGuard storage::SqlConnectionPool::acquire(){
     return guard;
 }
 size_t storage::SqlConnectionPool::size()const{
+    std::lock_guard lk(mutex_);
     return connections_.size();
 }
 bool storage::SqlConnectionPool::healthy(){
+    std::lock_guard lk(mutex_);
     for(auto& conn:connections_){
         if(!conn->ping()){
             return false;
@@ -55,7 +59,7 @@ bool storage::SqlConnectionPool::healthy(){
     return true;
 }
 void storage::SqlConnectionPool::release(std::shared_ptr<SqlConnection> conn){
-    if(conn){
+    if(!conn){
         return;
     }
     {
