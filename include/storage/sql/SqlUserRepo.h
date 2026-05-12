@@ -1,7 +1,8 @@
+#pragma once
 #include <memory>
 #include <string>
 #include "SqlConnectionPool.h"
-#include "UserRepo.h"
+#include "storage/UserRepo.h"
 
 /*用SQL实现UserRepo
 辅助用户创建和用户存在性查询*/

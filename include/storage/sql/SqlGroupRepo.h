@@ -1,6 +1,7 @@
+#pragma once
 #include <memory>
 #include <string>
-#include "GroupRepo.h"
+#include "storage/GroupRepo.h"
 #include "SqlConnectionPool.h"
 
 /*用SQL实现GroupRepo

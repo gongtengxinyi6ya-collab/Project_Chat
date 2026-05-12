@@ -1,6 +1,7 @@
+#pragma once
 #include <string>
 #include <memory>
-#include "MessageRepo.h"
+#include "storage/MessageRepo.h"
 #include "SqlConnectionPool.h"
 
 /*用SQL实现Message
@@ -14,5 +15,5 @@ public:
 
 private:
     std::shared_ptr<SqlConnectionPool> pool_;
-}
+};
 }
