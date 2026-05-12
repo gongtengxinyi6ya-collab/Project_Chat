@@ -48,6 +48,11 @@ add_executable(load_test tools/load_test.cpp)
 
 target_link_libraries(load_test PRIVATE chat_lib)
 
+#mysql
+
+find_package(mysql-concpp REQUIRED)
+target_link_libraries(Project_Chat PRIVATE mysql::concpp-jdbc)
+
 # =========================
 # ASAN
 # =========================
