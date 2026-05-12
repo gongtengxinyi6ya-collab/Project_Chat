@@ -6,6 +6,16 @@ storage::SqlConnection::~SqlConnection(){
     connected_=false;
 }
 bool storage::SqlConnection::connect(){
+    try{
+        driver_=sql::mysql::get_driver_instance();
+        std::string url="tcp://"+config_.host()+":"+std::to_string(config_.port());
+        conn_.reset(driver_->connect(url,config_.user(),config_.password()));//设置连接
+        conn_->setSchema(config_.database());
+    }catch(const sql::SQLException& e){
+        std::cerr << "Error connecting to database: " << e.what() << std::endl;
+        connected_=false;
+        return false;
+    }
     connected_=true;
     return true;
 }
@@ -13,19 +23,47 @@ void storage::SqlConnection::close(){
     connected_=false;
 }
 bool storage::SqlConnection::ping(){
+    if(!connected_||!conn_){
+        return false;
+    }
     return connected_;
 }
 storage::SqlResult storage::SqlConnection::execute(const std::string& sql){
-    if(!connected_){
+    if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }
-    return SqlResult{.success=true};
+    try{
+        auto stmt=std::unique_ptr<sql::Statement>(conn_->createStatement());
+        uint64_t affected=stmt->executeUpdate(sql);
+        return SqlResult{.success=true,.affectedRows=affected};
+    }catch(const sql::SQLException& e){
+        return SqlResult{.success=false,.error=e.what()};
+    }
 }
 storage::SqlResult storage::SqlConnection::query(const std::string& sql){
     if(!connected_){
         return SqlResult{.success=false,.error="not connected"};
     }
-    return SqlResult{.success=true};
+    try{
+        auto stmt=std::unique_ptr<sql::Statement>(conn_->createStatement());
+        auto ResultSet=stmt->executeQuery(sql);
+        SqlResult result;
+        result.success=true;
+        while(ResultSet->next()){
+            SqlRow row;
+            auto meta=ResultSet->getMetaData();
+            for(size_t i=1;i<=meta->getColumnCount();++i){
+                std::string columnName=meta->getColumnLabel(i);
+                std::string value=ResultSet->getString(i);
+                row[columnName]=value;
+            }
+            result.rows.push_back(std::move(row));
+        }
+        return result;
+    }catch(const sql::SQLException& e){
+        return SqlResult{.success=false,.error=e.what()};
+    }
+    return SqlResult{.success=false,.error="unknown error"};
 }
 bool storage::SqlConnection::connected()const{
     return connected_;

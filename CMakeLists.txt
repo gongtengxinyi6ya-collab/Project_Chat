@@ -20,6 +20,7 @@ add_library(chat_lib ${SRC_FILES})
 target_include_directories(chat_lib
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
+        /usr/include/mysql-cppconn/jdbc
 )
 find_package(mysql-concpp CONFIG REQUIRED)
 target_link_libraries(chat_lib PUBLIC mysql::concpp-jdbc)

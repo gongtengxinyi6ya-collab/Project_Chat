@@ -1,6 +1,10 @@
 #pragma once
 #include <string>
 #include <mysql_driver.h>
+#include <cppconn/connection.h>
+#include <cppconn/statement.h>
+#include <cppconn/exception.h>
+
 #include <memory>
 #include "SqlResult.h"
 #include "config/DatabaseConfig.h"
@@ -22,5 +26,7 @@ public:
 private:
     DatabaseConfig config_;
     bool connected_{false};
+    std::unique_ptr<sql::Connection> conn_;//MySql连接对象
+    sql::Driver* driver_{nullptr};//驱动入口
 };
 }
