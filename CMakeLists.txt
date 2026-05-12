@@ -21,7 +21,8 @@ target_include_directories(chat_lib
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
 )
-
+find_package(mysql-concpp CONFIG REQUIRED)
+target_link_libraries(chat_lib PUBLIC mysql::concpp-jdbc)
 if(MSVC)
     target_compile_options(chat_lib PRIVATE /W4)
 else()
@@ -47,12 +48,6 @@ target_link_libraries(client PRIVATE chat_lib)
 add_executable(load_test tools/load_test.cpp)
 
 target_link_libraries(load_test PRIVATE chat_lib)
-
-#mysql
-
-find_package(mysql-concpp REQUIRED)
-target_link_libraries(Project_Chat PRIVATE mysql::concpp-jdbc)
-
 # =========================
 # ASAN
 # =========================

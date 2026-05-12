@@ -1,5 +1,7 @@
 #pragma once
 #include <string>
+#include <mysql_driver.h>
+#include <memory>
 #include "SqlResult.h"
 #include "config/DatabaseConfig.h"
 /*
