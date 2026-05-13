@@ -7,7 +7,7 @@ storage::SqlConnection::~SqlConnection(){
 }
 bool storage::SqlConnection::connect(){
     try{
-        driver_=sql::mysql::get_driver_instance();
+        driver_=sql::mysql::get_mysql_driver_instance();
         std::string url="tcp://"+config_.host()+":"+std::to_string(config_.port());
         conn_.reset(driver_->connect(url,config_.user(),config_.password()));//设置连接
         conn_->setSchema(config_.database());
@@ -21,11 +21,13 @@ bool storage::SqlConnection::connect(){
 }
 void storage::SqlConnection::close(){
     connected_=false;
+    conn_->close();
 }
 bool storage::SqlConnection::ping(){
     if(!connected_||!conn_){
         return false;
     }
+    auto result=query("SELECT 1");
     return connected_;
 }
 storage::SqlResult storage::SqlConnection::execute(const std::string& sql){
@@ -46,7 +48,7 @@ storage::SqlResult storage::SqlConnection::query(const std::string& sql){
     }
     try{
         auto stmt=std::unique_ptr<sql::Statement>(conn_->createStatement());
-        auto ResultSet=stmt->executeQuery(sql);
+        auto ResultSet=std::unique_ptr<sql::ResultSet>(stmt->executeQuery(sql));
         SqlResult result;
         result.success=true;
         while(ResultSet->next()){

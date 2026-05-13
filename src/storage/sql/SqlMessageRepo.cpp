@@ -19,7 +19,7 @@ storage::SaveMessageResult storage::SqlMessageRepo::saveGroupMessage(const std::
         return SaveMessageResult{.status=RepoStatus::SqlError,.message="Failed to acquire a SqlConnection"};
     }
     if(conn->connected()){
-        auto result=conn->execute("INSERT INTO group_messages(group_id,`from`,content,server_ts) VALUES('"+groupId+"','"+from+"','"+content+"',"+std::to_string(serverTsmS)+")");
+        auto result=conn->execute("INSERT INTO messages(msg_id, group_id, sender, content, server_ts_ms) VALUES(''',"+groupId+"','"+from+"','"+content+"',"+std::to_string(serverTsmS)+")");
          if(result.ok()){
             return SaveMessageResult{.status=RepoStatus::Ok,.messageId=result.lastInsertId};
         }
