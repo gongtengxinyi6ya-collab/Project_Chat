@@ -28,7 +28,10 @@ bool storage::SqlConnection::ping(){
         return false;
     }
     auto result=query("SELECT 1");
-    return connected_;
+    if(result.ok()){
+        return true;
+    }
+    return false;
 }
 storage::SqlResult storage::SqlConnection::execute(const std::string& sql){
     if(!connected_||!conn_){
@@ -59,6 +62,7 @@ storage::SqlResult storage::SqlConnection::query(const std::string& sql){
                 std::string value=ResultSet->getString(i);
                 row[columnName]=value;
             }
+           
             result.rows.push_back(std::move(row));
         }
         return result;
