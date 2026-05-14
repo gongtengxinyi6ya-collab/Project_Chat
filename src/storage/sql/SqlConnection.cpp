@@ -69,8 +69,8 @@ storage::SqlResult storage::SqlConnection::executePrePared(const std::string& sq
     }
     try{
         auto stmt=std::unique_ptr<sql::PreparedStatement>(conn_->prepareStatement(sql));
-        for(auto param:params){
-            param.bind(stmt.get(),1);
+        for(size_t i=0;i<params.size();i++){
+            params[i].bind(stmt.get(),static_cast<int>(i+1));
         }
         uint64_t affectedRows=stmt->executeUpdate();
         return SqlResult{.success=true,.affectedRows=affectedRows};
@@ -85,8 +85,8 @@ storage::SqlResult storage::SqlConnection::queryPrepared(const std::string& sql,
     }
     try{
         auto stmt=std::unique_ptr<sql::PreparedStatement>(conn_->prepareStatement(sql));
-        for(auto param:params){
-            param.bind(stmt.get(),1);
+        for(size_t i=0;i<params.size();i++){
+            params[i].bind(stmt.get(),static_cast<int>(i+1));
         }
         auto ResultSet=std::unique_ptr<sql::ResultSet>(stmt->executeQuery());
         return readResultSet(ResultSet.get());

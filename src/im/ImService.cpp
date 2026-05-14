@@ -170,8 +170,16 @@ im::Response im::Imservice::handleEcho(const im::Request& req,[[maybe_unused]]Co
 uint64_t im::Imservice::nowMs()const{
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
-void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> clientReqId){
-    resp.data["msg_id"]=nextMsgId_++;
+uint64_t im::Imservice::nextMessageId(){
+    return nextMsgId_++;
+}
+void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> msgId,std::optional<uint64_t> clientReqId){
+    if(msgId){
+        resp.data["msg_id"]=msgId;
+    }
+    else{
+        resp.data["msg_id"]=nextMsgId_++;
+    }
     resp.data["server_ts_ms"]=nowMs();
     if(clientReqId.has_value()){
         resp.data["client_req_id"]=*clientReqId;
@@ -234,7 +242,11 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
 im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,[[maybe_unused]]const std::string& fromUser,ConnKey senderkey,im::Response& push){
     BroadcastResult result;
     push.req_id=0;//群推送消息不需要req_id，由服务器生成唯一msg_id
-    decorate(push);//群推送消息也需要decorate添加msg_id和server_ts_ms等字段
+    std::optional<uint64_t> msgId=std::nullopt;
+    if(push.data.contains("msg_id")){
+        msgId=push.data["msg_id"].get<uint64_t>();
+    }
+    decorate(push,msgId);//群推送消息也需要decorate添加msg_id和server_ts_ms等字段
     auto payload=encodeResponse(push);
     const auto& users=groupManager_.members(groupId);//根据群id取成员用户名列表
     for(const auto& user:users){
@@ -368,14 +380,14 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
         return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
     uint64_t serverTsMs=nowMs();
-    uint64_t msgId=nextMsgId_+1;
+    uint64_t msgId=nextMessageId();
     if(hasRepositories()){
         auto result=repos_.messageRepo->saveGroupMessage(msgId,groupId.value(),user.value(),content,serverTsMs);
         if(!result.ok()){
             return makeRepoError(req,result.status,"failed to save group message");
         }
     }
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId.value()},{"content",content}}};
+    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId.value()},{"content",content},{"msg_id",msgId}}};
     BroadcastResult result=broadcastToGroup(groupId.value(),user.value(),key,pushMsg);
     return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 

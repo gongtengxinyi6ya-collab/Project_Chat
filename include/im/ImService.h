@@ -77,7 +77,8 @@ private:
     im::Response handleDm(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session);//把私聊消息投递到目标连接，并回复发送方投递结果
     im::Response handleListUsers(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session);//在线用户名列表
     uint64_t nowMs() const;//获取当前时间戳
-    void decorate(im::Response& resp,std::optional<uint64_t> clentReqId=std::nullopt);//给任何响应/错误/推送加trace字段
+    uint64_t nextMessageId();
+    void decorate(im::Response& resp,std::optional<uint64_t> msgId=std::nullopt,std::optional<uint64_t> clientReqId=std::nullopt);//给任何响应/错误/推送加trace字段
     std::optional<std::string> usernameByKey(ConnKey key) const;//把connKey映射为username
     SendResult sendPush(ConnKey,const std::string &);//统一对push做decorate,encode,sendToConnKey
     std::optional<std::string> resolveTargetGroupId(const Request&,const Session&);//群id获取辅助方法

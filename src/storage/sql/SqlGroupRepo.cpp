@@ -14,7 +14,7 @@ storage::RepoResult storage::SqlGroupRepo::createGroup(const std::string& groupI
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->execute("INSERT INTO groups(group_id,group_name,owner) VALUES(?,?,?)");
+        auto result=conn->executePrePared("INSERT INTO groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,owner});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -34,7 +34,7 @@ bool storage::SqlGroupRepo::groupExists(const std::string& groupId){
         return false;
     }
     if(conn->connected()){
-        auto result=conn->query("SELECT id FROM groups WHERE group_id=? LIMIT 1");
+        auto result=conn->queryPrepared("SELECT id FROM groups WHERE group_id=? LIMIT 1",{groupId});
         if(result.ok()&&!result.rows.empty()){
             return true;
         }
@@ -57,7 +57,7 @@ storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,c
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->execute("INSERT INTO group_members(group_id,username) VALUES(?,?)");
+        auto result=conn->executePrePared("INSERT INTO group_members(group_id,username) VALUES(?,?)",{groupId,username});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -83,7 +83,7 @@ storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& group
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->execute("DELETE FROM group_members WHERE group_id=? AND username=?");
+        auto result=conn->executePrePared("DELETE FROM group_members WHERE group_id=? AND username=?",{groupId,username});
         if(result.ok()){
             if(result.affectedRows>0){
                 return RepoResult{.status=RepoStatus::Ok};
@@ -104,7 +104,7 @@ std::vector<std::string> storage::SqlGroupRepo::listMembers(const std::string& g
         return {};
     }
     if(conn->connected()){
-        auto result=conn->query("SELECT username FROM group_members WHERE group_id=?");
+        auto result=conn->queryPrepared("SELECT username FROM group_members WHERE group_id=?",{groupId});
         if(result.ok()){
             std::vector<std::string> members;
             for(const auto& row:result.rows){
