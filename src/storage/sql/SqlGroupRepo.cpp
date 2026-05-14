@@ -35,7 +35,7 @@ bool storage::SqlGroupRepo::groupExists(const std::string& groupId){
     }
     if(conn->connected()){
         auto result=conn->query("SELECT id FROM groups WHERE");
-        if(result.rows.size()>=0){
+        if(!result.rows.empty()){
             return true;
         }
     }

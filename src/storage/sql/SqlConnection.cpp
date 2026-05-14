@@ -21,7 +21,9 @@ bool storage::SqlConnection::connect(){
 }
 void storage::SqlConnection::close(){
     connected_=false;
-    conn_->close();
+    if(conn_){
+        conn_->close();
+    }
 }
 bool storage::SqlConnection::ping(){
     if(!connected_||!conn_){

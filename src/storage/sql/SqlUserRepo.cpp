@@ -30,7 +30,7 @@ bool storage::SqlUserRepo::userExists(const std::string& username){
         return false;
     }
     auto result=conn->query("SELECT id FROM users WHERE username='"+username+"'");
-    if(!result.rows.empty()){
+    if(result.rows.empty()){
         return false;
     }
     return true;
