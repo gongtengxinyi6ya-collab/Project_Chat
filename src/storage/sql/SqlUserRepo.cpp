@@ -12,7 +12,8 @@ storage::RepoResult storage::SqlUserRepo::createUser(const std::string& username
     if(!conn){//获取连接失败
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a SqlConnection"};
     }
-    auto result=conn->execute("INSERT INTO users(username) VALUES(username)");
+    auto result=conn->executePrePared("INSERT INTO users(username) VALUES(?)",{username});
+
     if(result.ok()){
         return RepoResult{.status=RepoStatus::Ok};
     }
@@ -29,8 +30,8 @@ bool storage::SqlUserRepo::userExists(const std::string& username){
     if(!conn){
         return false;
     }
-    auto result=conn->query("SELECT id FROM users WHERE username='"+username+"'");
-    if(result.rows.empty()){
+    auto result=conn->queryPrepared("SELECT id FROM users WHERE username=? LIMIT 1",{username});
+    if(!result.ok()||result.rows.empty()){
         return false;
     }
     return true;

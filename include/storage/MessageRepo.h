@@ -16,7 +16,7 @@ public:
 class MessageRepo{
 public:
     virtual ~MessageRepo()=default;
-    virtual SaveMessageResult saveGroupMessage(const std::string& groupId,const std::string&from,const std::string&content,uint64_t serverTsMs)=0;//保存群消息
+    virtual SaveMessageResult saveGroupMessage(uint64_t msgId,const std::string& groupId,const std::string&from,const std::string&content,uint64_t serverTsMs)=0;//保存群消息
     
 };
 }

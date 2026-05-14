@@ -368,8 +368,9 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
         return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
     uint64_t serverTsMs=nowMs();
+    uint64_t msgId=nextMsgId_+1;
     if(hasRepositories()){
-        auto result=repos_.messageRepo->saveGroupMessage(groupId.value(),user.value(),content,serverTsMs);
+        auto result=repos_.messageRepo->saveGroupMessage(msgId,groupId.value(),user.value(),content,serverTsMs);
         if(!result.ok()){
             return makeRepoError(req,result.status,"failed to save group message");
         }

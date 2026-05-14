@@ -11,7 +11,7 @@ namespace storage{
 class SqlMessageRepo:public MessageRepo{
 public:
     explicit SqlMessageRepo(std::shared_ptr<SqlConnectionPool> pool);
-    SaveMessageResult saveGroupMessage(const std::string& groupId,const std::string& from,const std::string& content,uint64_t serverTsMs) override;
+    SaveMessageResult saveGroupMessage(uint64_t msgId,const std::string& groupId,const std::string& from,const std::string& content,uint64_t serverTsMs) override;
 
 private:
     std::shared_ptr<SqlConnectionPool> pool_;
