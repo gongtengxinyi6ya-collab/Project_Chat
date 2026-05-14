@@ -19,7 +19,6 @@ struct MessageRecord{
     storage::SaveMessageResult saveGroupMessage(uint64_t,const std::string& groupId,const std::string&from,const std::string&content,uint64_t serverTsMs)override;//保存群消息
 private:
     std::unordered_map<std::string,std::vector<MessageRecord>> groupMessages_;//groupId映射消息列表
-    std::atomic<uint64_t> nextMessageId_{1};//生成messageId的递增序列,用于生成唯一messageId
     mutable std::mutex mutex_;//保护groupMessages_的读写
 };
 }

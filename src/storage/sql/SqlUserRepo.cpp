@@ -12,7 +12,7 @@ storage::RepoResult storage::SqlUserRepo::createUser(const std::string& username
     if(!conn){//获取连接失败
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a SqlConnection"};
     }
-    auto result=conn->executePrePared("INSERT INTO users(username) VALUES(?)",{username});
+    auto result=conn->executePrepared("INSERT INTO users(username) VALUES(?)",{username});
 
     if(result.ok()){
         return RepoResult{.status=RepoStatus::Ok};

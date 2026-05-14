@@ -14,7 +14,7 @@ storage::RepoResult storage::SqlGroupRepo::createGroup(const std::string& groupI
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrePared("INSERT INTO groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,owner});
+        auto result=conn->executePrepared("INSERT INTO groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,owner});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -57,7 +57,7 @@ storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,c
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrePared("INSERT INTO group_members(group_id,username) VALUES(?,?)",{groupId,username});
+        auto result=conn->executePrepared("INSERT INTO group_members(group_id,username) VALUES(?,?)",{groupId,username});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -83,7 +83,7 @@ storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& group
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrePared("DELETE FROM group_members WHERE group_id=? AND username=?",{groupId,username});
+        auto result=conn->executePrepared("DELETE FROM group_members WHERE group_id=? AND username=?",{groupId,username});
         if(result.ok()){
             if(result.affectedRows>0){
                 return RepoResult{.status=RepoStatus::Ok};

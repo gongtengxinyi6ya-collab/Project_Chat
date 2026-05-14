@@ -3,7 +3,7 @@ storage::SqlConnection::SqlConnection(const DatabaseConfig& config):config_(conf
 
 }
 storage::SqlConnection::~SqlConnection(){
-    connected_=false;
+    close();
 }
 bool storage::SqlConnection::connect(){
     try{
@@ -48,7 +48,7 @@ storage::SqlResult storage::SqlConnection::execute(const std::string& sql){
     }
 }
 storage::SqlResult storage::SqlConnection::query(const std::string& sql){
-    if(!connected_){
+    if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }
     try{
@@ -63,7 +63,7 @@ storage::SqlResult storage::SqlConnection::query(const std::string& sql){
 bool storage::SqlConnection::connected()const{
     return connected_;
 }
-storage::SqlResult storage::SqlConnection::executePrePared(const std::string& sql,const std::vector<SqlParam>& params){
+storage::SqlResult storage::SqlConnection::executePrepared(const std::string& sql,const std::vector<SqlParam>& params){
     if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }

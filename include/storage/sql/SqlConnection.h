@@ -22,7 +22,7 @@ public:
     SqlResult query(const std::string& sql);//执行查询操作
     bool connected()const;//判断连接状态
 
-    SqlResult executePrePared(const std::string& sql,const std::vector<SqlParam>& params);
+    SqlResult executePrepared(const std::string& sql,const std::vector<SqlParam>& params);
     SqlResult queryPrepared(const std::string& sql,const std::vector<SqlParam>& params);
 private:
     DatabaseConfig config_;

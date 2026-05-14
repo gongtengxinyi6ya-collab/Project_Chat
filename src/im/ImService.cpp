@@ -139,7 +139,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     }
     //构造推送消息
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"from",session.username_},{"to",req.to},{"content",content}}};
-    decorate(pushMsg,req.req_id);//推送消息也携带client_req_id，方便客户端关联请求和推送
+    decorate(pushMsg,std::nullopt,req.req_id);//推送消息也携带client_req_id，方便客户端关联请求和推送
     std::string payload=encodeResponse(pushMsg);
     for(const auto& targetKey:keys){
         SendResult res=sendPush(targetKey,payload);
@@ -528,7 +528,7 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
     }
 }
 im::Imservice::SendResult im::Imservice::sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet){
-    decorate(resp,req.req_id);
+    decorate(resp,std::nullopt,req.req_id);
     auto payload=im::encodeResponse(resp);
     SendResult result;
     if(sendToConnKey_){

@@ -19,9 +19,9 @@ storage::SaveMessageResult storage::SqlMessageRepo::saveGroupMessage(uint64_t ms
         return SaveMessageResult{.status=RepoStatus::SqlError,.message="Failed to acquire a SqlConnection"};
     }
     if(conn->connected()){
-        auto result=conn->executePrePared("INSERT INTO messages(msg_id, group_id, sender, content, server_ts_ms) VALUES(?,?,?,?,?)",{msgId,groupId,from,content,serverTsmS});
+        auto result=conn->executePrepared("INSERT INTO messages(msg_id, group_id, sender, content, server_ts_ms) VALUES(?,?,?,?,?)",{msgId,groupId,from,content,serverTsmS});
          if(result.ok()){
-            return SaveMessageResult{.status=RepoStatus::Ok,.messageId=result.lastInsertId};
+            return SaveMessageResult{.status=RepoStatus::Ok,.messageId=msgId};
         }
         return SaveMessageResult{.status=RepoStatus::SqlError,.message=result.error};
     }
