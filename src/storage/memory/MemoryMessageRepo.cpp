@@ -1,11 +1,11 @@
 #include "storage/memory/MemoryMessageRepo.h"
 
-storage::SaveMessageResult storage::MemoryMessageRepo::saveGroupMessage(const std::string& groupId,const std::string& from,const std::string& content,uint64_t serverTsMs){
+storage::SaveMessageResult storage::MemoryMessageRepo::saveGroupMessage(uint64_t msgId,const std::string& groupId,const std::string& from,const std::string& content,uint64_t serverTsMs){
     if(groupId.empty()||from.empty()||content.empty()){
         return {RepoStatus::InvalidArgument,0,""};
     }
     MessageRecord record;
-    record.messageId=nextMessageId_++;
+    record.messageId=msgId;
     record.groupId=groupId;
     record.from=from;
     record.content=content;

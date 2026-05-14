@@ -304,7 +304,7 @@ uint64_t TcpConnection::droppedMessage()const{
 uint32_t TcpConnection::overloadDropCount()const{
     return overloadDropCount_.load(std::memory_order_relaxed);
 }
-void TcpConnection::recordDrop(size_t payloadBytes){
+void TcpConnection::recordDrop([[maybe_unused]]size_t payloadBytes){
     droppedMessage_.fetch_add(1,std::memory_order_relaxed);
     size_t drops=overloadDropCount_.fetch_add(1,std::memory_order_relaxed)+1;
     bool wasOverload=overloaded_.exchange(true,std::memory_order_relaxed);
