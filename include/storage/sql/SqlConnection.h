@@ -3,6 +3,7 @@
 #include <mysql/jdbc.h>
 #include <memory>
 #include <iostream>
+#include <vector>
 #include "SqlResult.h"
 #include "config/DatabaseConfig.h"
 #include "SqlParam.h"
