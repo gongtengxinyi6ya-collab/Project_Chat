@@ -25,11 +25,14 @@ add_library(chat_lib ${SRC_FILES})
 target_include_directories(chat_lib
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
-        /usr/include/mysql-cppconn/jdbc
 )
 if(ENABLE_SQL)
     find_package(mysql-concpp CONFIG REQUIRED)
     target_link_libraries(chat_lib PUBLIC mysql::concpp-jdbc)
+    target_include_directories(chat_lib
+    PUBLIC
+        /usr/include/mysql-cppconn/jdbc
+)
     target_compile_definitions(chat_lib PUBLIC PROJECT_CHAT_ENABLE_SQL)
 endif()
 if(MSVC)

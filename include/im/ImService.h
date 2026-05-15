@@ -63,6 +63,7 @@ public:
     //持久化存储接口
     void setRepositories(storage::RepositoryBundle repos);//移动保存repos_
     bool hasRepositories()const;//
+    void loadFromRepositories();//服务启动时从Repo恢复群和成员关系
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
     SendToConnKeyFn sendToConnKey_;

@@ -41,9 +41,9 @@ storage::RepositoryBundle storage::RepositoryFactory::create(const AppConfig& co
     if(config.storage().type()=="sql"){
         try{
             return createSql(config.database());
-        }catch(...){
+        }catch(const std::exception& e){
             if(config.storage().fallbackToMemory()){
-                LOG_WARN("Failed to create sql,create memory instead");
+                LOG_WARN("Failed to create sql,create memory instead"+std::string(e.what()));
                 return createMemory();
             }
             else
