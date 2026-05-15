@@ -2,8 +2,8 @@
 
 StorageConfig StorageConfig::fromJson(const nlohmann::json& j){
     StorageConfig config;
-    config.type_=ConfigParseHelper::getOrDefault(j,"key",config.type());
-    config.fallbackToMemory_=ConfigParseHelper::getOrDefault(j,"fallbackToMemory",config.fallbackToMemory());
+    config.type_=ConfigParseHelper::getOrDefault(j,"type",config.type());
+    config.fallbackToMemory_=ConfigParseHelper::getOrDefault(j,"fallback_to_memory",config.fallbackToMemory());
     return config;
 }
 
@@ -14,12 +14,12 @@ void StorageConfig::loadFromEnv(){
     }
     auto fallbackEnv=ConfigParseHelper::getEnv("CHAT_STORAGE_FALLBACK_TO_MEMORY");
     if(fallbackEnv){
-        fallbackToMemory_=ConfigParseHelper::parseEnvBool(fallbackEnv.value(),"CHAT_STORAGE_TO_MEMORY");
+        fallbackToMemory_=ConfigParseHelper::parseEnvBool(fallbackEnv.value(),"CHAT_STORAGE_FALLBACK_TO_MEMORY");
     }
 }
 void StorageConfig::validateOrThrow()const{
-    if(type_!="memory"||type_!="sql"){
-        std::runtime_error("Invaild type: "+type_);
+    if(type_!="memory"&&type_!="sql"){
+        throw std::runtime_error("Invaild type: "+type_);
     }
 
 }

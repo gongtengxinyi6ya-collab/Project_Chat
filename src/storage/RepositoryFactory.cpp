@@ -16,7 +16,7 @@ storage::RepositoryBundle storage::RepositoryFactory::createMemory(){
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& dbConfig){
     auto pool=std::make_shared<SqlConnectionPool>(dbConfig);
     if(!pool->start()){
-        std::runtime_error("Failed to start SQL connection pool");
+        throw std::runtime_error("Failed to start SQL connection pool");
     }
     RepositoryBundle bundle;
     bundle.userRepo=std::make_shared<SqlUserRepo>(pool);
