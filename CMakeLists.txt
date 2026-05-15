@@ -9,11 +9,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
-
+option(ENABLE_SQL "Enable MySQL storage backend" ON)
 # =========================
 # 库（核心代码）
 # =========================
-file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/storage/sql/*.cpp)
+file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp)
+
+if(ENABLE_SQL)
+    file(GLOB SQL_SRC_FILES src/storage/sql/*.cpp)
+    list(APPEND SRC_FILES ${SQL_SRC_FILES})
+endif()
 
 add_library(chat_lib ${SRC_FILES})
 
@@ -22,8 +27,11 @@ target_include_directories(chat_lib
         ${PROJECT_SOURCE_DIR}/include
         /usr/include/mysql-cppconn/jdbc
 )
-find_package(mysql-concpp CONFIG REQUIRED)
-target_link_libraries(chat_lib PUBLIC mysql::concpp-jdbc)
+if(ENABLE_SQL)
+    find_package(mysql-concpp CONFIG REQUIRED)
+    target_link_libraries(chat_lib PUBLIC mysql::concpp-jdbc)
+    target_compile_definitions(chat_lib PUBLIC PROJECT_CHAT_ENABLE_SQL)
+endif()
 if(MSVC)
     target_compile_options(chat_lib PRIVATE /W4)
 else()
