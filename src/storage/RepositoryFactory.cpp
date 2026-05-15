@@ -25,5 +25,19 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
     return bundle;
 }
 storage::RepositoryBundle storage::RepositoryFactory::create(const AppConfig& config){
-    if(config.
+    if(config.storage().type()=="memory"){
+        return createMemory();
+    }
+    if(config.storage().type()=="sql"){
+        RepositoryBundle bundle=createSql(config.database());
+        if(bundle.valid()){
+            return bundle;
+        }
+    }
+    if(config.storage().fallbackToMemory()){
+        LOG_WARN("Failed to createsql ,createMemory instead");
+        return createMemory();
+    }
+    
+    throw std::runtime_error("Failed to create RepositoryBundle");
 }
