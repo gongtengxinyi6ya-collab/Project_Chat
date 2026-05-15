@@ -40,6 +40,12 @@
     "database": "project_chat",
     "pool_size": 4,
     "connect_timeout_ms": 3000
-  }
+  },
+  
+  "storage": {
+  "type": "memory",
+  "fallback_to_memory": true
+}
+
 
 }

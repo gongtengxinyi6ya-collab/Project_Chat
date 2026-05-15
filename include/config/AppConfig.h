@@ -9,6 +9,7 @@
 #include "NetConfig.h"
 #include "LogConfig.h"
 #include "DatabaseConfig.h"
+#include "StorageConfig.h"
 /*
 总配置聚合：统一承载服务端/网络/日志/IM配置，提供加载，校验，查询
 */
@@ -25,10 +26,12 @@ public:
     const LogConfig& log()const{return log_;}//只读访问log_
     const ImConfig& im()const{return im_;}//只读访问im_
     const DatabaseConfig& database()const{return databaseConfig_;}
+    const StorageConfig& storage()const{return storageConfig_;}//获取存储配置
 private:
     ServerConfig server_;
     NetConfig net_;
     LogConfig log_;
     ImConfig im_;
     DatabaseConfig databaseConfig_;
+    StorageConfig storageConfig_;//存储后端配置
 };
