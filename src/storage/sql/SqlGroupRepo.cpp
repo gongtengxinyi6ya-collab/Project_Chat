@@ -129,12 +129,12 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups
             std::vector<GroupSnapshot> groupSnapshots;
             for(const auto& row:result.rows){
                 GroupSnapshot groupSnapshot;
-                auto it=row.find("group_id");
-                groupSnapshot.groupId=it!=row.end()?it->second:"";
-                auto it=row.find("group_name");
-                groupSnapshot.groupId=it!=row.end()?it->second:"";
-                auto it=row.find("owner");
-                groupSnapshot.groupId=it!=row.end()?it->second:"";
+                auto idPair=row.find("group_id");
+                groupSnapshot.groupId=idPair!=row.end()?idPair->second:"";
+                auto namePair=row.find("group_name");
+                groupSnapshot.groupName=namePair!=row.end()?namePair->second:"";
+                auto ownerPair=row.find("owner");
+                groupSnapshot.owner=ownerPair!=row.end()?ownerPair->second:"";
                 groupSnapshots.emplace_back(std::move(groupSnapshot));
             }
             return groupSnapshots;

@@ -121,6 +121,9 @@ void im::Imservice::loadFromRepositories(){
     if(!hasRepositories()||!repos_.groupRepo){
         return;
     }
+    size_t restoreGroups;//统计恢复群数量
+    size_t restoreMembers;//统计恢复成员数量
+    size_t failedGroups;//统计群成员恢复失败数量
     std::vector<storage::GroupRepo::GroupSnapshot> groups=repos_.groupRepo->listGroups();
     for(const auto& group:groups){
         auto members=repos_.groupRepo->listMembers(group.groupId);

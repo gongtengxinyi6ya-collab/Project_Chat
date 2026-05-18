@@ -13,7 +13,8 @@ storage::RepoResult storage::MemoryGroupRepo::createGroup(const std::string& gro
     group.members.insert(owner);
     {   
         std::lock_guard lk(mutex_);
-        if(groupExists(groupId)){
+        auto it=groups_.find(groupId);
+        if(it==groups_.end()){
         result.status=RepoStatus::AlreadyExists;
         return result;
     }
@@ -24,7 +25,8 @@ storage::RepoResult storage::MemoryGroupRepo::createGroup(const std::string& gro
 storage::RepoResult storage::MemoryGroupRepo::addMember(const std::string&groupId,const std::string& username){
     RepoResult result;
     std::lock_guard lk(mutex_);
-    if(!groupExists(groupId)){
+    auto it=groups_.find(groupId);
+    if(it==groups_.end()){
         result.status=RepoStatus::NotFound;
         return result;
     }

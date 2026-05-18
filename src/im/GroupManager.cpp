@@ -81,13 +81,18 @@ bool im::GroupManager::exists(const std::string& groupId)const{
     return groupsById_.count(groupId);
 }
 bool im::GroupManager::restoreGroup(const std::string& groupId,const std::string& groupName,const std::string&owner,const std::vector<std::string>& members){
+    if(groupId.empty()||groupName.empty()||owner.empty()){
+        return false;
+    }
     if(!exists(groupId)){
         Group g(groupId,groupName,owner);
         for(auto& member:members){
             if(!g.addMember(member)){
                 continue;
             }
+            userGroups_[member].insert(groupId);//恢复成员成功时同步添加映射
         }
+        groupsById_.emplace(groupId,std::move(g));//同步保存群
     }
     return true;
 }
