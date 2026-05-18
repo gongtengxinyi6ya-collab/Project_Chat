@@ -80,3 +80,14 @@ bool im::GroupManager::isMember(const std::string& groupId,const std::string& us
 bool im::GroupManager::exists(const std::string& groupId)const{
     return groupsById_.count(groupId);
 }
+bool im::GroupManager::restoreGroup(const std::string& groupId,const std::string& groupName,const std::string&owner,const std::vector<std::string>& members){
+    if(!exists(groupId)){
+        Group g(groupId,groupName,owner);
+        for(auto& member:members){
+            if(!g.addMember(member)){
+                continue;
+            }
+        }
+    }
+    return true;
+}

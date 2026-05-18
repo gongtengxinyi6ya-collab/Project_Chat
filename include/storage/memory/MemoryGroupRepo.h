@@ -20,6 +20,7 @@ struct GroupRecord{
     storage::RepoResult addMember(const std::string& groupId,const std::string& username)override;//用户入群时保存群成员关系
     storage::RepoResult removeMember(const std::string& groupId,const std::string& username)override;//主动退群或群主踢人删除关系
     std::vector<std::string> listMembers(const std::string& groupId)override;//服务重建时恢复时可重建GroupManager
+    std::vector<GroupSnapshot> listGroups()override;//读取所有群基础信息
 private:
     std::unordered_map<std::string,GroupRecord> groups_;//groupId映射GroupRecord
     mutable std::mutex mutex_;//保护groups_的读写

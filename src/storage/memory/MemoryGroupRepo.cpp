@@ -65,3 +65,18 @@ bool storage::MemoryGroupRepo::groupExists(const std::string&groupId){
     auto it=groups_.find(groupId);
     return it!=groups_.end();
 }
+std::vector<storage::GroupRepo::GroupSnapshot> storage::MemoryGroupRepo::listGroups(){
+    std::lock_guard lk(mutex_);
+    if(!groups_.empty()){
+        std::vector<GroupSnapshot> groupsBasicMess;
+        for(auto& it:groups_){
+            GroupSnapshot groupSnapshot;
+            groupSnapshot.groupId=it.second.groupId;
+            groupSnapshot.groupName=it.second.groupName;
+            groupSnapshot.owner=it.second.owner;
+            groupsBasicMess.emplace_back(std::move(groupSnapshot));
+        }
+        return groupsBasicMess;
+    }
+    return {};
+}

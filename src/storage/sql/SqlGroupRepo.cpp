@@ -118,3 +118,27 @@ std::vector<std::string> storage::SqlGroupRepo::listMembers(const std::string& g
     }
     return {};
 }
+std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups(){
+    auto conn=pool_->acquire();
+    if(!conn){
+        return {};
+    }
+    if(conn->connected()){
+        auto result=conn->queryPrepared("SELECT group_id,group_name,owner FROM groups",{});
+        if(result.ok()){
+            std::vector<GroupSnapshot> groupSnapshots;
+            for(const auto& row:result.rows){
+                GroupSnapshot groupSnapshot;
+                auto it=row.find("group_id");
+                groupSnapshot.groupId=it!=row.end()?it->second:"";
+                auto it=row.find("group_name");
+                groupSnapshot.groupId=it!=row.end()?it->second:"";
+                auto it=row.find("owner");
+                groupSnapshot.groupId=it!=row.end()?it->second:"";
+                groupSnapshots.emplace_back(std::move(groupSnapshot));
+            }
+            return groupSnapshots;
+        }
+    }
+    return {};
+}

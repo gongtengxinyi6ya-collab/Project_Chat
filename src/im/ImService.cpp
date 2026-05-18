@@ -117,6 +117,17 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
 bool im::Imservice::hasRepositories()const{
     return repos_.valid();
 }
+void im::Imservice::loadFromRepositories(){
+    if(!hasRepositories()||!repos_.groupRepo){
+        return;
+    }
+    std::vector<storage::GroupRepo::GroupSnapshot> groups=repos_.groupRepo->listGroups();
+    for(const auto& group:groups){
+        auto members=repos_.groupRepo->listMembers(group.groupId);
+        groupManager_.restoreGroup(group.groupId,group.groupName,group.owner,members);
+    }
+
+}
 
 
 im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){

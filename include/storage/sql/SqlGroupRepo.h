@@ -16,7 +16,7 @@ public:
     RepoResult addMember(const std::string& groupId,const std::string& username) override;
     RepoResult removeMember(const std::string& groupId,const std::string& username) override;
     std::vector<std::string> listMembers(const std::string& groupId) override;
-
+    std::vector<GroupSnapshot> listGroups()override;
 private:
     std::shared_ptr<SqlConnectionPool> pool_;
 };

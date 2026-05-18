@@ -28,6 +28,7 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 });
     auto repos=storage::RepositoryFactory::create(config_);
     imService_->setRepositories(std::move(repos));
+    imService_->loadFromRepositories();
 }
 
 TcpServer::~TcpServer(){
