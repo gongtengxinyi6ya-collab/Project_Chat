@@ -15,8 +15,15 @@ public:
 };
 class MessageRepo{
 public:
+struct MessageRecord{
+    uint64_t messageId;
+    std::string groupId;
+    std::string from;
+    std::string content;
+    uint64_t serverTsMs;
+};
     virtual ~MessageRepo()=default;
     virtual SaveMessageResult saveGroupMessage(uint64_t msgId,const std::string& groupId,const std::string&from,const std::string&content,uint64_t serverTsMs)=0;//保存群消息
-    
+    virtual std::vector<MessageRecord> listGroupMessages(const std::string&groupId,uint64_t beforeMsgId,size_t limit)=0;//查询群历史消息
 };
 }

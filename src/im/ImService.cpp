@@ -121,15 +121,21 @@ void im::Imservice::loadFromRepositories(){
     if(!hasRepositories()||!repos_.groupRepo){
         return;
     }
-    size_t restoreGroups;//统计恢复群数量
-    size_t restoreMembers;//统计恢复成员数量
-    size_t failedGroups;//统计群成员恢复失败数量
+    size_t restoreGroups=0;//统计恢复群数量
+    size_t restoreMembers=0;//统计恢复成员数量
+    size_t failedGroups=0;//统计群成员恢复失败数量
     std::vector<storage::GroupRepo::GroupSnapshot> groups=repos_.groupRepo->listGroups();
     for(const auto& group:groups){
         auto members=repos_.groupRepo->listMembers(group.groupId);
-        groupManager_.restoreGroup(group.groupId,group.groupName,group.owner,members);
+        if(groupManager_.restoreGroup(group.groupId,group.groupName,group.owner,members)){
+            restoreGroups++;
+            restoreMembers+=members.size();
+        }
+        else{
+            failedGroups++;
+        }
     }
-
+    LOG_INFO("Successfully restored Groups: "+std::to_string(restoreGroups)+"Successfully restored members: "+std::to_string(restoreMembers)+"Failed to restores groups: "+std::to_string(failedGroups));
 }
 
 
