@@ -20,7 +20,7 @@ std::vector<storage::MessageRepo::MessageRecord> storage::MemoryMessageRepo::lis
     if(groupId.empty()){
         return {};
     }
-    
+    std::lock_guard lk(mutex_);
     auto it=groupMessages_.find(groupId);
     if(it==groupMessages_.end()){
         return {};
@@ -29,7 +29,7 @@ std::vector<storage::MessageRepo::MessageRecord> storage::MemoryMessageRepo::lis
     const auto& messages=it->second;
     if(beforeMsgId==0){//当beforeMsgId为0时，返回最新的limit条消息
         if(messages.size()>limit){//如果消息数量超过limit，返回最新的limit条
-            res.insert(res.end(),messages.end()-limit,messages.end());
+            res.insert(res.end(),std::prev(messages.end(),limit),messages.end());
         }
         else{//否则返回所有消息
             return messages;
@@ -40,7 +40,7 @@ std::vector<storage::MessageRepo::MessageRecord> storage::MemoryMessageRepo::lis
             return msg.messageId<id;
         });
         if(std::distance(messages.begin(),pos)>limit){
-            res.insert(res.end(),pos-limit,pos);
+            res.insert(res.end(),std::prev(pos,limit),pos);//迭代器从pos向前移动limit位置
         }
         else{
             res.insert(res.end(),messages.begin(),pos);

@@ -38,9 +38,9 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
     if(conn->connected()){
         SqlResult result;
         if(beforeMsgId==0)
-            result=conn->queryPrepared("SELTCT msg_id,group_id,sender,content,server_ts_ms FROM messages WHERE group_id=? ORDER BY msg_id DESC LIMIT ?",{groupId,limit});
+            result=conn->queryPrepared("SELECT msg_id,group_id,sender,content,server_ts_ms FROM messages WHERE group_id=? ORDER BY msg_id DESC LIMIT ?",{groupId,limit});
         else
-            result=conn->queryPrepared("SELECT msg_id,groupId,sender,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id<? ORDER BY msg_id DESC LIMIT >",{groupId,beforeMsgId,limit});
+            result=conn->queryPrepared("SELECT msg_id,group_id,sender,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id<? ORDER BY msg_id DESC LIMIT ?",{groupId,beforeMsgId,limit});
         if(result.ok()){
                 std::vector<MessageRecord> messages;
                 for(auto& row:result.rows){

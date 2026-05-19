@@ -650,6 +650,8 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleGroupMembers(req,key,session);
         case im::MsgType::LIST_GROUPS_REQ:
             return handleListGroups(req,key,session);
+        case im::MsgType::GROUP_HISTORY_REQ:
+            return handleGroupHistory(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -703,6 +705,7 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,ConnKey key,Se
     }
     size_t limit=20;
     if(req.body.contains("limit")){
+        
         if(req.body["limit"].is_number_unsigned()){
             limit=req.body["limit"].get<size_t>();
         }
@@ -712,6 +715,9 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,ConnKey key,Se
         else{
             return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid limit");
         }
+    }
+    if(limit>100){//limit最大值限制
+        limit=100;
     }
     auto user=sessionManager_.usernameByConn(key);
     if(!user){
@@ -730,6 +736,6 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,ConnKey key,Se
     for(const auto& msg:messages){
         messagesJson.push_back(nlohmann::json{{"msg_id",msg.messageId},{"group_id",msg.groupId},{"from",msg.from},{ "content",msg.content},{"server_ts_ms",msg.serverTsMs}});
     }
-    return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,messagesJson);
+    return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"messages",messagesJson}});
 
 }

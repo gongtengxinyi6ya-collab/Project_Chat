@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <vector>
 #include "storage/RepoResult.h"
 
 /*后续保存群消息，私聊消息，离线消息*/
