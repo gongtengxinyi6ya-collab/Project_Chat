@@ -680,3 +680,56 @@ im::Response im::Imservice::makeRepoError(const im::Request& req,storage::RepoSt
     }
     return makeErr(req,code,msg);
 }
+im::Response im::Imservice::handleGroupHistory(const Request& req,ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    std::string groupId;
+    if(auto errField=getStringField(req,"groupId",groupId)){
+        return errField.value();
+    }
+    uint64_t beforeMsgId=0;
+    if(req.body.contains("beforeMsgId")){
+        if(req.body["beforeMsgId"].is_number_unsigned()){
+            beforeMsgId=req.body["beforeMsgId"].get<uint64_t>();
+        }
+        else if(req.body["beforeMsgId"].is_number_integer()&&req.body["beforeMsgId"].get<int64_t>()>=0){
+            beforeMsgId=static_cast<uint64_t>(req.body["beforeMsgId"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid beforeMsgId");
+        }
+    }
+    size_t limit=20;
+    if(req.body.contains("limit")){
+        if(req.body["limit"].is_number_unsigned()){
+            limit=req.body["limit"].get<size_t>();
+        }
+        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
+            limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid limit");
+        }
+    }
+    auto user=sessionManager_.usernameByConn(key);
+    if(!user){
+        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");
+    }
+    if(!groupManager_.isMember(groupId,user.value())){
+        return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
+    }
+    if(!hasRepositories()||!repos_.messageRepo){
+        return makeErr(req,im::ErrorCode::INTERNAL,"Message repository is not configured");
+    }
+    //调用群历史消息查询
+    auto messages=repos_.messageRepo->listGroupMessages(groupId,beforeMsgId,limit);
+    //返回JSON数组mwssages
+    nlohmann::json messagesJson=nlohmann::json::array();
+    for(const auto& msg:messages){
+        messagesJson.push_back(nlohmann::json{{"msg_id",msg.messageId},{"group_id",msg.groupId},{"from",msg.from},{ "content",msg.content},{"server_ts_ms",msg.serverTsMs}});
+    }
+    return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,messagesJson);
+
+}

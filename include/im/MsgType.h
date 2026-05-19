@@ -27,6 +27,8 @@ enum class MsgType:uint16_t{
     GROUP_MSG_REQ,
     GROUP_MSG_RESP,
     GROUP_MSG_PUSH,
+    GROUP_HISTORY_REQ,
+    GROUP_HISTORY_RESP,
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -78,6 +80,10 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::GROUP_MSG_RESP;
         case 23:
             return MsgType::GROUP_MSG_PUSH;
+        case 24:
+            return MsgType::GROUP_HISTORY_REQ;
+        case 25:
+            return MsgType::GROUP_HISTORY_RESP;
         case 255:
             return MsgType::ERR;
         default:

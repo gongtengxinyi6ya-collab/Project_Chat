@@ -17,21 +17,25 @@ storage::SaveMessageResult storage::MemoryMessageRepo::saveGroupMessage(uint64_t
     return {RepoStatus::Ok,record.messageId,""};
 }
 std::vector<storage::MessageRepo::MessageRecord> storage::MemoryMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
+    if(groupId.empty()){
+        return {};
+    }
+    
     auto it=groupMessages_.find(groupId);
     if(it==groupMessages_.end()){
         return {};
     }
     std::vector<MessageRecord> res;
     const auto& messages=it->second;
-    if(beforeMsgId==0){
-        if(messages.size()>limit){
+    if(beforeMsgId==0){//当beforeMsgId为0时，返回最新的limit条消息
+        if(messages.size()>limit){//如果消息数量超过limit，返回最新的limit条
             res.insert(res.end(),messages.end()-limit,messages.end());
         }
-        else{
+        else{//否则返回所有消息
             return messages;
         }
     }
-    else{
+    else{//当beforeMsgId不为0时，返回messageId小于beforeMsgId的消息，最多返回limit条
         auto pos=std::lower_bound(messages.begin(),messages.end(),beforeMsgId,[](const MessageRecord& msg,uint64_t id){
             return msg.messageId<id;
         });

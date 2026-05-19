@@ -109,5 +109,6 @@ private:
 
     im::ErrorCode repoStatusToErrorCode(storage::RepoStatus status)const;//把存储层错误转换为IM协议错误码
     im::Response makeRepoError(const im::Request&req,storage::RepoStatus,const std::string&fallbackMsg)const;//把repo错误统一转换为Response
+    im::Response handleGroupHistory(const Request& req,ConnKey key,Session& session);//获取群聊历史消息
 };
 }
