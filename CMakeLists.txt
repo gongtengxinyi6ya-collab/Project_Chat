@@ -34,6 +34,8 @@ if(ENABLE_SQL)
         /usr/include/mysql-cppconn/jdbc
 )
     target_compile_definitions(chat_lib PUBLIC PROJECT_CHAT_ENABLE_SQL)
+    add_executable(sql_repo_test tools/sql_repo_test.cpp)
+    target_link_libraries(sql_repo_test PRIVATE chat_lib)
 endif()
 if(MSVC)
     target_compile_options(chat_lib PRIVATE /W4)
@@ -57,7 +59,7 @@ target_link_libraries(client PRIVATE chat_lib)
 # =========================
 # load_test
 # =========================
-add_executable(load_test tools/load_test.cpp tools/sql_repo_test.cpp)
+add_executable(load_test tools/load_test.cpp)
 
 target_link_libraries(load_test PRIVATE chat_lib)
 # =========================

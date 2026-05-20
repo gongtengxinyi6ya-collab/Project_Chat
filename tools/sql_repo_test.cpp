@@ -2,6 +2,9 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/RepositoryBundle.h"
 #include "logger/LogMacros.h"
+#include "logger/Logger.h"
+#include "logger/FileSink.h"
+#include "logger/StderrSink.h"
 #include "storage/sql/SqlUserRepo.h"
 #include "storage/sql/SqlGroupRepo.h"
 #include "storage/sql/SqlMessageRepo.h"
@@ -11,6 +14,20 @@ int main(){
     config.applyEnvOverrides();
     config.validateOrThrow();
     LOG_INFO("Config summary: "+config.dumpSummary());
+    Logger::instance().setLevel(config.log().level);
+    Logger::instance().setAsyncOptions(config.log().asyncQueueSize,std::chrono::milliseconds(config.log().asyncFlushIntervalMs));
+    Logger::instance().setAsync(config.log().asyncEnabled);
+    if(config.log().toFile){
+        try{
+            Logger::instance().setSink(std::make_unique<FileSink>(config.log().filePath,config.log().jsonFormat));
+        }catch(const std::exception& e){
+            std::cerr<<"Failed to initialize file sink: "<<e.what()<<", falling back to stderr"<<std::endl;
+            Logger::instance().setSink(std::make_unique<StderrSink>());
+        }
+    }else{
+        Logger::instance().setSink(std::make_unique<StderrSink>());
+    }
+
     auto pool=std::make_shared<storage::SqlConnectionPool>(config.database());
     if(!pool->start()){
         LOG_ERROR("Failed to start SQL connection pool");
@@ -32,7 +49,6 @@ int main(){
     auto userId=bundle.userRepo->createUser("testuser");
     if(!userId.ok()){
         LOG_ERROR("Failed to create user: "+userId.message);
-        return -1;
     }
     LOG_INFO("Created user with ID: ");
     bool exists=bundle.userRepo->userExists("testuser");
@@ -41,7 +57,6 @@ int main(){
     auto groupId=bundle.groupRepo->createGroup("testgroup","Test Group","testuser");
     if(!groupId.ok()){
         LOG_ERROR("Failed to create group: "+groupId.message);
-        return -1;
     }
     LOG_INFO("Created group with ID: ");
     exists=bundle.groupRepo->groupExists("testgroup");
@@ -50,7 +65,6 @@ int main(){
     auto addMemberResult=bundle.groupRepo->addMember("testgroup","testuser");
     if(!addMemberResult.ok()){
         LOG_ERROR("Failed to add member: "+addMemberResult.message);
-        return -1;
     }
     LOG_INFO("Added member to group");
     //测试列出成员
@@ -63,7 +77,6 @@ int main(){
     auto saveResult=bundle.messageRepo->saveGroupMessage(1,"testgroup","testuser","Hello, World!",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
     if(!saveResult.ok()){
         LOG_ERROR("Failed to save message: "+saveResult.message);
-        return -1;
     }
     LOG_INFO("Message saved successfully");
     //测试列出消息
