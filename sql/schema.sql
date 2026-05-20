@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
-CREATE TABLE IF NOT EXISTS groups(
+CREATE TABLE IF NOT EXISTS chat_groups(
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     group_id VARCHAR(64) NOT NULL,
     group_name VARCHAR(128) NOT NULL,
@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS groups(
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_groups_group_id (group_id),
-    KEY idx_groups_owner (owner)
+    UNIQUE KEY uk_chat_groups_group_id (group_id),
+    KEY idx_chat_groups_owner (owner)
 )ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS group_members (

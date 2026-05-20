@@ -14,7 +14,7 @@ storage::RepoResult storage::SqlGroupRepo::createGroup(const std::string& groupI
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,owner});
+        auto result=conn->executePrepared("INSERT INTO chat_groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,owner});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -34,7 +34,7 @@ bool storage::SqlGroupRepo::groupExists(const std::string& groupId){
         return false;
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT id FROM groups WHERE group_id=? LIMIT 1",{groupId});
+        auto result=conn->queryPrepared("SELECT id FROM chat_groups WHERE group_id=? LIMIT 1",{groupId});
         if(result.ok()&&!result.rows.empty()){
             return true;
         }
@@ -124,7 +124,7 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups
         return {};
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT group_id,group_name,owner FROM groups",{});
+        auto result=conn->queryPrepared("SELECT group_id,group_name,owner FROM chat_groups",{});
         if(result.ok()){
             std::vector<GroupSnapshot> groupSnapshots;
             for(const auto& row:result.rows){

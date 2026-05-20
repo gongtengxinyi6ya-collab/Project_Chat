@@ -30,7 +30,7 @@ storage::RepoResult storage::MemoryGroupRepo::addMember(const std::string&groupI
         result.status=RepoStatus::NotFound;
         return result;
     }
-    auto it=groups_.find(groupId);
+    
     if(it->second.members.count(username)){
         result.status=RepoStatus::AlreadyExists;
         return result;
