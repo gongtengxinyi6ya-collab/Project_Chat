@@ -1,5 +1,7 @@
 #include "storage/sql/SqlUserRepo.h"
-
+#include "storage/sql/SqlConnectionPool.h"
+#include "storage/sql/SqlConnection.h"
+#include "storage/sql/SqlConnectionGuard.h"
 storage::SqlUserRepo::SqlUserRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 

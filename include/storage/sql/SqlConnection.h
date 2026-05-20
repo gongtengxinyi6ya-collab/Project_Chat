@@ -25,6 +25,10 @@ public:
 
     SqlResult executePrepared(const std::string& sql,const std::vector<SqlParam>& params);
     SqlResult queryPrepared(const std::string& sql,const std::vector<SqlParam>& params);
+    SqlResult beginTransaction();//关闭自动提交，进入事务
+    SqlResult commit();//提交事务并恢复自动提交
+    SqlResult rollback();//回滚事务并恢复自动提交
+    bool inTransaction()const;//标记当前连接是否处于事务状态
 private:
     DatabaseConfig config_;
     bool connected_{false};

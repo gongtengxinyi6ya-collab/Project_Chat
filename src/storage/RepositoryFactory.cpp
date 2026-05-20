@@ -6,7 +6,7 @@
 #include "storage/sql/SqlUserRepo.h"
 #include "storage/sql/SqlGroupRepo.h"
 #include "storage/sql/SqlMessageRepo.h"
-
+#include "storage/sql/SqlConnectionPool.h"
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& dbConfig){
     auto pool=std::make_shared<SqlConnectionPool>(dbConfig);
     if(!pool->start()){

@@ -1,13 +1,13 @@
 #pragma once
 #include <memory>
 #include <string>
-#include "SqlConnectionPool.h"
 #include "storage/UserRepo.h"
 
 /*用SQL实现UserRepo
 辅助用户创建和用户存在性查询*/
 
 namespace storage{
+    class SqlConnectionPool;
 class SqlUserRepo:public UserRepo{
 public:
     explicit SqlUserRepo(std::shared_ptr<SqlConnectionPool> pool);

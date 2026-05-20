@@ -74,7 +74,8 @@ int main(){
         LOG_INFO(" - "+member);
     }
     //测试保存消息
-    auto saveResult=bundle.messageRepo->saveGroupMessage(1,"testgroup","testuser","Hello, World!",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    uint64_t msgId=static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
+    auto saveResult=bundle.messageRepo->saveGroupMessage(msgId,"testgroup","testuser","Hello, World!",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
     if(!saveResult.ok()){
         LOG_ERROR("Failed to save message: "+saveResult.message);
     }

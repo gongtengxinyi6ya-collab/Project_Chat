@@ -3,11 +3,13 @@
 #include <memory>
 #include <condition_variable>
 #include <queue>
-#include "SqlConnection.h"
+
 #include "config/DatabaseConfig.h"
 #include "SqlConnectionGuard.h"
 /*维护固定数量SQL连接*/
 namespace storage{
+    class SqlConnection;
+
 class SqlConnectionPool{
 public:
     explicit SqlConnectionPool(const DatabaseConfig& config);

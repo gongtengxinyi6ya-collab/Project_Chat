@@ -2,12 +2,13 @@
 #include <memory>
 #include <string>
 #include "storage/GroupRepo.h"
-#include "SqlConnectionPool.h"
+
 
 /*用SQL实现GroupRepo
 负责群基础信息和群成员关系持久化*/
 
 namespace storage{
+    class SqlConnectionPool;
 class SqlGroupRepo:public GroupRepo{
 public:
     explicit SqlGroupRepo(std::shared_ptr<SqlConnectionPool> pool);

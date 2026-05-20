@@ -1,5 +1,6 @@
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlConnectionPool.h"
+#include "storage/sql/SqlConnection.h"
 
 storage::SqlConnectionGuard::SqlConnectionGuard(SqlConnectionPool& pool,std::shared_ptr<SqlConnection> conn)
 :pool_(&pool),conn_(std::move(conn)){

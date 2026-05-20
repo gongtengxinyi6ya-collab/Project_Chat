@@ -2,12 +2,13 @@
 #include <string>
 #include <memory>
 #include "storage/MessageRepo.h"
-#include "SqlConnectionPool.h"
+
 
 /*用SQL实现Message
 负责群消息持久化*/
 
 namespace storage{
+    class SqlConnectionPool;
 class SqlMessageRepo:public MessageRepo{
 public:
     explicit SqlMessageRepo(std::shared_ptr<SqlConnectionPool> pool);

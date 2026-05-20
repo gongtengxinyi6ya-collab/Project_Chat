@@ -95,6 +95,9 @@ storage::SqlResult storage::SqlConnection::queryPrepared(const std::string& sql,
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
+
+
+
 storage::SqlResult storage::SqlConnection::readResultSet(sql::ResultSet* resultset){
     SqlResult result;
     while(resultset->next()){

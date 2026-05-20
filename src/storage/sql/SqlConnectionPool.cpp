@@ -1,5 +1,5 @@
 #include "storage/sql/SqlConnectionPool.h"
-
+#include "storage/sql/SqlConnection.h"
 
 storage::SqlConnectionPool::SqlConnectionPool(const DatabaseConfig& config)
 :config_(config){

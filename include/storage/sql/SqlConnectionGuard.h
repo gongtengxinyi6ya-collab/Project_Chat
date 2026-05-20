@@ -1,11 +1,12 @@
 #pragma once
 #include <memory>
-#include "SqlConnection.h"
 
 
 /*RALL管理连接，离开作用域自动归还连接池*/
 namespace storage{
 class SqlConnectionPool;
+class SqlConnection;
+
 class SqlConnectionGuard{
 public:
     SqlConnectionGuard(SqlConnectionPool& pool,std::shared_ptr<SqlConnection> conn);
