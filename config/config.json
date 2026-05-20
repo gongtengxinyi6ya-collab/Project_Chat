@@ -43,8 +43,8 @@
   },
   
   "storage": {
-  "type": "memory",
-  "fallback_to_memory": true
+  "type": "sql",
+  "fallback_to_memory": false
 }
 
 
