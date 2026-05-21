@@ -21,6 +21,7 @@ public:
     virtual RepoResult removeMember(const std::string& groupId,const std::string& username)=0;//主动退群或群主踢人删除关系
     virtual std::vector<std::string> listMembers(const std::string& groupId)=0;//服务重建时恢复时可重建GroupManager
     virtual std::vector<GroupSnapshot> listGroups()=0;//启动时读取所有群基础信息
+    virtual RepoResult createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& owner);//创建群基础信息，同时把owner加入群列表
 
 };
 }

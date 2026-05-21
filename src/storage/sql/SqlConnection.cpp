@@ -95,9 +95,57 @@ storage::SqlResult storage::SqlConnection::queryPrepared(const std::string& sql,
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
+storage::SqlResult storage::SqlConnection::beginTransaction(){
+    if(!connected_||!conn_){
+        return SqlResult{.success=false,.error="not connected"};
+    }
+    try{
+        conn_->setAutoCommit(false);//关闭自动提交
+        inTransaction_=true;
+        return SqlResult{.success=true};
+    }catch(const sql::SQLException& e){
+        return SqlResult{.success=false,.error=e.what()};
+    }
+}
+storage::SqlResult storage::SqlConnection::commit(){
+    if(!connected_||!conn_){
+        return SqlResult{.success=false,.error="not connected"};
+    }
+    try{
+        conn_->commit();
+        conn_->setAutoCommit(true);
+        inTransaction_=false;
+        return SqlResult{.success=true};
+    }catch(const sql::SQLException& e){
+        try{
+            conn_->setAutoCommit(true);
+        }catch(const sql::SQLException& e2){
+            // Ignore this error
+        }
+        return SqlResult{.success=false,.error=e.what()};
+    }
+}
+storage::SqlResult storage::SqlConnection::rollback(){
+    if(!connected_||!conn_){
+        return SqlResult{.success=false,.error="not connected"};
+    }
+    try{
+        conn_->rollback();
+        conn_->setAutoCommit(true);//恢复自动提交
+        inTransaction_=false;
+        return SqlResult{.success=true};
+    }catch(const sql::SQLException& e){
+        try{
+            conn_->setAutoCommit(true);
+        }catch(...){
 
-
-
+        }
+        return SqlResult{.success=false,.error=e.what()};
+    }
+}
+bool storage::SqlConnection::inTransaction()const{
+    return inTransaction_;
+}
 storage::SqlResult storage::SqlConnection::readResultSet(sql::ResultSet* resultset){
     SqlResult result;
     while(resultset->next()){

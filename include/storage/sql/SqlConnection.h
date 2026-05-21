@@ -36,5 +36,7 @@ private:
     sql::Driver* driver_{nullptr};//驱动入口
 
     SqlResult readResultSet(sql::ResultSet* resultSet);
+
+    bool inTransaction_{false};//标记当前事务是否处于事务状态
 };
 }

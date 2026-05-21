@@ -144,3 +144,14 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups
     }
     return {};
 }
+
+storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& owner){
+    if(groupId.empty()||groupName.empty()||owner.empty()){
+        return RepoResult{.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();//获取连接
+    if(!conn){
+        return RepoResult{.status=RepoStatus::SqlError,.message="Failed to accquire a conn"};
+    }
+    
+}
