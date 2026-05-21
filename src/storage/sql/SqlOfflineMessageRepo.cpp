@@ -30,5 +30,7 @@ std::vector<storage::OfflineMessageIndex> storage::SqlOfflineMessageRepo::listOf
     if(username.empty()){
         return {};
     }
-    
+    auto conn=pool_->acquire();//获取连接
+    if(!conn){
+    }
 }
