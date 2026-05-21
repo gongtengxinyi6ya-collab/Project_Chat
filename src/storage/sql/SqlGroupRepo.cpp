@@ -2,6 +2,7 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlConnection.h"
+#include "storage/sql/SqlTransaction.h"
 storage::SqlGroupRepo::SqlGroupRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
@@ -153,5 +154,25 @@ storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::strin
     if(!conn){
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to accquire a conn"};
     }
-    
+    SqlTransaction tx(*conn);//开启事务
+    try{
+        //插入群
+        auto result1=conn->executePrepared("INSERT INTO chat_groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,owner});
+        if(!result1.ok()&&result1.error.find("Duplicate entry")!=std::string::npos){
+            return RepoResult{.status=RepoStatus::AlreadyExists,.message="Group already exists"};
+        }
+        else if(!result1.ok()){
+            return RepoResult{.status=RepoStatus::SqlError,.message=result1.error};
+
+        }
+        //插入群主成员
+        auto result2=conn->executePrepared("INSERT INTO group_members(group_id,username) VALUES(?,?)",{groupId,owner});
+        if(result1.ok()&&result2.ok()){
+            tx.commit();
+            return RepoResult{.status=RepoStatus::Ok};
+        }
+    }catch(const std::exception& e){
+        return RepoResult{.status=RepoStatus::SqlError,.message=e.what()};
+    }
+    return RepoResult{.status=RepoStatus::SqlError,.message="Unknown error"};
 }

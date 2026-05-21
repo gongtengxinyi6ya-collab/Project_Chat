@@ -67,6 +67,7 @@ void storage::SqlConnectionPool::release(std::shared_ptr<SqlConnection> conn){
         if(!started_){
             return;
         }
+        conn->resetSessionState();//防止业务忘记commit/rollback
         idle_.push(std::move(conn));
     }
     cv_.notify_one();

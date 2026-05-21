@@ -29,6 +29,7 @@ public:
     SqlResult commit();//提交事务并恢复自动提交
     SqlResult rollback();//回滚事务并恢复自动提交
     bool inTransaction()const;//标记当前连接是否处于事务状态
+    void resetSessionState();//连接归还连接池前，确保不在事务中
 private:
     DatabaseConfig config_;
     bool connected_{false};

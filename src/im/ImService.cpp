@@ -248,19 +248,12 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
     }
     std::string groupId=groupIdOrErr;
     if(hasRepositories()){
-        auto result=repos_.groupRepo->createGroup(groupId,groupName,owner);
+        auto result=repos_.groupRepo->createGroupWithOwner(groupId,groupName,owner);
         if(result.status!=storage::RepoStatus::Ok&&result.status!=storage::RepoStatus::AlreadyExists){
             LOG_ERROR_CTX("repo create group failed",makeReqCtx(key,req,session,"Repo failed"));
             groupManager_.leaveGroup(groupId,owner);//回滚内存状态
             groupManager_.removeGroup(groupId);
             return makeRepoError(req,result.status,"failed to persist group");
-        }
-        auto memberResult=repos_.groupRepo->addMember(groupId,owner);
-        if(memberResult.status!=storage::RepoStatus::Ok&&memberResult.status!=storage::RepoStatus::AlreadyExists){
-            LOG_ERROR_CTX("repo add group member failed",makeReqCtx(key,req,session,"Repo failed"));
-            groupManager_.leaveGroup(groupId,owner);//回滚内存状态
-            groupManager_.removeGroup(groupId);
-            return makeRepoError(req,memberResult.status,"failed to persist group member");
         }
     }
     session.joinedGroupIds_.insert(groupId);

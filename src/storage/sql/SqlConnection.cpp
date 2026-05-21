@@ -146,6 +146,12 @@ storage::SqlResult storage::SqlConnection::rollback(){
 bool storage::SqlConnection::inTransaction()const{
     return inTransaction_;
 }
+void storage::SqlConnection::resetSessionState(){
+    if(inTransaction_){
+        rollback();
+    }
+    conn_->setAutoCommit(true);
+}
 storage::SqlResult storage::SqlConnection::readResultSet(sql::ResultSet* resultset){
     SqlResult result;
     while(resultset->next()){
