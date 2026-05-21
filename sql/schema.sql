@@ -51,3 +51,16 @@ CREATE TABLE IF NOT EXISTS messages (
     KEY idx_messages_group_time (group_id, server_ts_ms),
     KEY idx_messages_sender (sender)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS offline_messages(
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREAMENT,
+    username VARCHAR(64) NOT NULL,
+    msg_id BIGINT UNSIGNED NOT NULL,
+    group_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_offline_user_msg (username, msg_id),
+    KEY idx_offline_username_id (username, id),
+    KEY idx_offline_username_msg (username, msg_id),
+    KEY idx_offline_group_id (group_id)
+)ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,3 +1,4 @@
+#pragma once
 /*作为RALL事务对象：
 构造时开启事务；commit（）成功后提交；若对象析构时还没提交，自动rollback;*/
 
