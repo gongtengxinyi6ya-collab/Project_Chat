@@ -6,12 +6,13 @@ namespace storage{
 class UserRepo;
 class GroupRepo;
 class MessageRepo;
+class OfflineMessageRepo;
 class RepositoryBundle{
 public:
     std::shared_ptr<UserRepo> userRepo;
     std::shared_ptr<GroupRepo> groupRepo;
     std::shared_ptr<MessageRepo> messageRepo;
-
+    std::shared_ptr<OfflineMessageRepo> offlineMessageRepo;//注入离线消息存储
     bool valid()const{return userRepo&&groupRepo&&messageRepo;};
 };
 }

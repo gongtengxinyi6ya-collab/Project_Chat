@@ -4,6 +4,7 @@
 #include "storage/UserRepo.h"
 #include "storage/GroupRepo.h"
 #include "storage/MessageRepo.h"
+#include "storage/OfflineMessageRepo.h"
 
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
@@ -368,7 +369,7 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",true},{"alreadyLeft",false}});
 }
 im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unused]]ConnKey key,Session& session){
-    auto err=guardAuthenticated(req,session);
+    auto err=guardAuthenticated(req,session);//校验登录
     if(err.has_value()){
         return err.value();
     }
@@ -401,14 +402,16 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     }
     uint64_t serverTsMs=nowMs();
     uint64_t msgId=nextMessageId();
-    if(hasRepositories()){
+    if(hasRepositories()){//保存消息
         auto result=repos_.messageRepo->saveGroupMessage(msgId,groupId.value(),user.value(),content,serverTsMs);
         if(!result.ok()){
             return makeRepoError(req,result.status,"failed to save group message");
         }
     }
+    //广播在线成员
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId.value()},{"content",content},{"msg_id",msgId}}};
     BroadcastResult result=broadcastToGroup(groupId.value(),user.value(),key,pushMsg);
+    saveOfflineForGroupMembers(groupId.value(),user.value(),msgId);
     return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
 }
@@ -739,3 +742,27 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,ConnKey key,Se
     return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"messages",messagesJson}});
 
 }
+
+void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromUser,uint64_t msgId){
+    if(groupId.empty()||fromUser.empty()){
+        return;
+    }
+    if(!repos_.offlineMessageRepo){
+        return;
+    }
+    auto members=groupManager_.members(groupId);//获取群成员
+    for(auto member:members){
+        if(member!=fromUser){//跳过发送者
+            auto keys=sessionManager_.connKeysByUser(member);
+            if(keys.empty()){
+                //用户各端都不在线
+                auto result=repos_.offlineMessageRepo->saveOfflineMessage(member,msgId,groupId);
+                if(!result.ok()){
+                    LOG_WARN("Failed to save offlineMessage for"+member);
+                }
+            }
+        }
+    }
+
+}
+

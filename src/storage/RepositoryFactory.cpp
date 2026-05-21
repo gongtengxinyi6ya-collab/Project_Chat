@@ -2,11 +2,13 @@
 #include "storage/memory/MemoryUserRepo.h"
 #include "storage/memory/MemoryGroupRepo.h"
 #include "storage/memory/MemoryMessageRepo.h"
+
 #ifdef PROJECT_CHAT_ENABLE_SQL
 #include "storage/sql/SqlUserRepo.h"
 #include "storage/sql/SqlGroupRepo.h"
 #include "storage/sql/SqlMessageRepo.h"
 #include "storage/sql/SqlConnectionPool.h"
+#include "storage/sql/SqlOfflineMessageRepo.h"
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& dbConfig){
     auto pool=std::make_shared<SqlConnectionPool>(dbConfig);
     if(!pool->start()){
@@ -19,6 +21,7 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
     bundle.userRepo=std::make_shared<SqlUserRepo>(pool);
     bundle.groupRepo=std::make_shared<SqlGroupRepo>(pool);
     bundle.messageRepo=std::make_shared<SqlMessageRepo>(pool);
+    bundle.offlineMessageRepo=std::make_shared<SqlOfflineMessageRepo>(pool);
     return bundle;
 }
 #else
