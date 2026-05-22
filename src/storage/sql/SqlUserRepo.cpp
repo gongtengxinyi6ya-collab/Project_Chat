@@ -38,7 +38,7 @@ bool storage::SqlUserRepo::userExists(const std::string& username){
     }
     return true;
 }
-std::optional<storage::UserAuthInfo> storage::SqlUserRepo::findAuthInfo(const std::string& username){
+std::optional<storage::UserAuthInfo> storage::SqlUserRepo::findAuthInfo(const std::string& username)const{
     if(username.empty()){
         return std::nullopt;
     }

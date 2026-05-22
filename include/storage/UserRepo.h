@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <optional>
 #include "storage/RepoResult.h"
 
 /*
@@ -21,6 +22,6 @@ public:
     virtual ~UserRepo()=default;
     virtual storage::RepoResult createUser(const std::string& username,const std::string& passwordHash,const std::string& passwordSalt)=0;//注册或者首次登录时创建用户
     virtual bool userExists(const std::string& username)=0;//判断用户是否存在
-    virtual std::optional<UserAuthInfo> findAuthInfo(const std::string& username)=0;//登录时查询用户认证信息
+    virtual std::optional<UserAuthInfo> findAuthInfo(const std::string& username)const=0;//登录时查询用户认证信息
 };
 }
