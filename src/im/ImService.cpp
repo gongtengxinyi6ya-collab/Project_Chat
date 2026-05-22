@@ -655,6 +655,10 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleListGroups(req,key,session);
         case im::MsgType::GROUP_HISTORY_REQ:
             return handleGroupHistory(req,key,session);
+        case im::MsgType::OFFLINE_LIST_REQ:
+            return handleOfflinelist(req,key,session);
+        case im::MsgType::OFFLINE_ACK_REQ:
+            return handleOfflineAck(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -765,4 +769,70 @@ void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const 
     }
 
 }
+im::Response im::Imservice::handleOfflinelist(const Request& req,ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);//校验已登录
+    if(err){
+        return err.value();
+    }
+    if(!repos_.offlineMessageRepo){
+        //检查repos_离线存储是否存在
+        return makeErr(req,ErrorCode::BAD_REQUEST,"OfflineMessageRepo is not exist");
+    }
+    std::string& username=session.username_;
+    //解析limit
+    size_t limit=20;
+    if(req.body.contains("limit")){
+        
+        if(req.body["limit"].is_number_unsigned()){
+            limit=req.body["limit"].get<size_t>();
+        }
+        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
+            limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid limit");
+        }
+    }
+    if(limit>200){
+        limit=200;//限制limit最大值
+    }
+    auto indexes=repos_.offlineMessageRepo->listOfflineMessage(username,limit);
+    nlohmann::json indexJson=nlohmann::json::array();
+    for(const auto& index:indexes){
+        indexJson.emplace_back(nlohmann::json{{"msg_id",index.msgId},{"group_id",index.groupId}});
+    }
+    return makeOk(req,MsgType::OFFLINE_LIST_RESP,nlohmann::json{{"messages",indexJson},{"count",indexJson.size()}});
+}
 
+im::Response im::Imservice::handleOfflineAck(const Request& req,ConnKey key,Session& session){
+    //校验已经登录
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    if(!repos_.offlineMessageRepo){
+        return makeErr(req,ErrorCode::BAD_REQUEST,"OfflineMessageRepo is not exist");
+    }
+    //解析msg_ids数组
+    if(!req.body.contains("msg_ids")||!req.body["msg_ids"].is_array()){
+        return makeErr(req,ErrorCode::BAD_JSON,"msg_ids Json is error");
+    }
+    const auto& msgIdsJsons=req.body.at("msg_ids");
+    std::vector<uint64_t> msgIds;
+    for(const auto& msgIdJson:msgIdsJsons){//过滤非法值
+        if(msgIdJson.is_number_unsigned()){
+            msgIds.push_back(msgIdJson.get<uint64_t>());
+        }
+        else if(msgIdJson.is_number_integer()&&msgIdJson.get<int64_t>()>0){
+            msgIds.push_back(static_cast<uint64_t>(msgIdJson.get<int64_t>()));
+        }
+        else{
+            return makeErr(req,ErrorCode::BAD_JSON,"Invalid msg_id in msg_ids");
+        }
+    }
+    auto result=repos_.offlineMessageRepo->ackOfflineMessage(session.username_,msgIds);
+    if(result.ok()){
+        return makeOk(req,MsgType::OFFLINE_ACK_RESP,nlohmann::json{{"acked",msgIds.size()}});
+    }
+    return makeErr(req,ErrorCode::BAD_REQUEST,"Failed to ack msgIds");
+}

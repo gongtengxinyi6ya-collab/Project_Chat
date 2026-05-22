@@ -10,7 +10,7 @@ class SaveMessageResult{
 public:
     RepoStatus status{RepoStatus::Ok};
     uint64_t messageId{0};
-    std::string message;
+    std::string message{};
 
     bool ok()const{return status==RepoStatus::Ok;}
 };

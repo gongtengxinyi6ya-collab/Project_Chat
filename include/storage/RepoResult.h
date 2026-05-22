@@ -15,7 +15,7 @@ enum class RepoStatus{
 class RepoResult{
 public:
     RepoStatus status{RepoStatus::Ok};
-    std::string message;
+    std::string message{};
 
     bool ok()const{return status==RepoStatus::Ok;}
 };

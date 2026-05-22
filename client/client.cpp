@@ -139,6 +139,40 @@ public:
         body["seq"]=state.allocSeq();
         return body.dump();
     }
+    std::string buildHistoryReq(ClientState& state,std::string groupId,uint64_t beforeMsgId){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::GROUP_HISTORY_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["groupId"]=groupId;
+        body["beforeMsgId"]=beforeMsgId;
+        return body.dump();
+    }
+    std::string buildOfflineListReq(ClientState& state,size_t limit){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::OFFLINE_LIST_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["limit"]=limit;
+        return body.dump();
+    }
+    std::string buildOfflineAckReq(ClientState& state,const std::vector<uint64_t>& msgIds){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::OFFLINE_ACK_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["msgIds"]=msgIds;
+        return body.dump();
+    }
 };
 //把/auth jason,/dm tom hello,/list,/gjoin room,/gleave ,/gmembers,/gls,/gsay 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
@@ -212,6 +246,36 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     if(line.rfind("/gcreate ",0)==0){
         std::string groupName=line.substr(9);
         return builder.buildCreateGroupReq(state,groupName);
+    }
+    if(line.rfind("/ghistory ",0)==0){
+        size_t firstSpace=line.find(' ',11);
+        if(firstSpace==std::string::npos) return std::nullopt;
+        std::string groupId=line.substr(11,firstSpace-11);
+        uint64_t beforeMsgId=std::stoull(line.substr(firstSpace+1));
+        return builder.buildHistoryReq(state,groupId,beforeMsgId);
+    }
+    if(line.rfind("/offlinelist ",0)==0){
+        size_t firstSpace=line.find(' ',13);
+        if(firstSpace==std::string::npos) return std::nullopt;
+        size_t limit=std::stoull(line.substr(13,firstSpace-13));
+        return builder.buildOfflineListReq(state,limit);
+    }
+    if(line.rfind("/offlineack ",0)==0){
+        size_t firstSpace=line.find(' ',14);
+        if(firstSpace==std::string::npos) return std::nullopt;
+        std::vector<uint64_t> msgIds;
+        std::string msgIdsStr=line.substr(14);
+        size_t start=0;
+        while(true){
+            size_t commaPos=msgIdsStr.find(',',start);
+            if(commaPos==std::string::npos){
+                msgIds.push_back(std::stoull(msgIdsStr.substr(start)));
+                break;
+            }
+            msgIds.push_back(std::stoull(msgIdsStr.substr(start,commaPos-start)));
+            start=commaPos+1;
+        }
+        return builder.buildOfflineAckReq(state,msgIds);
     }
 
     return std::nullopt;
