@@ -13,7 +13,7 @@ option(ENABLE_SQL "Enable MySQL storage backend" ON)
 # =========================
 # 库（核心代码）
 # =========================
-file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp)
+file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/security/*.cpp)
 
 if(ENABLE_SQL)
     file(GLOB SQL_SRC_FILES src/storage/sql/*.cpp)
@@ -37,6 +37,8 @@ if(ENABLE_SQL)
     add_executable(sql_repo_test tools/sql_repo_test.cpp)
     target_link_libraries(sql_repo_test PRIVATE chat_lib)
 endif()
+find_package(OpenSSL REQUIRED)
+target_link_libraries(chat_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 if(MSVC)
     target_compile_options(chat_lib PRIVATE /W4)
 else()
