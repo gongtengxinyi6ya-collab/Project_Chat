@@ -6,15 +6,15 @@ storage::SqlUserRepo::SqlUserRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
 }
-storage::RepoResult storage::SqlUserRepo::createUser(const std::string& username){
-    if(username.empty()){
-        return RepoResult{.status=RepoStatus::InvalidArgument,.message="username invalid"};
+storage::RepoResult storage::SqlUserRepo::createUser(const std::string& username,const std::string&passwordHash,const std::string& passwordSalt){
+    if(username.empty()||passwordHash.empty()||passwordSalt.empty()){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="argument invalid"};
     }
     auto conn=pool_->acquire();//获取连接
     if(!conn){//获取连接失败
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a SqlConnection"};
     }
-    auto result=conn->executePrepared("INSERT INTO users(username) VALUES(?)",{username});
+    auto result=conn->executePrepared("INSERT INTO users(username,password_hash,password_salt) VALUES(?,?,?)",{username,passwordHash,passwordSalt});
 
     if(result.ok()){
         return RepoResult{.status=RepoStatus::Ok};
@@ -37,4 +37,31 @@ bool storage::SqlUserRepo::userExists(const std::string& username){
         return false;
     }
     return true;
+}
+std::optional<storage::UserAuthInfo> storage::SqlUserRepo::findAuthInfo(const std::string& username){
+    if(username.empty()){
+        return std::nullopt;
+    }
+    auto conn=pool_->acquire();//获取连接
+    if(!conn){
+        return std::nullopt;
+    }
+    if(conn->connected()){
+        auto result=conn->queryPrepared("SELECT id,username,password_hash,password_salt,status FROM users WHERE username=? LIMIT 1",{username});
+        if(result.ok()){
+            UserAuthInfo info;
+            for(const auto& row:result.rows){
+                auto idPair=row.find("id");
+                info.userId=idPair!=row.end()?std::stoull(idPair->second):0;
+                auto usernamePair=row.find("username");
+                info.username=usernamePair!=row.end()?usernamePair->second:"";
+                auto hashPair=row.find("password_hash");
+                info.passwordHash=hashPair!=row.end()?hashPair->second:"";
+                auto saltPair=row.find("password_salt");
+                info.passwordSalt=saltPair!=row.end()?saltPair->second:"";
+            }
+            return info;
+        }
+    }
+    return std::nullopt;
 }

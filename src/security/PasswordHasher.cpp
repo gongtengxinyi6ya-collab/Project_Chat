@@ -47,5 +47,17 @@ std::string security::PasswordHasher::calculateHash(const std::string& password,
     if(password.empty()||salt.empty()){
         return "";
     }
-    
+    const std::string input=password+salt;
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char*>(input.data()),input.size(),hash);
+    //将二进制哈希值转换为十六进制字符串
+    std::stringstream ss;
+    for(int i=0;i<SHA256_DIGEST_LENGTH;++i){
+        ss
+        <<std::hex
+        <<std::setw(2)
+        <<std::setfill('0')
+        <<static_cast<int>(hash[i]);
+    }
+    return ss.str();
 }
