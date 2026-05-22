@@ -29,10 +29,15 @@ enum class MsgType:uint16_t{
     GROUP_MSG_PUSH,
     GROUP_HISTORY_REQ,
     GROUP_HISTORY_RESP,
-    OFFLINE_LIST_REQ,
-    OFFLINE_LIST_RESP,
-    OFFLINE_ACK_REQ,
-    OFFLINE_ACK_RESP,
+    OFFLINE_LIST_REQ,//离线消息列表请求
+    OFFLINE_LIST_RESP,//离线消息列表响应
+    OFFLINE_ACK_REQ,//离线消息确认请求
+    OFFLINE_ACK_RESP,//离线消息确认响应
+    REGISTER_REQ,//客户端登录请求
+    REGISTER_RESP,//注册响应
+    LOGIN_REQ,//客户端登录请求
+    LOGIN_RESP,//客户端登录响应
+
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -96,6 +101,14 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::OFFLINE_ACK_REQ;
         case 29:
             return MsgType::OFFLINE_ACK_RESP;
+        case 30:
+            return MsgType::REGISTER_REQ;
+        case 31:
+            return MsgType::REGISTER_RESP;
+        case 32:
+            return MsgType::LOGIN_REQ;
+        case 33:
+            return MsgType::LOGIN_RESP;
         case 255:
             return MsgType::ERR;
         

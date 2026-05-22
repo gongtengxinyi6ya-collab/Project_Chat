@@ -11,13 +11,16 @@ enum class ErrorCode: uint16_t{
     UNSUPPORTED_VER,//不支持的协议版本
     UNKNOWN_TYPE,//未知的消息类型
     NOT_AUTHED,//未登录
-    USER_EXISTS,//用户已存在
+    USER_EXISTS,//重复注册
     BAD_REQUEST,//字段类型不对
     NO_SUCH_USER,//用户不存在
     NO_SUCH_GROUP,//群不存在
     ALREADY_IN_GROUP,//已在群
     NOT_IN_GROUP,//不在群内
     GROUP_NAME_INVALID,//群名过长或非法
+    USER_NOT_FOUND,//登录时用户不存在
+    BAD_PASSWORD,//密码错误
+    WEAK_PASSWORD,//密码太短或格式不合法
     INTERNAL//服务器内部错误
 
 };
