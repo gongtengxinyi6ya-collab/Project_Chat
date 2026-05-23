@@ -37,9 +37,9 @@ std::string security::PasswordHasher::generateSalt(){
     for(auto b:buf){
         ss
         <<std::hex//后续整数按16进制输出
-        <<static_cast<int>(b)//转化为整数
         <<std::setw(2)//输出宽度至少为2
-        <<std::setfill('0');//宽度不足补充0
+        <<std::setfill('0')//宽度不足补充0
+        <<static_cast<int>(b);//转化为整数
     }
     return ss.str();
 }

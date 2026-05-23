@@ -5,6 +5,8 @@
 #include "storage/GroupRepo.h"
 #include "storage/MessageRepo.h"
 #include "storage/OfflineMessageRepo.h"
+#include "auth/AuthService.h"
+#include "security/PasswordHasher.h"
 
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
@@ -114,6 +116,10 @@ std::string_view im::Imservice::sendResultToString(SendResult result)const{
 //持久化存储接口
 void im::Imservice::setRepositories(storage::RepositoryBundle repos){
     repos_=std::move(repos);
+    if(repos_.userRepo){
+        security::PasswordHasher passwordHash(16,"SHA256");
+        authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash);
+    }
 }
 bool im::Imservice::hasRepositories()const{
     return repos_.valid();

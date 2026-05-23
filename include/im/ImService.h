@@ -22,7 +22,9 @@
 #include "storage/RepositoryBundle.h"
 #include "storage/RepoResult.h"
 class TcpConnection;
-
+namespace auth{
+    class AuthService;
+}
 /*唯一业务入口
 */
 namespace im{
@@ -113,5 +115,8 @@ private:
     void saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromUser,uint64_t msgId);//群消息发送后，为离线群成员记录离线索引
     im::Response handleOfflinelist(const Request& req,ConnKey key,Session& session);//客户端拉取自己的离线消息索引
     im::Response handleOfflineAck(const Request& req,ConnKey key,Session& session);//客户端确认离线消息已经处理，服务端删除离线索引
+
+    //注册登录
+    std::unique_ptr<auth::AuthService> authService_;//
 };
 }

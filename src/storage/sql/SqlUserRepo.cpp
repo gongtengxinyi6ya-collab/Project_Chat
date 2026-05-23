@@ -48,20 +48,22 @@ std::optional<storage::UserAuthInfo> storage::SqlUserRepo::findAuthInfo(const st
     }
     if(conn->connected()){
         auto result=conn->queryPrepared("SELECT id,username,password_hash,password_salt,status FROM users WHERE username=? LIMIT 1",{username});
-        if(result.ok()){
-            UserAuthInfo info;
-            for(const auto& row:result.rows){
-                auto idPair=row.find("id");
-                info.userId=idPair!=row.end()?std::stoull(idPair->second):0;
-                auto usernamePair=row.find("username");
-                info.username=usernamePair!=row.end()?usernamePair->second:"";
-                auto hashPair=row.find("password_hash");
-                info.passwordHash=hashPair!=row.end()?hashPair->second:"";
-                auto saltPair=row.find("password_salt");
-                info.passwordSalt=saltPair!=row.end()?saltPair->second:"";
-            }
-            return info;
+        if(!result.ok()||result.rows.empty()){
+            return std::nullopt;
         }
+        UserAuthInfo info;
+        const auto& row=result.rows.front();
+        auto idPair=row.find("id");
+        info.userId=idPair!=row.end()?std::stoull(idPair->second):0;
+        auto usernamePair=row.find("username");
+        info.username=usernamePair!=row.end()?usernamePair->second:"";
+        auto hashPair=row.find("password_hash");
+        info.passwordHash=hashPair!=row.end()?hashPair->second:"";
+        auto saltPair=row.find("password_salt");
+        info.passwordSalt=saltPair!=row.end()?saltPair->second:"";
+        auto statusPair = row.find("status");
+        info.status = statusPair != row.end() ? std::stoi(statusPair->second) : 0;
+        return info;
     }
     return std::nullopt;
 }

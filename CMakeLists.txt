@@ -13,7 +13,7 @@ option(ENABLE_SQL "Enable MySQL storage backend" ON)
 # =========================
 # 库（核心代码）
 # =========================
-file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/security/*.cpp)
+file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/security/*.cpp src/auth/*.cpp)
 
 if(ENABLE_SQL)
     file(GLOB SQL_SRC_FILES src/storage/sql/*.cpp)

@@ -10,7 +10,7 @@ struct PasswordHash{
 
 class PasswordHasher{
 public:
-    PasswordHasher(size_t saltLength=16,const std::string& algorithm);
+    explicit PasswordHasher(size_t saltLength=16,const std::string& alogorithm="sha256");
     PasswordHash hashPassword(const std::string& password);//用户注册时调用，输出salt+hash
     bool verifyPassword(const std::string& password,const std::string& expextedHash,const std::string& salt);//登录时调用，对用户密码进行计算后与数据库中的哈希密码进行校验
     std::string generateSalt();//生成随机salt
