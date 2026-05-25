@@ -6,6 +6,7 @@
 #include "storage/MessageRepo.h"
 #include "storage/OfflineMessageRepo.h"
 #include "auth/AuthService.h"
+#include "auth/AuthResult.h"
 #include "security/PasswordHasher.h"
 
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
@@ -63,12 +64,13 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
     if(!sessionManager_.bindUser(key,username)){
         return makeErr(req,im::ErrorCode::INTERNAL,"Failed to bind user to session");
     }
+    /*
     if(hasRepositories()){
         auto result=repos_.userRepo->createUser(username);
         if(result.status!=storage::RepoStatus::Ok&&result.status!=storage::RepoStatus::AlreadyExists){
             return makeRepoError(req,result.status,"Fail to create user");
         }
-    }
+    }*/
     return makeOk(req,im::MsgType::AUTH_RESP);
 }
 
@@ -549,6 +551,10 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
         case im::ErrorCode::ALREADY_IN_GROUP:
         case im::ErrorCode::NOT_IN_GROUP:
         case im::ErrorCode::NOT_AUTHED:
+        case im::ErrorCode::USER_NOT_FOUND:
+        case im::ErrorCode::BAD_PASSWORD:
+        case im::ErrorCode::WEAK_PASSWORD:
+        case im::ErrorCode::USER_EXISTS:
             return LogLevel::WARN;
         case im::ErrorCode::INTERNAL:
             return LogLevel::ERROR;
@@ -665,6 +671,10 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleOfflinelist(req,key,session);
         case im::MsgType::OFFLINE_ACK_REQ:
             return handleOfflineAck(req,key,session);
+        case im::MsgType::REGISTER_REQ:
+            return handleRegister(req,key,session);
+        case im::MsgType::LOGIN_REQ:
+            return handleLogin(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -841,4 +851,72 @@ im::Response im::Imservice::handleOfflineAck(const Request& req,ConnKey key,Sess
         return makeOk(req,MsgType::OFFLINE_ACK_RESP,nlohmann::json{{"acked",msgIds.size()}});
     }
     return makeErr(req,ErrorCode::BAD_REQUEST,"Failed to ack msgIds");
+}
+
+
+//登录注册接口
+
+im::Response im::Imservice::handleRegister(const Request& req,ConnKey key,Session& session){
+    std::string username;
+    auto getUsername=getStringField(req,"username",username);
+    if(getUsername){
+        return getUsername.value();
+    }
+    std::string password;
+    auto getPassword=getStringField(req,"password",password);
+    if(getPassword){
+        return getPassword.value();
+    }
+    if(!authService_){
+        return makeErr(req,ErrorCode::INTERNAL,"authService is not exist");
+    }
+    auto result=authService_->registerUser(username,password);
+    if(result.ok){
+        return makeOk(req,MsgType::REGISTER_RESP);
+    }
+    if(result.status==auth::AuthStatus::AlreadyExist){
+        return makeErr(req,ErrorCode::USER_EXISTS,"User is alreadyexist");
+    }
+    if(result.status==auth::AuthStatus::WeakPassword){
+        return makeErr(req,ErrorCode::WEAK_PASSWORD,"Password is too weak");
+    }
+    return makeErr(req,ErrorCode::INTERNAL,"internal");
+}
+im::Response im::Imservice::handleLogin(const Request& req,ConnKey key,Session& session){
+    std::string username;
+    auto getUsername=getStringField(req,"username",username);
+    if(getUsername){
+        return getUsername.value();
+    }
+    std::string password;
+    auto getPassword=getStringField(req,"password",password);
+    if(getPassword){
+        return getPassword.value();
+    }
+    if(session.state_==ConnState::Authed){
+        if(username==session.username_){
+            return makeOk(req,MsgType::LOGIN_RESP);
+        }
+        else{
+            return makeErr(req,ErrorCode::BAD_REQUEST,"username is different");
+        }
+    }
+    auto result=authService_->login(username,password);
+    if(!result.ok){
+        if(result.status==auth::AuthStatus::UserNotFound){
+            return makeErr(req,ErrorCode::USER_NOT_FOUND,"User is not exist");
+        }
+        if(result.status==auth::AuthStatus::BadPassword){
+            return makeErr(req,ErrorCode::BAD_PASSWORD,"Password is incorrect");
+        }
+        if(result.status==auth::AuthStatus::UserDisabled){
+            return makeErr(req,ErrorCode::BAD_REQUEST,"User is disabled");
+        }
+        return makeErr(req,ErrorCode::INTERNAL,"Internal error");
+    }
+    sessionManager_.bindUser(key,username);
+    session.username_=username;
+    session.userId_=result.user.value().userId;
+    session.state_=ConnState::Authed;
+    return makeOk(req,MsgType::LOGIN_RESP);
 }

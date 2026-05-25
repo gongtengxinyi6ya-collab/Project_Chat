@@ -21,10 +21,9 @@
 #include "logger/LogLevel.h"
 #include "storage/RepositoryBundle.h"
 #include "storage/RepoResult.h"
+#include "auth/AuthService.h"
 class TcpConnection;
-namespace auth{
-    class AuthService;
-}
+
 /*唯一业务入口
 */
 namespace im{
@@ -118,5 +117,8 @@ private:
 
     //注册登录
     std::unique_ptr<auth::AuthService> authService_;//
+    Response handleRegister(const Request& req,ConnKey key,Session& session);//处理客户端注册
+    Response handleLogin(const Request& req,ConnKey key,Session& session);//处理密码登录
+
 };
 }

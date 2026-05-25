@@ -10,6 +10,8 @@ namespace auth{
         UserNotFound,//用户不存在
         BadPassword,//密码禁用
         UserDisabled,//用户禁用
+        AlreadyExist,//已经存在
+        WeakPassword,//密码强度太弱
         Internal
     };
     struct AuthResult

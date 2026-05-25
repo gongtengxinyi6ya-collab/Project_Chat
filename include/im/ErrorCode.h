@@ -53,6 +53,12 @@ inline const char* errCodeToString(ErrorCode code){
             return "The user is not in the group";
         case ErrorCode::GROUP_NAME_INVALID:
             return "Group name is invalid";
+        case ErrorCode::USER_NOT_FOUND:
+            return "User is not exist";
+        case ErrorCode::BAD_PASSWORD:
+            return "Password is wrong";
+        case ErrorCode::WEAK_PASSWORD:
+            return "Password is too weak";
         case ErrorCode::INTERNAL:
             return "Internal Server Error";
         default:

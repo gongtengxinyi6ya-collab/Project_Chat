@@ -19,7 +19,7 @@ auth::AuthResult auth::AuthService::registerUser(const std::string& username,con
     }
 
     if(!validatePasswordStrength(password)){
-        return AuthResult{.status=AuthStatus::BadPassword,.message="password is too weak"};
+        return AuthResult{.status=AuthStatus::WeakPassword,.message="password is too weak"};
     }
     try{
         auto hashResult=passwordHasher_.hashPassword(password);
@@ -28,7 +28,7 @@ auth::AuthResult auth::AuthService::registerUser(const std::string& username,con
             return AuthResult{.ok=true,.status=AuthStatus::Ok};
         }
         if(result.status==storage::RepoStatus::AlreadyExists){
-            return AuthResult{.status=AuthStatus::UserNotFound,.message="User already exists"};
+            return AuthResult{.status=AuthStatus::AlreadyExist,.message="User already exists"};
         }
         return AuthResult{.status=AuthStatus::Internal,.message=result.message};
     }catch(const std::exception& e){

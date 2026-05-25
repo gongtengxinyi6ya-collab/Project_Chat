@@ -16,7 +16,7 @@ struct Session{
     ConnState state_;
     std::string username_;
     std::unordered_set<std::string> joinedGroupIds_;//已经加入的群聊集合
-
+    uint64_t userId_{0};//数据库稳定主键
     
     Session():state_(ConnState::Connected),username_(""){}
 };

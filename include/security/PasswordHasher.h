@@ -1,3 +1,4 @@
+#pragma once
 #include <string>
 /*
 负责密码哈希和密码校验*/

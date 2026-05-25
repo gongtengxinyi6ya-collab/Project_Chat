@@ -8,6 +8,7 @@
 #include "storage/sql/SqlUserRepo.h"
 #include "storage/sql/SqlGroupRepo.h"
 #include "storage/sql/SqlMessageRepo.h"
+#include "security/PasswordHasher.h"
 
 int main(){
     auto config=AppConfig::loadFromFile("config/config.json");
@@ -46,7 +47,9 @@ int main(){
         return -1;
     }
     //测试用户创建
-    auto userId=bundle.userRepo->createUser("testuser");
+    security::PasswordHasher hasher(16,"SHA256");
+    auto hashResult=hasher.hashPassword("TestPassword123");
+    auto userId=bundle.userRepo->createUser("testuser", hashResult.hash, hashResult.salt);
     if(!userId.ok()){
         LOG_ERROR("Failed to create user: "+userId.message);
     }

@@ -173,6 +173,30 @@ public:
         body["msgIds"]=msgIds;
         return body.dump();
     }
+    std::string buildRegisterReq(ClientState& state,std::string username,std::string password){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::REGISTER_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["username"]=username;
+        body["password"]=password;
+        return body.dump();
+    }
+    std::string buildLoginReq(ClientState& state,std::string username,std::string password){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::LOGIN_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        body["username"]=username;
+        body["password"]=password;
+        return body.dump();
+    }
 };
 //把/auth jason,/dm tom hello,/list,/gjoin room,/gleave ,/gmembers,/gls,/gsay 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
@@ -277,7 +301,20 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         }
         return builder.buildOfflineAckReq(state,msgIds);
     }
-
+    if(line.rfind("/register ",0)==0){
+        size_t firstSpace=line.find(' ',10);
+        if(firstSpace==std::string::npos) return std::nullopt;
+        std::string username=line.substr(10,firstSpace-10);
+        std::string password=line.substr(firstSpace+1);
+        return builder.buildRegisterReq(state,username,password);
+    }
+    if(line.rfind("/login ",0)==0){
+        size_t firstSpace=line.find(' ',7);
+        if(firstSpace==std::string::npos) return std::nullopt;
+        std::string username=line.substr(7,firstSpace-7);
+        std::string password=line.substr(firstSpace+1);
+        return builder.buildLoginReq(state,username,password);
+    }
     return std::nullopt;
 }
 //尝试parse JSON,按type分类打印摘要，失败则原样输出
