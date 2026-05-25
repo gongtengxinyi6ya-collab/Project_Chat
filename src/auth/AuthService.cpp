@@ -55,7 +55,7 @@ auth::AuthResult auth::AuthService::login(const std::string& username,const std:
     return AuthResult{.ok=true,.user=result.value()};
 }
 bool auth::AuthService::validatePasswordStrength(const std::string& password)const{
-    if(password.size()<8||password.size()>16){
+    if(password.size()<8||password.size()>32){
         return false;
     }
     bool hasUpper=false;

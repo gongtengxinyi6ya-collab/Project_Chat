@@ -883,7 +883,7 @@ im::Response im::Imservice::handleRegister(const Request& req,[[maybe_unused]]Co
     if(result.status==auth::AuthStatus::WeakPassword){
         return makeErr(req,ErrorCode::WEAK_PASSWORD,"Password is too weak");
     }
-    return makeErr(req,ErrorCode::INTERNAL,"internal");
+    return makeErr(req,ErrorCode::INTERNAL,"internal"+result.message);
 }
 im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     std::string username;

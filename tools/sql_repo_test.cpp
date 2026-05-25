@@ -53,6 +53,11 @@ int main(){
     if(!userId.ok()){
         LOG_ERROR("Failed to create user: "+userId.message);
     }
+    //测试密码校验
+    bool verifyResult=hasher.verifyPassword("TestPassword12",hashResult.hash,hashResult.salt);
+    LOG_INFO("Password verify result: "+std::string(verifyResult?"true":"false"));
+    bool verifyResult2=hasher.verifyPassword("TestPassword123",hashResult.hash,hashResult.salt);
+    LOG_INFO("Password verify result: "+std::string(verifyResult2?"true":"false"));
     LOG_INFO("Created user with ID: ");
     bool exists=bundle.userRepo->userExists("testuser");
     LOG_INFO("User exists: "+std::string(exists?"true":"false"));
