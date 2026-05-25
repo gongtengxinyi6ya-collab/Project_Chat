@@ -21,6 +21,8 @@
 #include "third_party/json.hpp"
 struct ClientState{
     std::string username;
+    std::string pendingLoginUsername;
+    bool loggedIn{false};
     std::unordered_set<std::string> groupIds;
     uint64_t nextReqId{1};
     uint64_t nextSeq{1};
@@ -313,6 +315,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         if(firstSpace==std::string::npos) return std::nullopt;
         std::string username=line.substr(7,firstSpace-7);
         std::string password=line.substr(firstSpace+1);
+        state.pendingLoginUsername=username;
         return builder.buildLoginReq(state,username,password);
     }
     return std::nullopt;
@@ -402,6 +405,21 @@ void printPretty(const std::string& payload,ClientState& state){
                     std::cout<<groupId.get<std::string>()<<" ";
                 }
                 std::cout<<std::endl;
+                break;
+            }
+            case im::MsgType::LOGIN_RESP:{
+                if(json["ok"].get<bool>()){
+                    state.username=state.pendingLoginUsername;
+                    state.loggedIn=true;
+                    state.pendingLoginUsername.clear();
+                }
+                state.loggedIn=false;
+                state.pendingLoginUsername.clear();
+                std::cout<<"LOGIN_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            }
+            case im::MsgType::REGISTER_RESP:{
+                std::cout<<"REGISTER_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             }
             default:

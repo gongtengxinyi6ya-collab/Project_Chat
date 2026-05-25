@@ -45,6 +45,9 @@ auth::AuthResult auth::AuthService::login(const std::string& username,const std:
     if(!result){
         return AuthResult{.status=AuthStatus::UserNotFound};
     }
+    if(result->status!=0){
+        return AuthResult{.status=AuthStatus::UserDisabled};
+    }
     //校验登录密码
     if(!passwordHasher_.verifyPassword(password,result.value().passwordHash,result.value().passwordSalt)){
         return AuthResult{.status=AuthStatus::BadPassword,.message="password is wrong"};

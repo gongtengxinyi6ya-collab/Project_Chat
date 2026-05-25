@@ -48,6 +48,9 @@ void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
 
 
 im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& session){
+    if(!imConfig_.allowDebugAuth){
+        return makeErr(req,ErrorCode::BAD_REQUEST,"NOT be allowed to auth,please login first");
+    }
     if(!req.body.contains("user")){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing username field");
     }
@@ -705,7 +708,7 @@ im::Response im::Imservice::makeRepoError(const im::Request& req,storage::RepoSt
     }
     return makeErr(req,code,msg);
 }
-im::Response im::Imservice::handleGroupHistory(const Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -785,7 +788,7 @@ void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const 
     }
 
 }
-im::Response im::Imservice::handleOfflinelist(const Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);//校验已登录
     if(err){
         return err.value();
@@ -820,7 +823,7 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,ConnKey key,Ses
     return makeOk(req,MsgType::OFFLINE_LIST_RESP,nlohmann::json{{"messages",indexJson},{"count",indexJson.size()}});
 }
 
-im::Response im::Imservice::handleOfflineAck(const Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]ConnKey key,[[maybe_unused]]Session& session){
     //校验已经登录
     auto err=guardAuthenticated(req,session);
     if(err){
@@ -856,7 +859,7 @@ im::Response im::Imservice::handleOfflineAck(const Request& req,ConnKey key,Sess
 
 //登录注册接口
 
-im::Response im::Imservice::handleRegister(const Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleRegister(const Request& req,[[maybe_unused]]ConnKey key,[[maybe_unused]]Session& session){
     std::string username;
     auto getUsername=getStringField(req,"username",username);
     if(getUsername){
@@ -882,7 +885,7 @@ im::Response im::Imservice::handleRegister(const Request& req,ConnKey key,Sessio
     }
     return makeErr(req,ErrorCode::INTERNAL,"internal");
 }
-im::Response im::Imservice::handleLogin(const Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     std::string username;
     auto getUsername=getStringField(req,"username",username);
     if(getUsername){
@@ -901,6 +904,9 @@ im::Response im::Imservice::handleLogin(const Request& req,ConnKey key,Session& 
             return makeErr(req,ErrorCode::BAD_REQUEST,"username is different");
         }
     }
+    if(!authService_){
+        return makeErr(req,ErrorCode::INTERNAL,"authService is not exist");
+    }
     auto result=authService_->login(username,password);
     if(!result.ok){
         if(result.status==auth::AuthStatus::UserNotFound){
@@ -914,9 +920,9 @@ im::Response im::Imservice::handleLogin(const Request& req,ConnKey key,Session& 
         }
         return makeErr(req,ErrorCode::INTERNAL,"Internal error");
     }
-    sessionManager_.bindUser(key,username);
-    session.username_=username;
+    if(!sessionManager_.bindUser(key,username)){
+        return makeErr(req,ErrorCode::INTERNAL,"Failed to bind user");
+    }
     session.userId_=result.user.value().userId;
-    session.state_=ConnState::Authed;
     return makeOk(req,MsgType::LOGIN_RESP);
 }

@@ -4,6 +4,7 @@ ImConfig ImConfig::fromJson(const nlohmann::json& j){
     imConfig.requireGroupIdForSend=ConfigParseHelper::getOrDefault(j,"require_group_id_for_send",imConfig.requireGroupIdForSend);
     imConfig.maxGroupNameLen=ConfigParseHelper::getOrDefault(j,"max_group_name_len",imConfig.maxGroupNameLen);
     imConfig.maxMessageLen=ConfigParseHelper::getOrDefault(j,"max_message_len",imConfig.maxMessageLen);
+    imConfig.allowDebugAuth=ConfigParseHelper::getOrDefault(j,"allow_debug_auth",imConfig.allowDebugAuth);
     return imConfig;
 }
 void ImConfig::applyEnvOverrides(){
@@ -18,6 +19,10 @@ void ImConfig::applyEnvOverrides(){
     auto envMaxMessageLen=ConfigParseHelper::getEnv("IM_MAX_MESSAGE_LEN");
     if(envMaxMessageLen.has_value()){
         maxMessageLen=ConfigParseHelper::parseEnvUInt(envMaxMessageLen.value(), "IM_MAX_MESSAGE_LEN", 1024*1024);
+    }
+    auto envAllowDebugAuth=ConfigParseHelper::getEnv("IM_ALLOW_DEBUG_AUTH");
+    if(envAllowDebugAuth.has_value()){
+        allowDebugAuth=ConfigParseHelper::parseEnvBool(envAllowDebugAuth.value(), "IM_ALLOW_DEBUG_AUTH");
     }
 }
 void ImConfig::validateOrThrow() const{

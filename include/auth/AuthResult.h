@@ -17,8 +17,8 @@ namespace auth{
     struct AuthResult
     {
         bool ok{false};
-        AuthStatus status;
-        std::optional<storage::UserAuthInfo> user;
+        AuthStatus status{AuthStatus::Internal};
+        std::optional<storage::UserAuthInfo> user{std::nullopt};
         std::string message{};
     };
 }

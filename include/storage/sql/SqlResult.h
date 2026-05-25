@@ -15,7 +15,7 @@ class SqlResult{
 public:
     bool success{true};//SQL是否成功
     std::string error{};//失败原因
-    std::vector<SqlRow> rows;//查询结果
+    std::vector<SqlRow> rows{};//查询结果
     uint64_t affectedRows{0};//影响行数
     uint64_t lastInsertId{0};//插入后ID
     bool ok()const{return success;}
