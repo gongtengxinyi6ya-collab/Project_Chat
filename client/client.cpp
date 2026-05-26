@@ -26,6 +26,8 @@ struct ClientState{
     std::unordered_set<std::string> groupIds;
     uint64_t nextReqId{1};
     uint64_t nextSeq{1};
+    std::string token;
+    int64_t tokenExpireAtMs{0};
 
     uint64_t allocReqId(){
         return nextReqId++;
@@ -199,6 +201,27 @@ public:
         body["password"]=password;
         return body.dump();
     }
+    std::string buildLogoutReq(ClientState& state){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::LOGOUT_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        return body.dump();
+    }
+    std::string buildTokenLoginReq(ClientState& state,std::string token){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::TOKEN_LOGIN_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]="";
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        body["token"]=token;
+        return body.dump();
+    }
 };
 //把/auth jason,/dm tom hello,/list,/gjoin room,/gleave ,/gmembers,/gls,/gsay 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
@@ -318,6 +341,13 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         state.pendingLoginUsername=username;
         return builder.buildLoginReq(state,username,password);
     }
+    if(line=="/logout"){
+        return builder.buildLogoutReq(state);
+    }
+    if(line.rfind("/tokenlogin ",0)==0){
+        std::string token=line.substr(12);
+        return builder.buildTokenLoginReq(state,token);
+    }
     return std::nullopt;
 }
 //尝试parse JSON,按type分类打印摘要，失败则原样输出
@@ -427,6 +457,33 @@ void printPretty(const std::string& payload,ClientState& state){
             }
             case im::MsgType::REGISTER_RESP:{
                 std::cout<<"REGISTER_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            }
+            case im::MsgType::TOKEN_LOGIN_RESP:{
+                if(json["ok"].get<bool>()){
+                    state.username=state.pendingLoginUsername;
+                    state.loggedIn=true;
+                    state.pendingLoginUsername.clear();
+                    if(json["data"].contains("token")&&json["data"]["token"].is_string()){
+                        state.token=json["data"]["token"].get<std::string>();
+                    }
+                    if(json["data"].contains("tokenExpireAtMs")&&json["data"]["tokenExpireAtMs"].is_number()){
+                        state.tokenExpireAtMs=json["data"]["tokenExpireAtMs"].get<int64_t>();
+                    }
+
+                }
+                state.loggedIn=false;
+                state.pendingLoginUsername.clear();
+                std::cout<<"TOKEN_LOGIN_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            }
+            case im::MsgType::LOGOUT_RESP:{
+                if(json["ok"].get<bool>()){
+                    state.username.clear();
+                    state.loggedIn=false;
+                    state.groupIds.clear();
+                }
+                std::cout<<"LOGOUT_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             }
             default:

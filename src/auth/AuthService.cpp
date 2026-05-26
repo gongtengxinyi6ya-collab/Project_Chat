@@ -1,5 +1,6 @@
 #include "auth/AuthService.h"
 #include <stdexcept>
+#include <chrono>
 #include <cctype>
 auth::AuthService::AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher,security::TokenManager tokenManager,std::shared_ptr<storage::UserSessionRepo> userSessionRepo)
 :userRepo_(std::move(userRepo)),passwordHasher_(passwordHasher),tokenManager_(tokenManager),userSessionRepo_(std::move(userSessionRepo)){
@@ -53,9 +54,16 @@ auth::AuthResult auth::AuthService::login(const std::string& username,const std:
     if(!passwordHasher_.verifyPassword(password,result.value().passwordHash,result.value().passwordSalt)){
         return AuthResult{.status=AuthStatus::BadPassword,.message="password is wrong"};
     }
+    auto userAuthInnfo=result.value();
     auto issueToken=tokenManager_.issueToken();
-    
-    return AuthResult{.ok=true,.user=result.value()};
+    auto createAtMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto lastSeenAtMs=createAtMs;
+    storage::StoredUserSession session{.userId=userAuthInnfo.userId,.username=userAuthInnfo.username,.tokenHash=issueToken.tokenHash,.expireAtMs=issueToken.expireAtMs,.createAtMs=createAtMs,.lastSeenAtMs=lastSeenAtMs,.revoked=false};
+    auto saveResult=userSessionRepo_->createSession(session);
+    if(!saveResult.ok()){
+        return AuthResult{.status=AuthStatus::Internal,.message=saveResult.message};
+    }
+    return AuthResult{.ok=true,.status=AuthStatus::Ok,.user=result.value(),.issuedToken=issueToken};
 }
 bool auth::AuthService::validatePasswordStrength(const std::string& password)const{
     if(password.size()<8||password.size()>32){
@@ -86,5 +94,37 @@ auth::AuthResult auth::AuthService::loginByToken(const std::string& rawToken){
     }
     //获取tokenHash
     auto tokenHash=tokenManager_.hashToken(rawToken);
+    if(tokenHash.empty()){
+        return AuthResult{.status=AuthStatus::InvalidToken,.message="Failed to get tokenHash"};
+    }
+    auto result=userSessionRepo_->findByTokenHash(tokenHash);
+    if(result){
+        return AuthResult{.status=AuthStatus::InvalidToken};
+    }
+    auto session=result.value();
+    if(session.revoked){
+        return AuthResult{.status=AuthStatus::TokenRevoked};
+    }
+    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    if(session.expireAtMs<=nowMs){
+        return AuthResult{.status=AuthStatus::TokenExpired};
+    }
+    auto updateResult=userSessionRepo_->touchSession(session.tokenHash,nowMs);
+    if(!updateResult.ok()){
+        return AuthResult{.status=AuthStatus::Internal,.message="Failed to update lastSeenAtMs"};
+    }
+    storage::UserAuthInfo userInfo{.userId=session.userId,.username=session.username};
+    return AuthResult{.ok=true,.status=AuthStatus::Ok,.user=userInfo};
     
+}
+auth::AuthStatus auth::AuthService::logout(const std::string& rawToken){
+    auto tokenHash=tokenManager_.hashToken(rawToken);
+    if(tokenHash.empty()){
+        return AuthStatus::InvalidToken;
+    }
+    auto result=userSessionRepo_->revokeSession(tokenHash);
+    if(result.ok()){
+        return AuthStatus::TokenRevoked;
+    }
+    return AuthStatus::Internal;
 }

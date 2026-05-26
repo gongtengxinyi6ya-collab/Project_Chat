@@ -123,7 +123,8 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
     repos_=std::move(repos);
     if(repos_.userRepo){
         security::PasswordHasher passwordHash(16,"SHA256");
-        authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash);
+        security::TokenManager tokenManager;
+        authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash,tokenManager,repos_.userSessionRepo);
     }
 }
 bool im::Imservice::hasRepositories()const{
@@ -558,6 +559,9 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
         case im::ErrorCode::BAD_PASSWORD:
         case im::ErrorCode::WEAK_PASSWORD:
         case im::ErrorCode::USER_EXISTS:
+        case im::ErrorCode::TOKEN_INVALID:
+        case im::ErrorCode::TOKEN_EXPIRED:
+        case im::ErrorCode::TOKEN_REVOKED:
             return LogLevel::WARN;
         case im::ErrorCode::INTERNAL:
             return LogLevel::ERROR;
@@ -678,6 +682,10 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleRegister(req,key,session);
         case im::MsgType::LOGIN_REQ:
             return handleLogin(req,key,session);
+        case im::MsgType::LOGOUT_REQ:
+            return handleLogout(req,key,session);
+        case im::MsgType::TOKEN_LOGIN_REQ:
+            return handleTokenLogin(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }

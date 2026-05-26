@@ -9,15 +9,16 @@
 namespace storage{
 struct StoredUserSession
 {
-    uint64_t userId;//用户稳定ID
-    std::string username;//用户名
-    std::string tokenHash;//数据库存储的token hash
-    int64_t expireAtMs;//过期时间
-    int64_t createAtMs;//创建时间
-    int64_t lastSeenAtMs;//最近使用时间
-    bool revoked;//是否已退出或者注销
+    uint64_t userId{0};//用户稳定ID
+    std::string username{};//用户名
+    std::string tokenHash{};//数据库存储的token hash
+    int64_t expireAtMs{0};//过期时间
+    int64_t createAtMs{0};//创建时间
+    int64_t lastSeenAtMs{0};//最近使用时间
+    bool revoked{false};//是否已退出或者注销
 };
 class UserSessionRepo{
+public:
     virtual ~UserSessionRepo()=default;
     virtual RepoResult createSession(const StoredUserSession& session)=0;//登录成功后调用，保存到数据库
     virtual std::optional<StoredUserSession> findByTokenHash(const std::string& tokenHash)=0;//TOKEN_LOGIN_REQ后调用，根据hash查询session
