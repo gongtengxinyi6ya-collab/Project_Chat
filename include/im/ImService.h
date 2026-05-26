@@ -120,5 +120,8 @@ private:
     Response handleRegister(const Request& req,ConnKey key,Session& session);//处理客户端注册
     Response handleLogin(const Request& req,ConnKey key,Session& session);//处理密码登录
 
+    //token登录和注销
+    Response handleTokenLogin(const Request& req,ConnKey key,Session& session);//处理token登录
+    Response handleLogout(const Request& req,ConnKey key,Session& session);//处理注销
 };
 }

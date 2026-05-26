@@ -21,6 +21,9 @@ enum class ErrorCode: uint16_t{
     USER_NOT_FOUND,//登录时用户不存在
     BAD_PASSWORD,//密码错误
     WEAK_PASSWORD,//密码太短或格式不合法
+    TOKEN_INVALID,//token不存在或格式错误
+    TOKEN_EXPIRED,//token过期
+    TOKEN_REVOKED,//用户主动退出登录后再次使用token
     INTERNAL//服务器内部错误
 
 };
@@ -61,6 +64,12 @@ inline const char* errCodeToString(ErrorCode code){
             return "Password is too weak";
         case ErrorCode::INTERNAL:
             return "Internal Server Error";
+        case ErrorCode::TOKEN_INVALID:
+            return "Token is invalid";
+        case ErrorCode::TOKEN_EXPIRED:
+            return "Token is expired";
+        case ErrorCode::TOKEN_REVOKED:
+            return "Token is revoked";
         default:
             return "Unknown Error Code";
     }

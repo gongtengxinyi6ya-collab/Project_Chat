@@ -1,8 +1,8 @@
 #include "auth/AuthService.h"
 #include <stdexcept>
 #include <cctype>
-auth::AuthService::AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher)
-:userRepo_(std::move(userRepo)),passwordHasher_(passwordHasher){
+auth::AuthService::AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher,security::TokenManager tokenManager,std::shared_ptr<storage::UserSessionRepo> userSessionRepo)
+:userRepo_(std::move(userRepo)),passwordHasher_(passwordHasher),tokenManager_(tokenManager),userSessionRepo_(std::move(userSessionRepo)){
     if(userRepo_==nullptr){
         throw std::invalid_argument("userRepo is null");
     }
@@ -45,6 +45,7 @@ auth::AuthResult auth::AuthService::login(const std::string& username,const std:
     if(!result){
         return AuthResult{.status=AuthStatus::UserNotFound};
     }
+    //校验stauts
     if(result->status!=0){
         return AuthResult{.status=AuthStatus::UserDisabled};
     }
@@ -52,6 +53,8 @@ auth::AuthResult auth::AuthService::login(const std::string& username,const std:
     if(!passwordHasher_.verifyPassword(password,result.value().passwordHash,result.value().passwordSalt)){
         return AuthResult{.status=AuthStatus::BadPassword,.message="password is wrong"};
     }
+    auto issueToken=tokenManager_.issueToken();
+    
     return AuthResult{.ok=true,.user=result.value()};
 }
 bool auth::AuthService::validatePasswordStrength(const std::string& password)const{
@@ -76,4 +79,12 @@ bool auth::AuthService::validatePasswordStrength(const std::string& password)con
         }
     }
     return false;
+}
+auth::AuthResult auth::AuthService::loginByToken(const std::string& rawToken){
+    if(rawToken.empty()){
+        return AuthResult{.status=AuthStatus::InvalidArgument,.message="rawToken is empty"};
+    }
+    //获取tokenHash
+    auto tokenHash=tokenManager_.hashToken(rawToken);
+    
 }

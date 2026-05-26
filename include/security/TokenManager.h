@@ -5,7 +5,7 @@
 /*负责生成安全随机token
 把原始token转成token hash
 验证token格式和过期时间辅助信息*/
-namespace auth{
+namespace security{
 struct IssuedToken{
     std::string rawToken;//返回给客户端，仅返回一次
     std::string tokenHash;//保存到数据库

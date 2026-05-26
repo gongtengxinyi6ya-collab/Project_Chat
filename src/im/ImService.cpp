@@ -924,5 +924,61 @@ im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnK
         return makeErr(req,ErrorCode::INTERNAL,"Failed to bind user");
     }
     session.userId_=result.user.value().userId;
-    return makeOk(req,MsgType::LOGIN_RESP);
+    return makeOk(req,MsgType::LOGIN_RESP,nlohmann::json{{"userId",session.userId_},{"username",username},{"token",result.issuedToken.value().rawToken},{"expireAtMs",result.issuedToken.value().expireAtMs}});
+}
+im::Response im::Imservice::handleTokenLogin(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    std::string token;
+    auto getToken=getStringField(req,"token",token);
+    if(getToken){
+        return getToken.value();
+    }
+    if(session.state_==ConnState::Authed){
+        //当前session已经Authed，幂等处理
+        return makeOk(req,MsgType::TOKEN_LOGIN_REQ);
+    }
+    if(!authService_){
+        return makeErr(req,ErrorCode::INTERNAL,"authService is not exist");
+    }
+    auto result=authService_->loginByToken(token);
+    if(!result.ok){
+        if(result.status==auth::AuthStatus::InvalidToken){
+            return makeErr(req,ErrorCode::TOKEN_INVALID,"token is invalid");
+        }
+        if(result.status==auth::AuthStatus::TokenExpired){
+            return makeErr(req,ErrorCode::TOKEN_EXPIRED,"token is expired");
+        }
+        if(result.status==auth::AuthStatus::TokenRevoked){
+            return makeErr(req,ErrorCode::TOKEN_REVOKED,"token is revoked");
+        }
+        return makeErr(req,ErrorCode::INTERNAL,"Internal error");
+    }
+    if(!sessionManager_.bindUser(key,result.user.value().username)){
+        return makeErr(req,ErrorCode::INTERNAL,"Failed to bind user");
+    }
+    session.userId_=result.user.value().userId;
+    return makeOk(req,MsgType::TOKEN_LOGIN_RESP);
+}
+im::Response im::Imservice::handleLogout(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    std::string token;
+    auto getToken=getStringField(req,"token",token);
+    if(getToken){
+        return getToken.value();
+    }
+    if(!authService_){
+        return makeErr(req,ErrorCode::INTERNAL,"authService is not exist");
+    }
+    auto result=authService_->logout(token);
+    if(result==auth::AuthStatus::TokenRevoked){
+        sessionManager_.unbindConn(key);
+        session.username_.clear();
+        session.state_=ConnState::Connected;
+        session.joinedGroupIds_.clear();
+        session.userId_=0;
+        return makeOk(req,MsgType::LOGOUT_RESP);
+    }
+    return makeErr(req,ErrorCode::INTERNAL,"Internal error");
 }

@@ -37,6 +37,10 @@ enum class MsgType:uint16_t{
     REGISTER_RESP,//注册响应
     LOGIN_REQ,//客户端登录请求
     LOGIN_RESP,//客户端登录响应
+    TOKEN_LOGIN_REQ,//
+    TOKEN_LOGIN_RESP,
+    LOGOUT_REQ,
+    LOGOUT_RESP,
 
     ERR=255
 };
@@ -109,6 +113,14 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::LOGIN_REQ;
         case 33:
             return MsgType::LOGIN_RESP;
+        case 34:
+            return MsgType::TOKEN_LOGIN_REQ;
+        case 35:
+            return MsgType::TOKEN_LOGIN_RESP;
+        case 36:
+            return MsgType::LOGOUT_REQ;
+        case 37:
+            return MsgType::LOGOUT_RESP;
         case 255:
             return MsgType::ERR;
         

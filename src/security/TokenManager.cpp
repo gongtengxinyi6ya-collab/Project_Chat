@@ -1,4 +1,4 @@
-#include "auth/TokenManager.h"
+#include "security/TokenManager.h"
 #include <openssl/rand.h>
 #include <iomanip>
 #include <sstream>
@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <openssl/sha.h>
 #include <chrono>
-std::string auth::TokenManager::sha256Hex(const std::string& input)const{
+std::string security::TokenManager::sha256Hex(const std::string& input)const{
     unsigned char hash[SHA224_DIGEST_LENGTH];
     SHA256(reinterpret_cast<const unsigned char*>(input.data()),input.size(),hash);
     std::ostringstream tokenHash;
@@ -19,7 +19,7 @@ std::string auth::TokenManager::sha256Hex(const std::string& input)const{
     }
     return tokenHash.str();
 }
-auth::IssuedToken auth::TokenManager::issueToken(){
+security::IssuedToken security::TokenManager::issueToken(){
     //生成字节随机数
     std::vector<unsigned char> buf(tokenBytes_);
     if(RAND_bytes(buf.data(),static_cast<int>(buf.size()))!=1){
@@ -42,7 +42,7 @@ auth::IssuedToken auth::TokenManager::issueToken(){
 
 }
 
-std::string auth::TokenManager::hashToken(const std::string&rawToken)const{
+std::string security::TokenManager::hashToken(const std::string&rawToken)const{
     if(rawToken.empty()){
         return "";
     }
