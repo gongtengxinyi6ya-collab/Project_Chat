@@ -30,7 +30,7 @@
     "require_group_id_for_send": true,
     "max_group_name_len": 64,
     "max_message_len": 4096,
-    "allowDebugAuth":false
+    "allow_debug_auth":false
   },
   
   "database": {

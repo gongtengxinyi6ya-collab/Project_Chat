@@ -209,6 +209,7 @@ public:
         body["from"]=state.username;
         body["to"]="";
         body["seq"]=state.allocSeq();  
+        body["token"]=state.token;
         return body.dump();
     }
     std::string buildTokenLoginReq(ClientState& state,std::string token){
@@ -450,8 +451,10 @@ void printPretty(const std::string& payload,ClientState& state){
                     state.loggedIn=true;
                     state.pendingLoginUsername.clear();
                 }
+                else{
                 state.loggedIn=false;
                 state.pendingLoginUsername.clear();
+                }
                 std::cout<<"LOGIN_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             }
@@ -472,8 +475,10 @@ void printPretty(const std::string& payload,ClientState& state){
                     }
 
                 }
+                else{
                 state.loggedIn=false;
                 state.pendingLoginUsername.clear();
+                }
                 std::cout<<"TOKEN_LOGIN_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             }
@@ -482,6 +487,8 @@ void printPretty(const std::string& payload,ClientState& state){
                     state.username.clear();
                     state.loggedIn=false;
                     state.groupIds.clear();
+                    state.token.clear();
+                    state.tokenExpireAtMs=0;
                 }
                 std::cout<<"LOGOUT_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;

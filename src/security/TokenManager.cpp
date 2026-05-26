@@ -7,7 +7,7 @@
 #include <openssl/sha.h>
 #include <chrono>
 std::string security::TokenManager::sha256Hex(const std::string& input)const{
-    unsigned char hash[SHA224_DIGEST_LENGTH];
+    unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256(reinterpret_cast<const unsigned char*>(input.data()),input.size(),hash);
     std::ostringstream tokenHash;
     for(int i=0;i<SHA256_DIGEST_LENGTH;++i){

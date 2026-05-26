@@ -942,7 +942,7 @@ im::Response im::Imservice::handleTokenLogin(const Request& req,[[maybe_unused]]
     }
     if(session.state_==ConnState::Authed){
         //当前session已经Authed，幂等处理
-        return makeOk(req,MsgType::TOKEN_LOGIN_REQ);
+        return makeOk(req,MsgType::TOKEN_LOGIN_RESP);
     }
     if(!authService_){
         return makeErr(req,ErrorCode::INTERNAL,"authService is not exist");
@@ -964,7 +964,7 @@ im::Response im::Imservice::handleTokenLogin(const Request& req,[[maybe_unused]]
         return makeErr(req,ErrorCode::INTERNAL,"Failed to bind user");
     }
     session.userId_=result.user.value().userId;
-    return makeOk(req,MsgType::TOKEN_LOGIN_RESP);
+    return makeOk(req,MsgType::TOKEN_LOGIN_RESP,nlohmann::json{{"userId",session.userId_},{"username",session.username_},{"expireAtMs",result.issuedToken.value().expireAtMs}});
 }
 im::Response im::Imservice::handleLogout(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);

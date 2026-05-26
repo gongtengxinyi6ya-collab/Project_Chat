@@ -15,7 +15,7 @@ storage::RepoResult storage::SqlUserSessionRepo::createSession(const storage::St
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO user_sessions(user_id,username,token_hash,expire_at_ms) VALUES(?,?,?,?)",{session.userId,session.username,session.tokenHash,session.expireAtMs});
+        auto result=conn->executePrepared("INSERT INTO user_sessions(user_id,username,token_hash,expire_at_ms,last_seen_at_ms) VALUES(?,?,?,?,?)",{session.userId,session.username,session.tokenHash,session.expireAtMs,session.lastSeenAtMs});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -47,7 +47,7 @@ std::optional<storage::StoredUserSession> storage::SqlUserSessionRepo::findByTok
             session.tokenHash=tokenHashPair!=row.end()?tokenHashPair->second:"";    
             auto expireAtPair=row.find("expire_at_ms");
             session.expireAtMs=expireAtPair!=row.end()?std::stoll(expireAtPair->second):0;
-            auto createAtPair=row.find("create_at_ms");
+            auto createAtPair=row.find("create_at");
             session.createAtMs=createAtPair!=row.end()?std::stoll(createAtPair->second):0;
             auto lastSeenAtPair=row.find("last_seen_at_ms");
             session.lastSeenAtMs=lastSeenAtPair!=row.end()?std::stoll(lastSeenAtPair->second):0;

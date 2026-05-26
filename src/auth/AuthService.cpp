@@ -98,7 +98,7 @@ auth::AuthResult auth::AuthService::loginByToken(const std::string& rawToken){
         return AuthResult{.status=AuthStatus::InvalidToken,.message="Failed to get tokenHash"};
     }
     auto result=userSessionRepo_->findByTokenHash(tokenHash);
-    if(result){
+    if(!result){
         return AuthResult{.status=AuthStatus::InvalidToken};
     }
     auto session=result.value();
