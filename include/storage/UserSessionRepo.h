@@ -20,10 +20,10 @@ struct StoredUserSession
 class UserSessionRepo{
 public:
     virtual ~UserSessionRepo()=default;
-    virtual RepoResult createSession(const StoredUserSession& session)=0;//登录成功后调用，保存到数据库
+    virtual RepoResult createSession(const StoredUserSession& session)=0;//登录成功后调用，保存token会话到数据库
     virtual std::optional<StoredUserSession> findByTokenHash(const std::string& tokenHash)=0;//TOKEN_LOGIN_REQ后调用，根据hash查询session
     virtual RepoResult touchSession(const std::string& tokenHash,int64_t lastSeenAtMs)=0;//token登录成功后更新最近使用时间
-    virtual RepoResult revokeSession(const std::string& tokenHash)=0;//退出登录后删除session
+    virtual RepoResult revokeSession(const std::string& tokenHash,int64_t revokedAtMs)=0;//注销后软失效token
 };
 
 }

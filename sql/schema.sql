@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     username VARCHAR(64) NOT NULL,
     token_hash CHAR(64) NOT NULL,
     expire_at_ms BIGINT UNSIGNED NOT NULL,
+    created_at_ms BIGINT UNSIGNED NOT NULL,
     last_seen_at_ms BIGINT UNSIGNED NOT NULL,
     revoked TINYINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

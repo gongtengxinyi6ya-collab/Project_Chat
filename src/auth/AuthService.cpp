@@ -122,7 +122,8 @@ auth::AuthStatus auth::AuthService::logout(const std::string& rawToken){
     if(tokenHash.empty()){
         return AuthStatus::InvalidToken;
     }
-    auto result=userSessionRepo_->revokeSession(tokenHash);
+    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto result=userSessionRepo_->revokeSession(tokenHash,nowMs);
     if(result.ok()){
         return AuthStatus::TokenRevoked;
     }
