@@ -121,7 +121,7 @@ std::string_view im::Imservice::sendResultToString(SendResult result)const{
 //持久化存储接口
 void im::Imservice::setRepositories(storage::RepositoryBundle repos){
     repos_=std::move(repos);
-    if(repos_.userRepo){
+    if(repos_.userRepo&&repos_.userSessionRepo){
         security::PasswordHasher passwordHash(16,"SHA256");
         security::TokenManager tokenManager;
         authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash,tokenManager,repos_.userSessionRepo);
