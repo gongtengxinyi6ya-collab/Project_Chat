@@ -10,6 +10,7 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlOfflineMessageRepo.h"
 #include "storage/sql/SqlUserSessionRepo.h"
+#include "storage/sql/SqlUserProfileRepo.h"
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& dbConfig){
     auto pool=std::make_shared<SqlConnectionPool>(dbConfig);
     if(!pool->start()){
@@ -24,6 +25,7 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
     bundle.messageRepo=std::make_shared<SqlMessageRepo>(pool);
     bundle.offlineMessageRepo=std::make_shared<SqlOfflineMessageRepo>(pool);
     bundle.userSessionRepo=std::make_shared<SqlUserSessionRepo>(pool);
+    bundle.userProfileRepo=std::make_shared<SqlUserProfileRepo>(pool);
     return bundle;
 }
 #else

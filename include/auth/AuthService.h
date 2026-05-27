@@ -9,12 +9,13 @@
 #include "auth/AuthResult.h"
 #include "storage/UserSessionRepo.h"
 #include "security/TokenManager.h"
+#include "storage/UserProfileRepo.h"
 /*AuthService:
 负责账号注册和登录*/
 namespace auth{
 class AuthService{
 public:
-    explicit AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher,security::TokenManager tokenManager,std::shared_ptr<storage::UserSessionRepo> userSessionRepo);
+    explicit AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher,security::TokenManager tokenManager,std::shared_ptr<storage::UserSessionRepo> userSessionRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo);
     AuthResult registerUser(const std::string& username,const std::string& password);//注册新用户
     AuthResult login(const std::string& username,const std::string& password);
     bool validatePasswordStrength(const std::string& password)const;//检查密码强度，长度和复杂度要求
@@ -27,7 +28,8 @@ private:
     //token
     std::shared_ptr<storage::UserSessionRepo> userSessionRepo_;//保存与查询token会话
     security::TokenManager tokenManager_;//生成与哈希token
-    
+    //用户资料
+    std::shared_ptr<storage::UserProfileRepo> userProfileRepo_;//注册成功时创建默认Profile
 };
 
 }
