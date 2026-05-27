@@ -36,7 +36,7 @@ std::optional<storage::StoredUserSession> storage::SqlUserSessionRepo::findByTok
         return std::nullopt;
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT user_id,username,token_hash,expire_at_ms,created_at_ms,last_seen_at_ms,revoked FROM user_sessions WHERE token_hash=? LIMIT 1",{tokenHash});
+        auto result=conn->queryPrepared("SELECT user_id,username,token_hash,expire_at_ms,created_at_ms,last_seen_at_ms,revoked,revoked_at_ms FROM user_sessions WHERE token_hash=? LIMIT 1",{tokenHash});
         if(result.ok()&&!result.rows.empty()){
             const auto& row=result.rows.front();
             StoredUserSession session;
@@ -54,6 +54,8 @@ std::optional<storage::StoredUserSession> storage::SqlUserSessionRepo::findByTok
             session.lastSeenAtMs=lastSeenAtPair!=row.end()?std::stoll(lastSeenAtPair->second):0;
             auto revokedPair=row.find("revoked");
             session.revoked=revokedPair!=row.end()&&revokedPair->second=="1";
+            auto revokedAtPair=row.find("revoked_at_ms");
+            session.revokedAtMs=revokedAtPair!=row.end()?std::stoll(revokedAtPair->second):0;
             return session;
         }
     }

@@ -960,17 +960,19 @@ im::Response im::Imservice::handleTokenLogin(const Request& req,[[maybe_unused]]
         }
         return makeErr(req,ErrorCode::INTERNAL,"Internal error");
     }
+    if(!result.user.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"Internal error, user info is missing in token login result");
+    }
+    if(!result.tokenExpireAtMs.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"Internal error, token expire time is missing in token login result");
+    }
     if(!sessionManager_.bindUser(key,result.user.value().username)){
         return makeErr(req,ErrorCode::INTERNAL,"Failed to bind user");
     }
     session.userId_=result.user.value().userId;
-    return makeOk(req,MsgType::TOKEN_LOGIN_RESP,nlohmann::json{{"userId",session.userId_},{"username",session.username_},{"expireAtMs",result.tokenExpireAtMs}});
+    return makeOk(req,MsgType::TOKEN_LOGIN_RESP,nlohmann::json{{"userId",session.userId_},{"username",session.username_},{"expireAtMs",result.tokenExpireAtMs.value()}});
 }
 im::Response im::Imservice::handleLogout(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
-    auto err=guardAuthenticated(req,session);
-    if(err){
-        return err.value();
-    }
     std::string token;
     auto getToken=getStringField(req,"token",token);
     if(getToken){
@@ -980,14 +982,28 @@ im::Response im::Imservice::handleLogout(const Request& req,[[maybe_unused]]Conn
         return makeErr(req,ErrorCode::INTERNAL,"authService is not exist");
     }
     auto result=authService_->logout(token);
+    if(!result.ok&&!result.alreadyLoggedOut){
+        if(result.status==auth::AuthStatus::InvalidToken){
+            return makeErr(req,ErrorCode::TOKEN_INVALID,"token is invalid");
+        }
+        if(result.status==auth::AuthStatus::TokenExpired){
+            return makeErr(req,ErrorCode::TOKEN_EXPIRED,"token is expired");
+        }
+        return makeErr(req,ErrorCode::INTERNAL,"Internal error");
+    }
+    std::string username=session.username_;
     //注销
-    if(result.ok){
-        sessionManager_.unbindConn(key);
-        session.username_.clear();
-        session.state_=ConnState::Connected;
-        session.joinedGroupIds_.clear();
-        session.userId_=0;
-        return makeOk(req,MsgType::LOGOUT_RESP,nlohmann::json{{"username",session.username_},{"revoked",result.revokedNow},{"alreadyRevoked",result.alreadyLoggedOut}});
+    if(result.ok||result.alreadyLoggedOut){
+        //若当前连接已经绑定用户，则解绑
+        if(session.state_==ConnState::Authed){
+            sessionManager_.unbindConn(key);
+            session.username_.clear();
+            session.state_=ConnState::Connected;
+            session.joinedGroupIds_.clear();
+            session.userId_=0;
+        }
+
+        return makeOk(req,MsgType::LOGOUT_RESP,nlohmann::json{{"username",username},{"revoked",result.revokedNow},{"alreadyRevoked",result.alreadyLoggedOut}});
     }
     return makeErr(req,ErrorCode::INTERNAL,"Internal error");
 }

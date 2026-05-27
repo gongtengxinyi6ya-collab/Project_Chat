@@ -84,3 +84,16 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     KEY idx_user_sessions_user_id (user_id),
     KEY idx_user_sessions_expire (expire_at_ms)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+    user_id BIGINT UNSIGNED NOT NULL,
+    username VARCHAR(64) NOT NULL,
+    nickname VARCHAR(64) NOT NULL,
+    avatar_url VARCHAR(512) NOT NULL DEFAULT '',
+    signature VARCHAR(256) NOT NULL DEFAULT '',
+    updated_at_ms BIGINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id),
+    UNIQUE KEY uk_user_profiles_username (username)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -239,7 +239,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     }
     if(line.rfind("/dm ",0)==0){
         if(state.username.empty()){
-            std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
             return std::nullopt;
         }
         size_t firstSpace=line.find(' ',4);
@@ -261,14 +261,14 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     }
     if(line=="/gleave"){
         if(state.username.empty()){
-            std::cerr<<"please authenticate first"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
             return std::nullopt;
         }
         return builder.buildLeaveReq(state,std::nullopt);
     }
     if(line.rfind("/gleave ",0)==0){
         if(state.username.empty()){
-            std::cerr<<"please authenticate first"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
             return std::nullopt;
         }
         std::string groupId=line.substr(8);
@@ -277,7 +277,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     
     if(line.rfind("/gsayto ",0)==0){
         if(state.username.empty()){
-            std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
             return std::nullopt;
         }
         size_t firstSpace=line.find(' ',8);
