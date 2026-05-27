@@ -447,9 +447,17 @@ void printPretty(const std::string& payload,ClientState& state){
             }
             case im::MsgType::LOGIN_RESP:{
                 if(json["ok"].get<bool>()){
-                    state.username=state.pendingLoginUsername;
+                    if(json["data"].contains("username")&&json["data"]["username"].is_string()){
+                        state.username=json["data"]["username"].get<std::string>();
+                    }
                     state.loggedIn=true;
                     state.pendingLoginUsername.clear();
+                    if(json["data"].contains("token")&&json["data"]["token"].is_string()){
+                        state.token=json["data"]["token"].get<std::string>();
+                    }
+                    if(json["data"].contains("expireAtMs")&&json["data"]["expireAtMs"].is_number()){
+                        state.tokenExpireAtMs=json["data"]["expireAtMs"].get<int64_t>();
+                    }
                 }
                 else{
                 state.loggedIn=false;
@@ -464,16 +472,14 @@ void printPretty(const std::string& payload,ClientState& state){
             }
             case im::MsgType::TOKEN_LOGIN_RESP:{
                 if(json["ok"].get<bool>()){
-                    state.username=state.pendingLoginUsername;
+                    if(json["data"].contains("username")&&json["data"]["username"].is_string()){
+                        state.username=json["data"]["username"].get<std::string>();
+                    }
                     state.loggedIn=true;
                     state.pendingLoginUsername.clear();
-                    if(json["data"].contains("token")&&json["data"]["token"].is_string()){
-                        state.token=json["data"]["token"].get<std::string>();
+                    if(json["data"].contains("expireAtMs")&&json["data"]["expireAtMs"].is_number()){
+                        state.tokenExpireAtMs=json["data"]["expireAtMs"].get<int64_t>();
                     }
-                    if(json["data"].contains("tokenExpireAtMs")&&json["data"]["tokenExpireAtMs"].is_number()){
-                        state.tokenExpireAtMs=json["data"]["tokenExpireAtMs"].get<int64_t>();
-                    }
-
                 }
                 else{
                 state.loggedIn=false;

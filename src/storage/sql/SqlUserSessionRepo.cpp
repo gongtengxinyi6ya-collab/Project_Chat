@@ -16,7 +16,7 @@ storage::RepoResult storage::SqlUserSessionRepo::createSession(const storage::St
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO user_sessions(user_id,username,token_hash,expire_at_ms,created_at_ms,last_seen_at_ms,revoked) VALUES(?,?,?,?,?,0)",{session.userId,session.username,session.tokenHash,session.expireAtMs,session.createAtMs,session.lastSeenAtMs});
+        auto result=conn->executePrepared("INSERT INTO user_sessions(user_id,username,token_hash,expire_at_ms,created_at_ms,last_seen_at_ms,revoked) VALUES(?,?,?,?,?,?,0)",{session.userId,session.username,session.tokenHash,session.expireAtMs,session.createAtMs,session.lastSeenAtMs});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -85,7 +85,7 @@ storage::RepoResult storage::SqlUserSessionRepo::revokeSession(const std::string
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("UPDATE user_sessions SET revoked=1,last_seen_at_ms=? WHERE token_hash=? AND revokked=0",{tokenHash,revokedAt});
+        auto result=conn->executePrepared("UPDATE user_sessions SET revoked=1,last_seen_at_ms=? WHERE token_hash=? AND revoked=0",{tokenHash,revokedAt});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
