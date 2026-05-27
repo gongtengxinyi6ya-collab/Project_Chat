@@ -253,7 +253,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     }
     if(line.rfind("/gjoin ",0)==0){
         if(state.username.empty()){
-            std::cerr<<"Please authenticate first using /auth <username>"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
             return std::nullopt;
         }
         std::string groupId=line.substr(7);
@@ -458,6 +458,7 @@ void printPretty(const std::string& payload,ClientState& state){
                     if(json["data"].contains("expireAtMs")&&json["data"]["expireAtMs"].is_number()){
                         state.tokenExpireAtMs=json["data"]["expireAtMs"].get<int64_t>();
                     }
+                    std::cout<<"Login successful, token: "<<state.token<<" expireAt: "<<state.tokenExpireAtMs<<std::endl;
                 }
                 else{
                 state.loggedIn=false;

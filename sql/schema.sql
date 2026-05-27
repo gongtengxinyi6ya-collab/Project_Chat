@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     created_at_ms BIGINT UNSIGNED NOT NULL,
     last_seen_at_ms BIGINT UNSIGNED NOT NULL,
     revoked TINYINT NOT NULL DEFAULT 0,
+    revoked_at_ms BIGINT UNSIGNED NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_user_sessions_token_hash (token_hash),

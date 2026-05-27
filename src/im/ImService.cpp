@@ -964,7 +964,7 @@ im::Response im::Imservice::handleTokenLogin(const Request& req,[[maybe_unused]]
         return makeErr(req,ErrorCode::INTERNAL,"Failed to bind user");
     }
     session.userId_=result.user.value().userId;
-    return makeOk(req,MsgType::TOKEN_LOGIN_RESP,nlohmann::json{{"userId",session.userId_},{"username",session.username_},{"expireAtMs",result.issuedToken.value().expireAtMs}});
+    return makeOk(req,MsgType::TOKEN_LOGIN_RESP,nlohmann::json{{"userId",session.userId_},{"username",session.username_},{"expireAtMs",result.tokenExpireAtMs}});
 }
 im::Response im::Imservice::handleLogout(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
@@ -980,13 +980,14 @@ im::Response im::Imservice::handleLogout(const Request& req,[[maybe_unused]]Conn
         return makeErr(req,ErrorCode::INTERNAL,"authService is not exist");
     }
     auto result=authService_->logout(token);
-    if(result==auth::AuthStatus::TokenRevoked){
+    //注销
+    if(result.ok){
         sessionManager_.unbindConn(key);
         session.username_.clear();
         session.state_=ConnState::Connected;
         session.joinedGroupIds_.clear();
         session.userId_=0;
-        return makeOk(req,MsgType::LOGOUT_RESP);
+        return makeOk(req,MsgType::LOGOUT_RESP,nlohmann::json{{"username",session.username_},{"revoked",result.revokedNow},{"alreadyRevoked",result.alreadyLoggedOut}});
     }
     return makeErr(req,ErrorCode::INTERNAL,"Internal error");
 }

@@ -85,7 +85,7 @@ storage::RepoResult storage::SqlUserSessionRepo::revokeSession(const std::string
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("UPDATE user_sessions SET revoked=1,last_seen_at_ms=? WHERE token_hash=? AND revoked=0",{tokenHash,revokedAt});
+        auto result=conn->executePrepared("UPDATE user_sessions SET revoked=1,revoked_at_ms=? WHERE token_hash=? AND revoked=0",{revokedAt,tokenHash});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }

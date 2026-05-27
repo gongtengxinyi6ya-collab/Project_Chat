@@ -2,6 +2,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <cstdint>
 #include "security/PasswordHasher.h"
 #include "storage/RepoResult.h"
 #include "storage/UserRepo.h"
@@ -18,7 +19,7 @@ public:
     AuthResult login(const std::string& username,const std::string& password);
     bool validatePasswordStrength(const std::string& password)const;//检查密码强度，长度和复杂度要求
     AuthResult loginByToken(const std::string& rawToken);//使用token恢复登录身份
-    AuthStatus logout(const std::string& rawToken);//注销当前token
+    LogoutResult logout(const std::string& rawToken);//注销当前token
 private:
     std::shared_ptr<storage::UserRepo> userRepo_;//读写用户账号数据
     security::PasswordHasher passwordHasher_;//生成密码hash,校验密码
@@ -26,6 +27,7 @@ private:
     //token
     std::shared_ptr<storage::UserSessionRepo> userSessionRepo_;//保存与查询token会话
     security::TokenManager tokenManager_;//生成与哈希token
+    
 };
 
 }

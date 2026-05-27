@@ -16,6 +16,7 @@ struct StoredUserSession
     int64_t createAtMs{0};//创建时间
     int64_t lastSeenAtMs{0};//最近使用时间
     bool revoked{false};//是否已退出或者注销
+    std::optional<int64_t> revokedAtMs{std::nullopt};//token被注销时间
 };
 class UserSessionRepo{
 public:

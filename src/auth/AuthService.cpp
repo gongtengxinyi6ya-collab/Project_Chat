@@ -4,8 +4,8 @@
 #include <cctype>
 auth::AuthService::AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher,security::TokenManager tokenManager,std::shared_ptr<storage::UserSessionRepo> userSessionRepo)
 :userRepo_(std::move(userRepo)),passwordHasher_(passwordHasher),tokenManager_(tokenManager),userSessionRepo_(std::move(userSessionRepo)){
-    if(userRepo_==nullptr){
-        throw std::invalid_argument("userRepo is null");
+    if(userRepo_==nullptr||userSessionRepo_==nullptr){
+        throw std::invalid_argument("userRepo and userSessionRepo are null");
     }
 }
 auth::AuthResult auth::AuthService::registerUser(const std::string& username,const std::string& password){
@@ -63,7 +63,7 @@ auth::AuthResult auth::AuthService::login(const std::string& username,const std:
     if(!saveResult.ok()){
         return AuthResult{.status=AuthStatus::Internal,.message=saveResult.message};
     }
-    return AuthResult{.ok=true,.status=AuthStatus::Ok,.user=result.value(),.issuedToken=issueToken};
+    return AuthResult{.ok=true,.status=AuthStatus::Ok,.user=result.value(),.issuedToken=issueToken,.tokenExpireAtMs=issueToken.expireAtMs};
 }
 bool auth::AuthService::validatePasswordStrength(const std::string& password)const{
     if(password.size()<8||password.size()>32){
@@ -101,10 +101,12 @@ auth::AuthResult auth::AuthService::loginByToken(const std::string& rawToken){
     if(!result){
         return AuthResult{.status=AuthStatus::InvalidToken};
     }
+    //判断是否注销
     auto session=result.value();
     if(session.revoked){
         return AuthResult{.status=AuthStatus::TokenRevoked};
     }
+    //更新最近使用时间
     auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     if(session.expireAtMs<=nowMs){
         return AuthResult{.status=AuthStatus::TokenExpired};
@@ -114,18 +116,28 @@ auth::AuthResult auth::AuthService::loginByToken(const std::string& rawToken){
         return AuthResult{.status=AuthStatus::Internal,.message="Failed to update lastSeenAtMs"};
     }
     storage::UserAuthInfo userInfo{.userId=session.userId,.username=session.username};
-    return AuthResult{.ok=true,.status=AuthStatus::Ok,.user=userInfo};
+    return AuthResult{.ok=true,.status=AuthStatus::Ok,.user=userInfo,.tokenExpireAtMs=session.expireAtMs};
     
 }
-auth::AuthStatus auth::AuthService::logout(const std::string& rawToken){
+auth::LogoutResult auth::AuthService::logout(const std::string& rawToken){
+    if(rawToken.empty()){
+        return LogoutResult{.status=AuthStatus::InvalidToken};
+    }
     auto tokenHash=tokenManager_.hashToken(rawToken);
     if(tokenHash.empty()){
-        return AuthStatus::InvalidToken;
+        return LogoutResult{.status=AuthStatus::InvalidToken};
+    }
+    auto findResult=userSessionRepo_->findByTokenHash(tokenHash);
+    if(!findResult){
+        return LogoutResult{.status=AuthStatus::InvalidToken};
+    }
+    if(findResult.value().revoked){//幂等注销
+        return LogoutResult{.ok=true,.status=AuthStatus::Ok,.alreadyLoggedOut=true};
     }
     auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     auto result=userSessionRepo_->revokeSession(tokenHash,nowMs);
     if(result.ok()){
-        return AuthStatus::TokenRevoked;
+        return LogoutResult{.ok=true,.status=AuthStatus::Ok,.revokedNow=true};
     }
-    return AuthStatus::Internal;
+    return LogoutResult{.status=AuthStatus::Internal};
 }
