@@ -31,7 +31,7 @@ storage::RepoResult storage::SqlUserProfileRepo::createDefaultProfile(uint64_t u
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to create userProfile"};
 }
 std::optional<storage::UserProfile> storage::SqlUserProfileRepo::findByUserId(uint64_t userId)const{
-    if(userId=0){
+    if(userId==0){
         return std::nullopt;
     }
     auto conn=pool_->acquire();
@@ -39,7 +39,7 @@ std::optional<storage::UserProfile> storage::SqlUserProfileRepo::findByUserId(ui
         return std::nullopt;
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT user_id,username,nickname,avatar_url,signature,updated_at_ms FROM user_profiles WHERE userId=? LIMIT 1",{userId});
+        auto result=conn->queryPrepared("SELECT user_id,username,nickname,avatar_url,signature,updated_at_ms FROM user_profiles WHERE user_id=? LIMIT 1",{userId});
         if(result.ok()&&!result.rows.empty()){
             const auto& row=result.rows.front();
             UserProfile profile;
@@ -92,7 +92,7 @@ std::optional<storage::UserProfile> storage::SqlUserProfileRepo::findByUsername(
 }
 
 storage::RepoResult storage::SqlUserProfileRepo::updateProfile(uint64_t userId,const std::string& nickname,const std::string& avatarUrl,const std::string& signature,int64_t updateAtMs){
-    if(userId==0||nickname.empty()||signature.empty()||avatarUrl.empty()||updateAtMs==0){
+    if(userId==0||nickname.empty()||updateAtMs==0){
         return RepoResult{.status=RepoStatus::InvalidArgument};
     }
     //默认昵称使用username
@@ -103,10 +103,10 @@ storage::RepoResult storage::SqlUserProfileRepo::updateProfile(uint64_t userId,c
     if(conn->connected()){
         auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         auto result=conn->executePrepared("UPDATE user_profiles SET nickname=?,avatar_url=?,signature=?,updated_at_ms=? WHERE user_id=?",{nickname,avatarUrl,signature,updateAtMs,userId});
-        if(result.ok()){
+        if(result.ok()&&result.affectedRows!=0){
             return RepoResult{.status=RepoStatus::Ok};
         }
-        if(!result.ok()&&result.affectedRows==0){
+        if(!result.ok()){
             return RepoResult{.status=RepoStatus::NotFound,.message="Failed to update profile"};
         }
          return RepoResult{.status=RepoStatus::SqlError,.message=result.error};

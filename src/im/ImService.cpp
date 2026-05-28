@@ -562,6 +562,10 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
         case im::ErrorCode::TOKEN_INVALID:
         case im::ErrorCode::TOKEN_EXPIRED:
         case im::ErrorCode::TOKEN_REVOKED:
+        case im::ErrorCode::PROFILE_NOT_FOUND:
+        case im::ErrorCode::AVATAR_URL_TOO_LONG:
+        case im::ErrorCode::SIGNATURE_TOO_LONG:
+        case im::ErrorCode::NICKNAME_INVALID:
             return LogLevel::WARN;
         case im::ErrorCode::INTERNAL:
             return LogLevel::ERROR;
@@ -1068,7 +1072,7 @@ im::Response im::Imservice::handleUpdateProfile(const Request& req,[[maybe_unuse
         auto profileResult=repos_.userProfileRepo->findByUserId(session.userId_);
         if(profileResult){
             auto userProfile=profileResult.value();
-            return makeOk(req,MsgType::GET_PROFILE_RESP,nlohmann::json{{"userId",userProfile.userId},{"username",userProfile.username},{"nickname",userProfile.nickname},{"avatarUrl",userProfile.avatarUrl},{"signature",userProfile.signature},{"updateAtMs",userProfile.updateAtMs}});
+            return makeOk(req,MsgType::UPDATE_PROFILE_RESP,nlohmann::json{{"userId",userProfile.userId},{"username",userProfile.username},{"nickname",userProfile.nickname},{"avatarUrl",userProfile.avatarUrl},{"signature",userProfile.signature},{"updateAtMs",userProfile.updateAtMs}});
         }
         return makeErr(req,ErrorCode::PROFILE_NOT_FOUND,"Failed to get profile");
     }
