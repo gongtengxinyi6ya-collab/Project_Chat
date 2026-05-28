@@ -24,6 +24,10 @@ enum class ErrorCode: uint16_t{
     TOKEN_INVALID,//token不存在或格式错误
     TOKEN_EXPIRED,//token过期
     TOKEN_REVOKED,//用户主动退出登录后再次使用token
+    PROFILE_NOT_FOUND,//当前账号没有对应资料记录
+    NICKNAME_INVALID,//昵称为空或超长
+    SIGNATURE_TOO_LONG,//签名长度超过限制
+    AVATAR_URL_TOO_LONG,//头像URL长度超过限制
     INTERNAL//服务器内部错误
 
 };
@@ -70,6 +74,14 @@ inline const char* errCodeToString(ErrorCode code){
             return "Token is expired";
         case ErrorCode::TOKEN_REVOKED:
             return "Token is revoked";
+        case ErrorCode::PROFILE_NOT_FOUND:
+            return "Profile not found";
+        case ErrorCode::NICKNAME_INVALID:
+            return "Nickname is invalid";
+        case ErrorCode::SIGNATURE_TOO_LONG:
+            return "Signature is too long";
+        case ErrorCode::AVATAR_URL_TOO_LONG:
+            return "Avatar URL is too long";
         default:
             return "Unknown Error Code";
     }

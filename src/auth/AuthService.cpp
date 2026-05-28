@@ -2,10 +2,10 @@
 #include <stdexcept>
 #include <chrono>
 #include <cctype>
-auth::AuthService::AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher,security::TokenManager tokenManager,std::shared_ptr<storage::UserSessionRepo> userSessionRepo)
-:userRepo_(std::move(userRepo)),passwordHasher_(passwordHasher),tokenManager_(tokenManager),userSessionRepo_(std::move(userSessionRepo)){
-    if(userRepo_==nullptr||userSessionRepo_==nullptr){
-        throw std::invalid_argument("userRepo and userSessionRepo are null");
+auth::AuthService::AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher,security::TokenManager tokenManager,std::shared_ptr<storage::UserSessionRepo> userSessionRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo)
+:userRepo_(std::move(userRepo)),passwordHasher_(passwordHasher),tokenManager_(tokenManager),userSessionRepo_(std::move(userSessionRepo)),userProfileRepo_(std::move(userProfileRepo)){
+    if(userRepo_==nullptr||userSessionRepo_==nullptr||userProfileRepo_==nullptr){
+        throw std::invalid_argument("One or more repositories are null");
     }
 }
 auth::AuthResult auth::AuthService::registerUser(const std::string& username,const std::string& password){
@@ -26,6 +26,15 @@ auth::AuthResult auth::AuthService::registerUser(const std::string& username,con
         auto hashResult=passwordHasher_.hashPassword(password);
         auto result=userRepo_->createUser(username,hashResult.hash,hashResult.salt);
         if(result.ok()){
+            auto userInfo=userRepo_->findAuthInfo(username);
+            if(!userInfo){
+                return AuthResult{.status=AuthStatus::UserNotFound};
+            }
+            auto createProfile=userProfileRepo_->createDefaultProfile(userInfo.value().userId,username);
+            if(!createProfile.ok()){
+                return AuthResult{.status=AuthStatus::Internal,.message="Failed to create userProfile"};
+                
+            }
             return AuthResult{.ok=true,.status=AuthStatus::Ok};
         }
         if(result.status==storage::RepoStatus::AlreadyExists){

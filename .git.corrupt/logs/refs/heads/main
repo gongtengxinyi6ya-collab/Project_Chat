@@ -1,0 +1,18 @@
+0000000000000000000000000000000000000000 ce9e695538a902f59a8714029bea2b3c335b9eda jason <jason@example.com> 1779416317 +0800	clone: from https://github.com/gongtengxinyi6ya-collab/Project_Chat.git
+ce9e695538a902f59a8714029bea2b3c335b9eda bc9f451bb716c67e58f0e563e2bb7083e6163cf1 jason <jason@example.com> 1779416589 +0800	commit: 完善离线消息接口，添加到Im系统；
+bc9f451bb716c67e58f0e563e2bb7083e6163cf1 1b9cdf6cc8ca32585dd4dd81611ecd6c23281441 jason <jason@example.com> 1779421814 +0800	commit: 完善用户账号，添加类型
+1b9cdf6cc8ca32585dd4dd81611ecd6c23281441 71407ce35f087af77fd12168f19fcdfac2ae1609 jason <jason@example.com> 1779437067 +0800	commit: 添加PasswordHasher进行哈希映射和哈希校验
+71407ce35f087af77fd12168f19fcdfac2ae1609 8c1300cb36bfa626d7eeae2ce1f69acbfb8042a4 jason <jason@example.com> 1779439992 +0800	commit: 修改SqlUserRepo,注册时存储密码hash与salt
+8c1300cb36bfa626d7eeae2ce1f69acbfb8042a4 404c09e1e77372ac627e1d285e63c4dca02103da jason <jason@example.com> 1779466426 +0800	commit: 添加AuthService，进行注册与登录
+404c09e1e77372ac627e1d285e63c4dca02103da 642134359672bd5a2b1f6593c666bc53270e2ebc jason <jason@example.com> 1779526073 +0800	commit: im系统添加AuthService
+642134359672bd5a2b1f6593c666bc53270e2ebc 6779e43cc8d4f6fbd67f4ffb03779f8fa3cba507 jason <jason@example.com> 1779698153 +0800	commit: Im添加注册与登录接口，完善im的MsgType
+6779e43cc8d4f6fbd67f4ffb03779f8fa3cba507 57b1b7e2dbd69dada8bd83f8767e49d55af64338 jason <jason@example.com> 1779702002 +0800	commit: 修复注册登录问题
+57b1b7e2dbd69dada8bd83f8767e49d55af64338 0771c1edf9931544fffd62e899ff1246bfaa2962 jason <jason@example.com> 1779725627 +0800	commit: 增加TokenManager
+0771c1edf9931544fffd62e899ff1246bfaa2962 8d3226f94b6c0dbefc9fc631d795f9a11490396f jason <jason@example.com> 1779788911 +0800	commit: 添加UserSessionRepo
+8d3226f94b6c0dbefc9fc631d795f9a11490396f 5a097f0d88c750cf6c17b46f3cd49f0fb617a7e7 jason <jason@example.com> 1779798064 +0800	commit: 完善UserSessionRepo方法以及使用接口
+5a097f0d88c750cf6c17b46f3cd49f0fb617a7e7 a5110e09a099a437a9f242f797c68f61caae2700 jason <jason@example.com> 1779811331 +0800	commit: 修复问题
+a5110e09a099a437a9f242f797c68f61caae2700 36f0932f673825db1d5075f4c2bc1262b43c224b jason <jason@example.com> 1779851507 +0800	commit: 表结构添加created_at_ms,提供毫秒级时间戳
+36f0932f673825db1d5075f4c2bc1262b43c224b 96144fed9f63bccceb56218407f034dd2b43c293 jason <jason@example.com> 1779853791 +0800	commit: 修复问题
+96144fed9f63bccceb56218407f034dd2b43c293 7173dc1e5b892c85f1169771a347a47f71640361 jason <jason@example.com> 1779859027 +0800	commit: 防御性补充构造检查usersessionrepo非空
+7173dc1e5b892c85f1169771a347a47f71640361 6a9ac0531df3bf93bf9575b5fb4d0cf0987959f8 jason <jason@example.com> 1779883317 +0800	commit: 完善注销流程
+6a9ac0531df3bf93bf9575b5fb4d0cf0987959f8 89d2ca74da876f3fa6a655bd5e6449cbf589e460 jason <jason@example.com> 1779889896 +0800	commit: 添加UserProfileRepo抽象接口

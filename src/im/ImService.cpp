@@ -1007,3 +1007,57 @@ im::Response im::Imservice::handleLogout(const Request& req,[[maybe_unused]]Conn
     }
     return makeErr(req,ErrorCode::INTERNAL,"Internal error");
 }
+
+//用户资料
+im::Response im::Imservice::handleGetProfile(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    if(!repos_.userProfileRepo){
+        return makeErr(req,ErrorCode::INTERNAL,"userProfile is not exist");
+    }
+    auto result=repos_.userProfileRepo->findByUserId(session.userId_);
+    if(result){
+        auto userProfile=result.value();
+        return makeOk(req,MsgType::GET_PROFILE_RESP,nlohmann::json{{"userId",userProfile.userId},{"username",userProfile.username},{"nickname",userProfile.nickname},{"avatarUrl",userProfile.avatarUrl},{"signature",userProfile.signature},{"updateAtMs",userProfile.updateAtMs}});
+    }
+    return makeErr(req,ErrorCode::PROFILE_NOT_FOUND,"Failed to get profile");
+}
+im::Response im::Imservice::handleUpdateProfile(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    //读取body
+    std::string nickname;
+    auto getNickname=getStringField(req,"nickname",nickname);
+    if(getNickname){
+        return getNickname.value();
+    }
+    if(nickname.empty()||nickname.size()>64){
+        return makeErr(req,ErrorCode::NICKNAME_INVALID,"nickname invalid");
+    }
+    std::string avatarUrl;
+    auto getUrl=getStringField(req,"avatarUrl",avatarUrl);
+    if(getUrl){
+        return getUrl.value();
+    }
+    if(avatarUrl.size()>512){
+        return makeErr(req,ErrorCode::AVATAR_URL_TOO_LONG,"avatarUrl is too long");
+    }
+    std::string signature;
+    auto getSignature=getStringField(req,"signature",signature);
+    if(getSignature){
+        return getSignature.value();
+    }
+    if(!repos_.userProfileRepo){
+        return makeErr(req,ErrorCode::INTERNAL,"userProfile is not exist");
+    }
+    auto result=repos_.userProfileRepo->findByUserId(session.userId_);
+    if(result){
+        auto userProfile=result.value();
+        return makeOk(req,MsgType::GET_PROFILE_RESP,nlohmann::json{{"userId",userProfile.userId},{"username",userProfile.username},{"nickname",userProfile.nickname},{"avatarUrl",userProfile.avatarUrl},{"signature",userProfile.signature},{"updateAtMs",userProfile.updateAtMs}});
+    }
+    return makeErr(req,ErrorCode::PROFILE_NOT_FOUND,"Failed to get profile");
+}

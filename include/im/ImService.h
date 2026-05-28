@@ -123,5 +123,10 @@ private:
     //token登录和注销
     Response handleTokenLogin(const Request& req,ConnKey key,Session& session);//处理token登录
     Response handleLogout(const Request& req,ConnKey key,Session& session);//处理注销
+
+    //用户资料接口
+    Response handleGetProfile(const Request& req,ConnKey key,Session& session);//当前已登录用户查询自己的资料
+    Response handleUpdateProfile(const Request& req,ConnKey key,Session& session);//当前登录用户修改自己的公开资料
+    
 };
 }

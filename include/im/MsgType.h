@@ -41,7 +41,10 @@ enum class MsgType:uint16_t{
     TOKEN_LOGIN_RESP,
     LOGOUT_REQ,
     LOGOUT_RESP,
-
+    GET_PROFILE_REQ,//获取自己资料
+    GET_PROFILE_RESP,//返回自己的资料
+    UPDATE_PROFILE_REQ,//修改资料请求
+    UPDATE_PROFILE_RESP,//修改资料响应
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -121,6 +124,14 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::LOGOUT_REQ;
         case 37:
             return MsgType::LOGOUT_RESP;
+        case 38:
+            return MsgType::GET_PROFILE_REQ;
+        case 39:
+            return MsgType::GET_PROFILE_RESP;
+        case 40:
+            return MsgType::UPDATE_PROFILE_REQ;
+        case 41:
+            return MsgType::UPDATE_PROFILE_RESP;
         case 255:
             return MsgType::ERR;
         
