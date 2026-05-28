@@ -124,7 +124,7 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
     if(repos_.userRepo&&repos_.userSessionRepo){
         security::PasswordHasher passwordHash(16,"SHA256");
         security::TokenManager tokenManager;
-        authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash,tokenManager,repos_.userSessionRepo);
+        authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash,tokenManager,repos_.userSessionRepo,repos_.userProfileRepo);
     }
 }
 bool im::Imservice::hasRepositories()const{
@@ -686,6 +686,10 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleLogout(req,key,session);
         case im::MsgType::TOKEN_LOGIN_REQ:
             return handleTokenLogin(req,key,session);
+        case im::MsgType::GET_PROFILE_REQ:
+            return handleGetProfile(req,key,session);
+        case im::MsgType::UPDATE_PROFILE_REQ:
+            return handleUpdateProfile(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -1022,6 +1026,7 @@ im::Response im::Imservice::handleGetProfile(const Request& req,[[maybe_unused]]
         auto userProfile=result.value();
         return makeOk(req,MsgType::GET_PROFILE_RESP,nlohmann::json{{"userId",userProfile.userId},{"username",userProfile.username},{"nickname",userProfile.nickname},{"avatarUrl",userProfile.avatarUrl},{"signature",userProfile.signature},{"updateAtMs",userProfile.updateAtMs}});
     }
+    
     return makeErr(req,ErrorCode::PROFILE_NOT_FOUND,"Failed to get profile");
 }
 im::Response im::Imservice::handleUpdateProfile(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
@@ -1051,13 +1056,21 @@ im::Response im::Imservice::handleUpdateProfile(const Request& req,[[maybe_unuse
     if(getSignature){
         return getSignature.value();
     }
+    if(signature.size()>256){
+        return makeErr(req,ErrorCode::SIGNATURE_TOO_LONG,"signature is too long");
+    }
     if(!repos_.userProfileRepo){
         return makeErr(req,ErrorCode::INTERNAL,"userProfile is not exist");
     }
-    auto result=repos_.userProfileRepo->findByUserId(session.userId_);
-    if(result){
-        auto userProfile=result.value();
-        return makeOk(req,MsgType::GET_PROFILE_RESP,nlohmann::json{{"userId",userProfile.userId},{"username",userProfile.username},{"nickname",userProfile.nickname},{"avatarUrl",userProfile.avatarUrl},{"signature",userProfile.signature},{"updateAtMs",userProfile.updateAtMs}});
+    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto result=repos_.userProfileRepo->updateProfile(session.userId_,nickname,avatarUrl,signature,nowMs);
+    if(result.ok()){
+        auto profileResult=repos_.userProfileRepo->findByUserId(session.userId_);
+        if(profileResult){
+            auto userProfile=profileResult.value();
+            return makeOk(req,MsgType::GET_PROFILE_RESP,nlohmann::json{{"userId",userProfile.userId},{"username",userProfile.username},{"nickname",userProfile.nickname},{"avatarUrl",userProfile.avatarUrl},{"signature",userProfile.signature},{"updateAtMs",userProfile.updateAtMs}});
+        }
+        return makeErr(req,ErrorCode::PROFILE_NOT_FOUND,"Failed to get profile");
     }
-    return makeErr(req,ErrorCode::PROFILE_NOT_FOUND,"Failed to get profile");
+    return makeErr(req,ErrorCode::INTERNAL,"Failed to update profile");
 }

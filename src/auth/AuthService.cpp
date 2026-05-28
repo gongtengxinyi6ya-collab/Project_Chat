@@ -3,7 +3,7 @@
 #include <chrono>
 #include <cctype>
 auth::AuthService::AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher,security::TokenManager tokenManager,std::shared_ptr<storage::UserSessionRepo> userSessionRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo)
-:userRepo_(std::move(userRepo)),passwordHasher_(passwordHasher),tokenManager_(tokenManager),userSessionRepo_(std::move(userSessionRepo)),userProfileRepo_(std::move(userProfileRepo)){
+:userRepo_(std::move(userRepo)),passwordHasher_(passwordHasher),userSessionRepo_(std::move(userSessionRepo)),tokenManager_(tokenManager),userProfileRepo_(std::move(userProfileRepo)){
     if(userRepo_==nullptr||userSessionRepo_==nullptr||userProfileRepo_==nullptr){
         throw std::invalid_argument("One or more repositories are null");
     }

@@ -223,6 +223,35 @@ public:
         body["token"]=token;
         return body.dump();
     }
+    std::string buildGetProfileReq(ClientState& state){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::GET_PROFILE_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        return body.dump();
+    }
+    std::string buildUpdateProfileReq(ClientState& state,std::optional<std::string> nickname,std::optional<std::string> avatarUrl,std::optional<std::string> signature){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::UPDATE_PROFILE_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.username;    
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        if(nickname.has_value()){
+            body["nickname"]=nickname.value();
+        }
+        if(avatarUrl.has_value()){
+            body["avatarUrl"]=avatarUrl.value();
+        }
+        if(signature.has_value()){
+            body["signature"]=signature.value();
+        }
+        return body.dump();
+    }
 };
 //把/auth jason,/dm tom hello,/list,/gjoin room,/gleave ,/gmembers,/gls,/gsay 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
@@ -349,6 +378,28 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         std::string token=line.substr(12);
         return builder.buildTokenLoginReq(state,token);
     }
+    if(line=="/getprofile"){
+        return builder.buildGetProfileReq(state);
+    }
+    if(line.rfind("/updateprofile ",0)==0){
+        size_t firstSpace=line.find(' ',15);
+        if(firstSpace==std::string::npos) return std::nullopt;
+        std::string nickname;
+        std::string avatarUrl;
+        std::string signature;
+        size_t secondSpace=line.find(' ',firstSpace+1); 
+        if(secondSpace==std::string::npos){
+            nickname=line.substr(15,firstSpace-15);
+            avatarUrl=line.substr(firstSpace+1);
+        }
+        else{
+            nickname=line.substr(15,firstSpace-15);
+            avatarUrl=line.substr(firstSpace+1,secondSpace-firstSpace-1);
+            signature=line.substr(secondSpace+1);
+        }
+        return builder.buildUpdateProfileReq(state,nickname.empty()?std::nullopt:std::optional<std::string>(nickname),avatarUrl.empty()?std::nullopt:std::optional<std::string>(avatarUrl),signature.empty()?std::nullopt:std::optional<std::string>(signature));
+    }
+
     return std::nullopt;
 }
 //尝试parse JSON,按type分类打印摘要，失败则原样输出
@@ -498,6 +549,43 @@ void printPretty(const std::string& payload,ClientState& state){
                     state.tokenExpireAtMs=0;
                 }
                 std::cout<<"LOGOUT_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            }
+            case im::MsgType::GET_PROFILE_RESP:{
+                if(json["ok"].get<bool>()){
+                    std::cout<<"Profile: "<<std::endl;
+                    if(json["data"].contains("username")&&json["data"]["username"].is_string()){
+                        std::cout<<"Username: "<<json["data"]["username"].get<std::string>()<<std::endl;
+                    }
+                    if(json["data"].contains("nickname")&&json["data"]["nickname"].is_string()){
+                        std::cout<<"Nickname: "<<json["data"]["nickname"].get<std::string>()<<std::endl;
+                    }
+                    if(json["data"].contains("avatarUrl")&&json["data"]["avatarUrl"].is_string()){
+                        std::cout<<"AvatarUrl: "<<json["data"]["avatarUrl"].get<std::string>()<<std::endl;
+                    }
+                    if(json["data"].contains("signature")&&json["data"]["signature"].is_string()){
+                        std::cout<<"Signature: "<<json["data"]["signature"].get<std::string>()<<std::endl;
+                    }
+                }
+                else{
+                    std::cout<<"Failed to get profile: "<<json["msg"].get<std::string>()<<std::endl;
+                }
+                break;
+            }
+            case im::MsgType::UPDATE_PROFILE_RESP:{
+
+                std::cout<<"UPDATE_PROFILE_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                if(json["ok"].get<bool>()){
+                    if(json["data"].contains("nickname")&&json["data"]["nickname"].is_string()){
+                        std::cout<<"New nickname: "<<json["data"]["nickname"].get<std::string>()<<std::endl;
+                    }
+                    if(json["data"].contains("avatarUrl")&&json["data"]["avatarUrl"].is_string()){
+                        std::cout<<"New avatarUrl: "<<json["data"]["avatarUrl"].get<std::string>()<<std::endl;
+                    }
+                    if(json["data"].contains("signature")&&json["data"]["signature"].is_string()){
+                        std::cout<<"New signature: "<<json["data"]["signature"].get<std::string>()<<std::endl;
+                    }
+                }
                 break;
             }
             default:

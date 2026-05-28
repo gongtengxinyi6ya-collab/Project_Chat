@@ -28,6 +28,7 @@ private:
     //token
     std::shared_ptr<storage::UserSessionRepo> userSessionRepo_;//保存与查询token会话
     security::TokenManager tokenManager_;//生成与哈希token
+    
     //用户资料
     std::shared_ptr<storage::UserProfileRepo> userProfileRepo_;//注册成功时创建默认Profile
 };
