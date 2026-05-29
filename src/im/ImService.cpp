@@ -46,7 +46,7 @@ void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     sessionManager_.erase(key);
 }
 
-
+/*
 im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& session){
     if(!imConfig_.allowDebugAuth){
         return makeErr(req,ErrorCode::BAD_REQUEST,"NOT be allowed to auth,please login first");
@@ -67,16 +67,16 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
     if(!sessionManager_.bindUser(key,username)){
         return makeErr(req,im::ErrorCode::INTERNAL,"Failed to bind user to session");
     }
-    /*
+    
     if(hasRepositories()){
         auto result=repos_.userRepo->createUser(username);
         if(result.status!=storage::RepoStatus::Ok&&result.status!=storage::RepoStatus::AlreadyExists){
             return makeRepoError(req,result.status,"Fail to create user");
         }
-    }*/
+    }
     return makeOk(req,im::MsgType::AUTH_RESP);
 }
-
+*/
 std::optional<im::Response> im::Imservice::guardAuthenticated(const Request& req,const Session& session){
     if(session.state_==im::ConnState::Authed){
         return std::nullopt;

@@ -19,7 +19,7 @@ namespace auth{
     };
     struct AuthResult
     {
-        bool ok{false};
+        bool ok{false};//注册成功
         AuthStatus status{AuthStatus::Internal};
         std::optional<storage::UserAuthInfo> user{std::nullopt};
         std::string message{};

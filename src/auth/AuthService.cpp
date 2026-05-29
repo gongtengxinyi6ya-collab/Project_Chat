@@ -1,4 +1,5 @@
 #include "auth/AuthService.h"
+#include "auth/AccountIdGenerator.h"
 #include <stdexcept>
 #include <chrono>
 #include <cctype>
@@ -24,13 +25,15 @@ auth::AuthResult auth::AuthService::registerUser(const std::string& username,con
     }
     try{
         auto hashResult=passwordHasher_.hashPassword(password);
-        auto result=userRepo_->createUser(username,hashResult.hash,hashResult.salt);
-        if(result.ok()){
-            auto userInfo=userRepo_->findAuthInfo(username);
+        for(int i=0;i<5;i++){
+            auto accountId=AccountIdGenerator::generateAccountId(12);
+            auto result=userRepo_->createUser(accountId,username,hashResult.hash,hashResult.salt);
+            if(result.ok()){
+                auto userInfo=userRepo_->findAuthInfoByAccountId(accountId);
             if(!userInfo){
                 return AuthResult{.status=AuthStatus::UserNotFound};
             }
-            auto createProfile=userProfileRepo_->createDefaultProfile(userInfo.value().userId,username);
+            auto createProfile=userProfileRepo_->createDefaultProfile(userInfo.value().userId,userInfo.value().accountId,username);
             if(!createProfile.ok()){
                 return AuthResult{.status=AuthStatus::Internal,.message="Failed to create userProfile"};
                 
@@ -38,20 +41,21 @@ auth::AuthResult auth::AuthService::registerUser(const std::string& username,con
             return AuthResult{.ok=true,.status=AuthStatus::Ok};
         }
         if(result.status==storage::RepoStatus::AlreadyExists){
-            return AuthResult{.status=AuthStatus::AlreadyExist,.message="User already exists"};
+            continue;
         }
-        return AuthResult{.status=AuthStatus::Internal,.message=result.message};
+        }
+        return AuthResult{.status=AuthStatus::Internal};
     }catch(const std::exception& e){
         return AuthResult{.status=AuthStatus::Internal,.message=e.what()};
     }
 
 }
-auth::AuthResult auth::AuthService::login(const std::string& username,const std::string& password){
-    if(username.empty()||password.empty()){
+auth::AuthResult auth::AuthService::login(const std::string& accountId,const std::string& password){
+    if(accountId.empty()||password.empty()){
         return AuthResult{.status=AuthStatus::InvalidArgument,.message="username or password is empty"};
     }
     //查询用户信息
-    std::optional<storage::UserAuthInfo> result=userRepo_->findAuthInfo(username);
+    std::optional<storage::UserAuthInfo> result=userRepo_->findAuthInfoByAccountId(accountId);
     if(!result){
         return AuthResult{.status=AuthStatus::UserNotFound};
     }
@@ -67,7 +71,7 @@ auth::AuthResult auth::AuthService::login(const std::string& username,const std:
     auto issueToken=tokenManager_.issueToken();
     auto createAtMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     auto lastSeenAtMs=createAtMs;
-    storage::StoredUserSession session{.userId=userAuthInnfo.userId,.username=userAuthInnfo.username,.tokenHash=issueToken.tokenHash,.expireAtMs=issueToken.expireAtMs,.createAtMs=createAtMs,.lastSeenAtMs=lastSeenAtMs,.revoked=false};
+    storage::StoredUserSession session{.userId=userAuthInnfo.userId,.accountId=userAuthInnfo.accountId,.username=userAuthInnfo.username,.tokenHash=issueToken.tokenHash,.expireAtMs=issueToken.expireAtMs,.createAtMs=createAtMs,.lastSeenAtMs=lastSeenAtMs,.revoked=false};
     auto saveResult=userSessionRepo_->createSession(session);
     if(!saveResult.ok()){
         return AuthResult{.status=AuthStatus::Internal,.message=saveResult.message};

@@ -17,7 +17,7 @@ class AuthService{
 public:
     explicit AuthService(std::shared_ptr<storage::UserRepo> userRepo,security::PasswordHasher passwordHasher,security::TokenManager tokenManager,std::shared_ptr<storage::UserSessionRepo> userSessionRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo);
     AuthResult registerUser(const std::string& username,const std::string& password);//注册新用户
-    AuthResult login(const std::string& username,const std::string& password);
+    AuthResult login(const std::string& accountId,const std::string& password);
     bool validatePasswordStrength(const std::string& password)const;//检查密码强度，长度和复杂度要求
     AuthResult loginByToken(const std::string& rawToken);//使用token恢复登录身份
     LogoutResult logout(const std::string& rawToken);//注销当前token

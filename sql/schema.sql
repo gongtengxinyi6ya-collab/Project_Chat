@@ -3,9 +3,9 @@ CREATE DATABASE IF NOT EXISTS project_chat
     DEFAULT COLLATE utf8mb4_unicode_ci;
 
 use project_chat;
-
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_id VARCHAR(32) NOT NULL,
     username VARCHAR(64) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS users (
     password_salt VARCHAR(64) NOT NULL,
     status TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_users_username (username)
+    UNIQUE KEY uk_users_account_id (account_id),
+    KEY idx_users_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 
 CREATE TABLE IF NOT EXISTS chat_groups(
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS offline_messages(
 CREATE TABLE IF NOT EXISTS user_sessions (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id BIGINT UNSIGNED NOT NULL,
+    account_id VARCHAR(32) NOT NULL,
     username VARCHAR(64) NOT NULL,
     token_hash CHAR(64) NOT NULL,
     expire_at_ms BIGINT UNSIGNED NOT NULL,
@@ -81,12 +82,15 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_user_sessions_token_hash (token_hash),
+    KEY idx_user_sessions_account_id (account_id),
     KEY idx_user_sessions_user_id (user_id),
     KEY idx_user_sessions_expire (expire_at_ms)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+
 CREATE TABLE IF NOT EXISTS user_profiles (
     user_id BIGINT UNSIGNED NOT NULL,
+    account_id VARCHAR(32) NOT NULL,
     username VARCHAR(64) NOT NULL,
     nickname VARCHAR(64) NOT NULL,
     avatar_url VARCHAR(512) NOT NULL DEFAULT '',
@@ -95,5 +99,6 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id),
-    UNIQUE KEY uk_user_profiles_username (username)
+    UNIQUE KEY uk_user_profiles_account_id (account_id),
+    KEY idx_user_profiles_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -10,6 +10,7 @@ namespace storage{
 struct StoredUserSession
 {
     uint64_t userId{0};//用户稳定ID
+    std::string accountId{};//账号唯一标识
     std::string username{};//用户名
     std::string tokenHash{};//数据库存储的token hash
     int64_t expireAtMs{0};//过期时间
