@@ -8,7 +8,7 @@ storage::SqlUserProfileRepo::SqlUserProfileRepo(std::shared_ptr<SqlConnectionPoo
 :pool_(std::move(pool)){
 
 }
-storage::RepoResult storage::SqlUserProfileRepo::createDefaultProfile(uint64_t userId,const std::string& username){
+storage::RepoResult storage::SqlUserProfileRepo::createDefaultProfile(uint64_t userId,const std::string& accountId,const std::string& username){
     if(username.empty()||userId==0){
         return RepoResult{.status=RepoStatus::InvalidArgument};
     }
@@ -19,7 +19,7 @@ storage::RepoResult storage::SqlUserProfileRepo::createDefaultProfile(uint64_t u
     }
     if(conn->connected()){
         auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        auto result=conn->executePrepared("INSERT INTO user_profiles (user_id,username,nickname,avatar_url,signature,updated_at_ms) VALUES(?,?,?,'','',?)",{userId,username,username,nowMs});
+        auto result=conn->executePrepared("INSERT INTO user_profiles (user_id,account_id,username,nickname,avatar_url,signature,updated_at_ms) VALUES(?,?,?,?,'','',?)",{userId,accountId,username,username,nowMs});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
