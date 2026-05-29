@@ -1,3 +1,4 @@
+#pragma once
 #include "storage/UserProfileRepo.h"
 #include <memory>
 /*基于当前连接池，实现用户资料持久化查询与修改*/

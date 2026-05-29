@@ -55,7 +55,7 @@ std::optional<storage::StoredUserSession> storage::SqlUserSessionRepo::findByTok
             auto revokedPair=row.find("revoked");
             session.revoked=revokedPair!=row.end()&&revokedPair->second=="1";
             auto revokedAtPair=row.find("revoked_at_ms");
-            session.revokedAtMs=revokedAtPair!=row.end()?std::stoll(revokedAtPair->second):0;
+            session.revokedAtMs=revokedAtPair!=row.end()&&!revokedAtPair->second.empty()?std::stoll(revokedAtPair->second):0;
             return session;
         }
     }

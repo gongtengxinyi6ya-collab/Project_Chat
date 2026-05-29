@@ -107,9 +107,9 @@ storage::RepoResult storage::SqlUserProfileRepo::updateProfile(uint64_t userId,c
             return RepoResult{.status=RepoStatus::Ok};
         }
         if(!result.ok()){
-            return RepoResult{.status=RepoStatus::NotFound,.message="Failed to update profile"};
+            return RepoResult{.status=RepoStatus::SqlError,.message="Failed to update profile"};
         }
-         return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
+         return RepoResult{.status=RepoStatus::NotFound,.message=result.error};
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to update userProfile"};
 }

@@ -13,7 +13,7 @@ struct UserProfile{
     std::string nickname{};//昵称
     std::string avatarUrl{};//头像资源地址
     std::string signature{};//个性签名
-    int64_t updateAtMs;//最近资料更新时间
+    int64_t updateAtMs{0};//最近资料更新时间
 
 };
 
