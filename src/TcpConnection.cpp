@@ -3,7 +3,7 @@
 #include "ThreadPool.h"
 
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config)
-:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connected_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),idleTimeout_(config.net().idleTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
+:loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connected_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
 }
 
 TcpConnection::~TcpConnection(){
@@ -42,7 +42,6 @@ void TcpConnection::handleRead(){
                     continue;
                 }
                 lastActiveTime_=std::chrono::steady_clock::now();
-                refreshIdleTimer();
                 if(messageCallback_)
                     messageCallback_(shared_from_this(),payload);
             }
@@ -104,9 +103,6 @@ void TcpConnection::handleClose(){
         return;
     }
     stopHeartbeat();
-    if(idleTimerId_.valid()){
-        loop_->cancel(idleTimerId_);
-    }
     channel_->disableAll();
     loop_->removeChannel(fd_);
     closeCallback_(shared_from_this());
@@ -205,7 +201,6 @@ void TcpConnection::connectionEstablished(){
 
     channel_->enableReading();//开启读事件
     startHeartbeat();//启动心跳检测
-    refreshIdleTimer();//启动空闲超时检测
 }
 
 void TcpConnection::connectionDestroyed(){
@@ -268,24 +263,6 @@ void TcpConnection::onHeartbeatTick(){//心跳定时器回调，检查连接状�
         LOG_DEBUG("Connection " + std::to_string(fd_) + " heartbeat tick, sending PING");
         send("PING");
     }
-}
-
-//空闲超时接口
-void TcpConnection::refreshIdleTimer(){
-    if(idleTimerId_.valid()){
-        loop_->cancel(idleTimerId_);
-    }
-    std::weak_ptr<TcpConnection> weakconn=shared_from_this();
-    idleTimerId_=loop_->runAfter(idleTimeout_,[weakconn](){
-        auto self=weakconn.lock();
-        if(self){
-            self->onIdTimerout();
-        }
-    });
-}
-void TcpConnection::onIdTimerout(){
-    LOG_WARN("Connection " + std::to_string(fd_) + " idle timeout, no data received for " + std::to_string(idleTimeout_.count()) + " ms, closing connection");
-    handleClose();
 }
 
 size_t TcpConnection::pendingBytes() const{

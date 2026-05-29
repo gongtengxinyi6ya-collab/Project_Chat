@@ -13,7 +13,6 @@ public:
     //属性
     uint32_t heartBeatMs{50000};//心跳间隔，单位毫秒
     uint32_t heartbeatTimeoutMs{120000};//心跳超时时间，单位毫秒，建议设置为heartbeatInterval的2-3倍
-    uint32_t idleTimeoutMs{60000};//连接空闲超时时间，单位毫秒
     uint32_t maxFrameLen{65536};//最大帧长度，单位字节
     uint32_t connHighWaterMark{1*1024*1024};//连接背压高水位，单位字节，超过则记录过载日志但不强制断开连接
     uint32_t connLowWaterMark{512*1024};//连接背压低水位，单位字节，恢复正常状态的阈值，建议设置为高水位的一半

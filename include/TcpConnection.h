@@ -50,9 +50,6 @@ public:
     void stopHeartbeat();//连接关闭时取消心跳定时器
     bool handleControlFrame(const std::string& payload);//拦截处理控制帧，不进入广播
 
-    //空闲超时接口
-    void refreshIdleTimer();//重置idle计时
-    void onIdTimerout();//到期处理
 
     //背压接口
     size_t pendingBytes() const;//返回outputBuffer_可读字节数
@@ -84,9 +81,6 @@ private:
     std::chrono::milliseconds heartbeatTimeout_;
     void onHeartbeatTick();//每次心跳定时器触发时执行，检测超时并发送ping
 
-    //空闲超时：一段时间内没有收到任何业务帧
-    TimerId idleTimerId_;//
-    std::chrono::milliseconds idleTimeout_{120000};//超时时间
     size_t maxFrameLen;//最大消息长度，超过认为协议错误，关闭连接
 
     //广播背压

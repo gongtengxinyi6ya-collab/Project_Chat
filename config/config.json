@@ -7,9 +7,9 @@
     "backlog": 1024
   },
   "net": {
-    "heartbeat_ms": 5000,
-    "heartbeat_timeout_ms": 30000,
-    "idle_timeout_ms": 120000,
+    "heartbeat_ms": 30000,
+    "heartbeat_timeout_ms": 90000,
+    
     "max_frame_len": 65536,
     "conn_high_water_mark": 1048576,
     "conn_low_water_mark": 524288,

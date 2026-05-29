@@ -3,6 +3,7 @@
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlConnection.h"
 #include <chrono>
+#include <optional>
 
 storage::SqlUserSessionRepo::SqlUserSessionRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
@@ -55,7 +56,12 @@ std::optional<storage::StoredUserSession> storage::SqlUserSessionRepo::findByTok
             auto revokedPair=row.find("revoked");
             session.revoked=revokedPair!=row.end()&&revokedPair->second=="1";
             auto revokedAtPair=row.find("revoked_at_ms");
-            session.revokedAtMs=revokedAtPair!=row.end()&&!revokedAtPair->second.empty()?std::stoll(revokedAtPair->second):0;
+            if(revokedAtPair!=row.end()&&revokedAtPair->second!="NULL"&&!revokedAtPair->second.empty()){
+                session.revokedAtMs=std::stoll(revokedAtPair->second);
+            }
+            else{
+                session.revokedAtMs=std::nullopt;
+            }
             return session;
         }
     }
