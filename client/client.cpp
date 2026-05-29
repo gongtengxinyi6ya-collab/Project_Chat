@@ -20,6 +20,7 @@
 #include "im/ImMessage.h"
 #include "third_party/json.hpp"
 struct ClientState{
+    std::string accountId;
     std::string username;
     std::string pendingLoginUsername;
     bool loggedIn{false};
@@ -501,6 +502,9 @@ void printPretty(const std::string& payload,ClientState& state){
                     if(json["data"].contains("username")&&json["data"]["username"].is_string()){
                         state.username=json["data"]["username"].get<std::string>();
                     }
+                    if(json["data"].contains("accountId")&&json["data"]["accountId"].is_string()){
+                        state.accountId=json["data"]["accountId"].get<std::string>();
+                    }
                     state.loggedIn=true;
                     state.pendingLoginUsername.clear();
                     if(json["data"].contains("token")&&json["data"]["token"].is_string()){
@@ -519,6 +523,12 @@ void printPretty(const std::string& payload,ClientState& state){
                 break;
             }
             case im::MsgType::REGISTER_RESP:{
+                if(json["ok"].get<bool>()){
+                    if(json["data"].contains("accountId")&&json["data"]["accountId"].is_string()){
+                        state.accountId=json["data"]["accountId"].get<std::string>();
+                        std::cout<<"Registered successfully, accountId: "<<state.accountId<<std::endl;
+                    }
+                }
                 std::cout<<"REGISTER_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             }
@@ -526,6 +536,9 @@ void printPretty(const std::string& payload,ClientState& state){
                 if(json["ok"].get<bool>()){
                     if(json["data"].contains("username")&&json["data"]["username"].is_string()){
                         state.username=json["data"]["username"].get<std::string>();
+                    }
+                    if(json["data"].contains("accountId")&&json["data"]["accountId"].is_string()){
+                        state.accountId=json["data"]["accountId"].get<std::string>();
                     }
                     state.loggedIn=true;
                     state.pendingLoginUsername.clear();
@@ -542,6 +555,7 @@ void printPretty(const std::string& payload,ClientState& state){
             }
             case im::MsgType::LOGOUT_RESP:{
                 if(json["ok"].get<bool>()){
+                    state.accountId.clear();
                     state.username.clear();
                     state.loggedIn=false;
                     state.groupIds.clear();
@@ -554,6 +568,9 @@ void printPretty(const std::string& payload,ClientState& state){
             case im::MsgType::GET_PROFILE_RESP:{
                 if(json["ok"].get<bool>()){
                     std::cout<<"Profile: "<<std::endl;
+                    if(json["data"].contains("accountId")&&json["data"]["accountId"].is_string()){
+                        std::cout<<"AccountId: "<<json["data"]["accountId"].get<std::string>()<<std::endl;
+                    }
                     if(json["data"].contains("username")&&json["data"]["username"].is_string()){
                         std::cout<<"Username: "<<json["data"]["username"].get<std::string>()<<std::endl;
                     }

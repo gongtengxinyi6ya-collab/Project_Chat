@@ -32,12 +32,13 @@ CREATE TABLE IF NOT EXISTS chat_groups(
 CREATE TABLE IF NOT EXISTS group_members (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     group_id VARCHAR(64) NOT NULL,
+    account_id VARCHAR(32) NOT NULL,
     username VARCHAR(64) NOT NULL,
     role TINYINT NOT NULL DEFAULT 0,
     joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_group_member (group_id, username),
-    KEY idx_group_members_username (username),
+    UNIQUE KEY uk_group_member (group_id, account_id),
+    KEY idx_group_members_account_id (account_id),
     KEY idx_group_members_group_id (group_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -45,26 +46,28 @@ CREATE TABLE IF NOT EXISTS messages (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     msg_id BIGINT UNSIGNED NOT NULL,
     group_id VARCHAR(64) NOT NULL,
-    sender VARCHAR(64) NOT NULL,
+    sender_account_id VARCHAR(32) NOT NULL,
+    sender_username VARCHAR(64) NOT NULL,
     content TEXT NOT NULL,
     server_ts_ms BIGINT UNSIGNED NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_messages_msg_id (msg_id),
     KEY idx_messages_group_time (group_id, server_ts_ms),
-    KEY idx_messages_sender (sender)
+    KEY idx_messages_sender (sender_account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS offline_messages(
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     username VARCHAR(64) NOT NULL,
+    account_id VARCHAR(32) NOT NULL,
     msg_id BIGINT UNSIGNED NOT NULL,
     group_id VARCHAR(64) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_offline_user_msg (username, msg_id),
-    KEY idx_offline_username_id (username, id),
-    KEY idx_offline_username_msg (username, msg_id),
+    UNIQUE KEY uk_offline_user_msg (account_id, msg_id),
+    KEY idx_offline_account_id_id (account_id, id),
+    KEY idx_offline_account_id_msg (account_id, msg_id),
     KEY idx_offline_group_id (group_id)
 )ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
