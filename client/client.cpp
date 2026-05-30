@@ -493,7 +493,7 @@ void printPretty(const std::string& payload,ClientState& state){
             case im::MsgType::GROUP_HISTORY_RESP:{
                 std::cout<<"Group history messages: "<<std::endl;
                 for(const auto& msg:json["data"]["messages"]){
-                        std::cout<<"[Group: "<<msg["groupId"].get<std::string>()<<"] "<<msg["sender_username"].get<std::string>()<<": "<<msg["content"].get<std::string>()<<" (msgId: "<<msg["msgId"].get<uint64_t>()<<")"<<std::endl;
+                        std::cout<<"[Group: "<<msg["groupId"].get<std::string>()<<"] "<<msg["senderUsername"].get<std::string>()<<": "<<msg["content"].get<std::string>()<<" (msgId: "<<msg["msgId"].get<uint64_t>()<<")"<<std::endl;
                 }
                 break;
             }
