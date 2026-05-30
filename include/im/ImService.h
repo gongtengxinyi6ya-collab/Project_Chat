@@ -86,7 +86,7 @@ private:
     std::optional<std::string> resolveTargetGroupId(const Request&,const Session&);//群id获取辅助方法
     //群聊接口
     Response handleCreateGroup(const Request&,[[maybe_unused]]ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
-    BroadcastResult broadcastToGroup(const std::string&,const std::string&,[[maybe_unused]]ConnKey,im::Response&push);//对房间内其他成员推送事件；
+    BroadcastResult broadcastToGroup(const std::string&,[[maybe_unused]]ConnKey,im::Response&push);//对房间内其他成员推送事件；
     im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入群
     im::Response handleLeave(const im::Request&,ConnKey,Session&);//退出群
     im::Response handleGroupMsg(const im::Request&,ConnKey,Session&);//提交房间消息

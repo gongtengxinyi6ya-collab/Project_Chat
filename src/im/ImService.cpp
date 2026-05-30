@@ -221,11 +221,11 @@ void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> msgId,st
         resp.data["msg_id"]=msgId;
     }
     else{
-        resp.data["msg_id"]=nextMsgId_++;
+        resp.data["msgId"]=nextMsgId_++;
     }
-    resp.data["server_ts_ms"]=nowMs();
+    resp.data["serverTsMs"]=nowMs();
     if(clientReqId.has_value()){
-        resp.data["client_req_id"]=*clientReqId;
+        resp.data["clientReqId"]=*clientReqId;
     }
 }
  im::Imservice::SendResult im::Imservice::sendPush(ConnKey target,const std::string& payload){
@@ -282,12 +282,12 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
     session.joinedGroupIds_.insert(groupId);
     return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"groupName",groupName},{"ownerAccountId",owner},{"ownerUsername",session.username_}});
 }
-im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,[[maybe_unused]]const std::string& fromUser,ConnKey senderkey,im::Response& push){
+im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,ConnKey senderkey,im::Response& push){
     BroadcastResult result;
     push.req_id=0;//群推送消息不需要req_id，由服务器生成唯一msg_id
     std::optional<uint64_t> msgId=std::nullopt;
-    if(push.data.contains("msg_id")){
-        msgId=push.data["msg_id"].get<uint64_t>();
+    if(push.data.contains("msgId")){
+        msgId=push.data["msgId"].get<uint64_t>();
     }
     decorate(push,msgId);//群推送消息也需要decorate添加msg_id和server_ts_ms等字段
     auto payload=encodeResponse(push);
@@ -420,8 +420,8 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
         }
     }
     //广播在线成员
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId.value()},{"content",content},{"msg_id",msgId}}};
-    BroadcastResult result=broadcastToGroup(groupId.value(),session.accountId_,key,pushMsg);
+    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId.value()},{"content",content},{"msgId",msgId}}};
+    BroadcastResult result=broadcastToGroup(groupId.value(),key,pushMsg);
     saveOfflineForGroupMembers(groupId.value(),session.accountId_,msgId);
     return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
@@ -652,8 +652,8 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             if(resp.ok&&resp.data.contains("alreadyIn")&&resp.data["alreadyIn"].get<bool>()==false){
                     std::string groupId=resp.data["groupId"];
                     LOG_INFO_CTX("user joined group",makeReqCtx(key,req,session,"JOIN_GROUP"));
-                    im::Response event=makeOk(req,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","join"},{"user",session.username_},{"groupId",groupId}});
-                    broadcastToGroup(groupId,session.username_,key,event);
+                    im::Response event=makeOk(req,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","join"},{"accountId",session.accountId_},{"username",session.username_},{"groupId",groupId}});
+                    broadcastToGroup(groupId,key,event);
                 }
             return resp;
         }
@@ -664,8 +664,8 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             if(resp.ok&&resp.data.contains("left")&&resp.data["left"].get<bool>()==true){
                     std::string groupId=resp.data["groupId"];
                     LOG_INFO_CTX("im leave group",makeRespCtx(key,req,resp,session,"LEAVE_GROUP"));
-                    im::Response leaveEvent=makeOk(req,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"user",session.username_},{"groupId",groupId}});
-                    broadcastToGroup(groupId,session.username_,key,leaveEvent);
+                    im::Response leaveEvent=makeOk(req,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"accountId",session.accountId_},{"username",session.username_},{"groupId",groupId}});
+                    broadcastToGroup(groupId,key,leaveEvent);
                 }
             return resp;
         }
@@ -775,14 +775,14 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     //返回JSON数组mwssages
     nlohmann::json messagesJson=nlohmann::json::array();
     for(const auto& msg:messages){
-        messagesJson.push_back(nlohmann::json{{"msg_id",msg.messageId},{"group_id",msg.groupId},{"sender_account_id",msg.senderAccountId},{"sender_username",msg.senderUsername},{"content",msg.content},{"server_ts_ms",msg.serverTsMs}});
+        messagesJson.push_back(nlohmann::json{{"msgId",msg.messageId},{"groupId",msg.groupId},{"senderAccountId",msg.senderAccountId},{"senderUsername",msg.senderUsername},{"content",msg.content},{"serverTsMs",msg.serverTsMs}});
     }
     return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"messages",messagesJson}});
 
 }
 
-void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromUser,uint64_t msgId){
-    if(groupId.empty()||fromUser.empty()){
+void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromAccountId,uint64_t msgId){
+    if(groupId.empty()||fromAccountId.empty()){
         return;
     }
     if(!repos_.offlineMessageRepo){
@@ -790,7 +790,7 @@ void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const 
     }
     auto members=groupManager_.members(groupId);//获取群成员
     for(auto member:members){
-        if(member!=fromUser){//跳过发送者
+        if(member!=fromAccountId){//跳过发送者
             auto keys=sessionManager_.connKeysByAccountId(member);
             if(keys.empty()){
                 //用户各端都不在线
