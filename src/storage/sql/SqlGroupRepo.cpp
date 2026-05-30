@@ -45,9 +45,12 @@ bool storage::SqlGroupRepo::groupExists(const std::string& groupId){
     return false;
 }
 
-storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,const std::string& username){
+storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,const std::string& accountId,const std::string& username){
     if(groupId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="groupId is empty"};
+    }
+    if(accountId.empty()){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
     }
     if(username.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="username is empty"};
@@ -60,7 +63,7 @@ storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,c
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO group_members(group_id,username) VALUES(?,?)",{groupId,username});
+        auto result=conn->executePrepared("INSERT INTO group_members(group_id,account_id,username) VALUES(?,?,?)",{groupId,accountId,username});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -71,12 +74,12 @@ storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,c
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
 }
-storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& groupId,const std::string& username){
+storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& groupId,const std::string& accountId){
     if(groupId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="groupId is empty"};
     }
-    if(username.empty()){
-        return RepoResult{.status=RepoStatus::InvalidArgument,.message="username is empty"};
+    if(accountId.empty()){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
     }
     if(!groupExists(groupId)){
         return RepoResult{.status=RepoStatus::NotFound,.message="Group not found"};
@@ -86,7 +89,7 @@ storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& group
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("DELETE FROM group_members WHERE group_id=? AND username=?",{groupId,username});
+        auto result=conn->executePrepared("DELETE FROM group_members WHERE group_id=? AND account_id=?",{groupId,accountId});
         if(result.ok()){
             if(result.affectedRows>0){
                 return RepoResult{.status=RepoStatus::Ok};
@@ -98,7 +101,7 @@ storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& group
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
 }
-std::vector<std::string> storage::SqlGroupRepo::listMembers(const std::string& groupId){
+std::vector<storage::GroupRepo::GroupMember> storage::SqlGroupRepo::listMembers(const std::string& groupId){
     if(groupId.empty()){
         return {};
     }
@@ -107,14 +110,16 @@ std::vector<std::string> storage::SqlGroupRepo::listMembers(const std::string& g
         return {};
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT username FROM group_members WHERE group_id=?",{groupId});
+        auto result=conn->queryPrepared("SELECT account_id,username FROM group_members WHERE group_id=?",{groupId});
         if(result.ok()){
-            std::vector<std::string> members;
+            std::vector<GroupMember> members;
             for(const auto& row:result.rows){
-                auto it=row.find("username");
-                if(it!=row.end()){
-                    members.push_back(it->second);
-                }
+                GroupMember member;
+                auto accountIdIt=row.find("account_id");
+                member.accountId=accountIdIt!=row.end()?accountIdIt->second:"";
+                auto usernameIt=row.find("username");
+                member.username=usernameIt!=row.end()?usernameIt->second:"";
+                members.emplace_back(std::move(member));
             }
             return members;
         }

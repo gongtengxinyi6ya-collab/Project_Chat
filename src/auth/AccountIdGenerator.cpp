@@ -15,8 +15,9 @@ std::string auth::AccountIdGenerator::generateAccountId(const size_t totalLength
     "abcdefghijklmnopqrstuvwxyz"
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     std::string output="im";
+    auto len=sizeof(kChars)-1;
     for(auto b:buf){
-        output.push_back(kChars[b%sizeof(kChars)-1]);
+        output.push_back(kChars[b%len]);
     }
     return output;
 }

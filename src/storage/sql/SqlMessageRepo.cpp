@@ -5,12 +5,12 @@ storage::SqlMessageRepo::SqlMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
 }
-storage::SaveMessageResult storage::SqlMessageRepo::saveGroupMessage(uint64_t msgId,const std::string&groupId,const std::string&from,const std::string& content,uint64_t serverTsmS){
+storage::SaveMessageResult storage::SqlMessageRepo::saveGroupMessage(uint64_t msgId,const std::string&groupId,const std::string&senderAccountId,const std::string&senderUsername,const std::string& content,uint64_t serverTsmS){
     if(groupId.empty()){
         return SaveMessageResult{.status=RepoStatus::InvalidArgument,.message="groupId is empty"};
     }
-    if(from.empty()){
-        return SaveMessageResult{.status=RepoStatus::InvalidArgument,.message="from is empty"};
+    if(senderAccountId.empty()){
+        return SaveMessageResult{.status=RepoStatus::InvalidArgument,.message="senderAccountId is empty"};
     }
     if(content.empty()){
         return SaveMessageResult{.status=RepoStatus::InvalidArgument,.message="content is empty"};
@@ -20,7 +20,7 @@ storage::SaveMessageResult storage::SqlMessageRepo::saveGroupMessage(uint64_t ms
         return SaveMessageResult{.status=RepoStatus::SqlError,.message="Failed to acquire a SqlConnection"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO messages(msg_id, group_id, sender, content, server_ts_ms) VALUES(?,?,?,?,?)",{msgId,groupId,from,content,serverTsmS});
+        auto result=conn->executePrepared("INSERT INTO messages(msg_id, group_id, sender_account_id, sender_username, content, server_ts_ms) VALUES(?,?,?,?,?,?)",{msgId,groupId,senderAccountId,senderUsername,content,serverTsmS});
          if(result.ok()){
             return SaveMessageResult{.status=RepoStatus::Ok,.messageId=msgId};
         }
@@ -39,9 +39,9 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
     if(conn->connected()){
         SqlResult result;
         if(beforeMsgId==0)
-            result=conn->queryPrepared("SELECT msg_id,group_id,sender,content,server_ts_ms FROM messages WHERE group_id=? ORDER BY msg_id DESC LIMIT ?",{groupId,limit});
+            result=conn->queryPrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? ORDER BY msg_id DESC LIMIT ?",{groupId,limit});
         else
-            result=conn->queryPrepared("SELECT msg_id,group_id,sender,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id<? ORDER BY msg_id DESC LIMIT ?",{groupId,beforeMsgId,limit});
+            result=conn->queryPrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id<? ORDER BY msg_id DESC LIMIT ?",{groupId,beforeMsgId,limit});
         if(result.ok()){
                 std::vector<MessageRecord> messages;
                 for(auto& row:result.rows){
@@ -50,8 +50,10 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
                     message.groupId=groupIdPair!=row.end()?groupIdPair->second:"";
                     auto msgIdPair=row.find("msg_id");
                     message.messageId=msgIdPair!=row.end()?std::stoull(msgIdPair->second):0;//数据库结果从string转为uint64_t
-                    auto senderPair=row.find("sender");
-                    message.from=senderPair!=row.end()?senderPair->second:"";
+                    auto senderAccountIdPair=row.find("sender_account_id");
+                    message.senderAccountId=senderAccountIdPair!=row.end()?senderAccountIdPair->second:"";
+                    auto senderUsernamePair=row.find("sender_username");
+                    message.senderUsername=senderUsernamePair!=row.end()?senderUsernamePair->second:"";
                     auto contentPair=row.find("content");
                     message.content=contentPair!=row.end()?contentPair->second:"";
                     auto serverTsMsPair=row.find("server_ts_ms");

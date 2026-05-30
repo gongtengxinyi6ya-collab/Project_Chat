@@ -38,7 +38,7 @@ auth::AuthResult auth::AuthService::registerUser(const std::string& username,con
                 return AuthResult{.status=AuthStatus::Internal,.message="Failed to create userProfile"};
                 
             }
-            return AuthResult{.ok=true,.status=AuthStatus::Ok};
+            return AuthResult{.ok=true,.status=AuthStatus::Ok,.user=userInfo.value()};
         }
         if(result.status==storage::RepoStatus::AlreadyExists){
             continue;
@@ -128,7 +128,7 @@ auth::AuthResult auth::AuthService::loginByToken(const std::string& rawToken){
     if(!updateResult.ok()){
         return AuthResult{.status=AuthStatus::Internal,.message="Failed to update lastSeenAtMs"};
     }
-    storage::UserAuthInfo userInfo{.userId=session.userId,.username=session.username};
+    storage::UserAuthInfo userInfo{.userId=session.userId,.accountId=session.accountId,.username=session.username};
     return AuthResult{.ok=true,.status=AuthStatus::Ok,.user=userInfo,.tokenExpireAtMs=session.expireAtMs};
     
 }

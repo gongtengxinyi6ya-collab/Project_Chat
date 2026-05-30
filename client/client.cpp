@@ -56,7 +56,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::DM_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]=to;
         body["seq"]=state.allocSeq();
         body["content"]=content;
@@ -67,7 +67,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::LIST_USERS_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         return body.dump();
@@ -77,7 +77,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::CREATE_GROUP_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         body["groupName"]=groupName;
@@ -88,7 +88,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::JOIN_GROUP_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         body["groupId"]=groupId;
@@ -99,7 +99,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::LEAVE_GROUP_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         if(groupId.has_value()){
@@ -112,7 +112,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::GROUP_MSG_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         body["content"]=content;
@@ -126,7 +126,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::GROUP_MEMBERS_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         if(groupId.has_value()){
@@ -139,7 +139,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::LIST_GROUPS_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         return body.dump();
@@ -149,7 +149,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::GROUP_HISTORY_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         body["groupId"]=groupId;
@@ -161,7 +161,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::OFFLINE_LIST_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         body["limit"]=limit;
@@ -172,7 +172,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::OFFLINE_ACK_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();
         body["msg_ids"]=msgIds;
@@ -229,7 +229,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::GET_PROFILE_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;
+        body["from"]=state.accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();  
         return body.dump();
@@ -239,7 +239,7 @@ public:
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::UPDATE_PROFILE_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=state.username;    
+        body["from"]=state.accountId;    
         body["to"]="";
         body["seq"]=state.allocSeq();  
         if(nickname.has_value()){
@@ -269,7 +269,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     }
     if(line.rfind("/dm ",0)==0){
         if(state.username.empty()){
-            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
         size_t firstSpace=line.find(' ',4);
@@ -283,7 +283,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     }
     if(line.rfind("/gjoin ",0)==0){
         if(state.username.empty()){
-            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
         std::string groupId=line.substr(7);
@@ -291,14 +291,14 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     }
     if(line=="/gleave"){
         if(state.username.empty()){
-            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
         return builder.buildLeaveReq(state,std::nullopt);
     }
     if(line.rfind("/gleave ",0)==0){
         if(state.username.empty()){
-            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
         std::string groupId=line.substr(8);
@@ -307,7 +307,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     
     if(line.rfind("/gsayto ",0)==0){
         if(state.username.empty()){
-            std::cerr<<"Please authenticate first using /login <username> <password>"<<std::endl;
+            std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
         size_t firstSpace=line.find(' ',8);

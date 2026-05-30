@@ -150,7 +150,7 @@ void im::Imservice::loadFromRepositories(){
     std::vector<storage::GroupRepo::GroupSnapshot> groups=repos_.groupRepo->listGroups();
     for(const auto& group:groups){
         auto members=repos_.groupRepo->listMembers(group.groupId);
-        if(groupManager_.restoreGroup(group.groupId,group.groupName,group.owner,members)){
+        if(groupManager_.restoreGroup(group.groupId,group.groupName,group.owner,)){
             restoreGroups++;
             restoreMembers+=members.size();
         }
@@ -264,7 +264,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
     if(groupName.size()>imConfig_.maxGroupNameLen){//群名称过长
         return makeErr(req,im::ErrorCode::GROUP_NAME_INVALID,"Group name is too long");
     }
-    std::string owner=session.username_;
+    std::string owner=session.accountId_;
     auto [success,groupIdOrErr]=groupManager_.createGroup(owner,groupName);
     if(!success){
         return makeErr(req,im::ErrorCode::INTERNAL,"Failed to create group:"+groupIdOrErr);
@@ -280,7 +280,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
         }
     }
     session.joinedGroupIds_.insert(groupId);
-    return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"groupName",groupName},{"owner",owner}});
+    return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"groupName",groupName},{"ownerAccountId",owner},{"ownerUsername",session.username_}});
 }
 im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,[[maybe_unused]]const std::string& fromUser,ConnKey senderkey,im::Response& push){
     BroadcastResult result;
@@ -328,11 +328,8 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     if(auto errField=getStringField(req,"groupId",groupId)){
         return errField.value();
     }
-    auto accountId=sessionManager_.accountIdByConn(key);
-    if(!accountId){
-        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"user is not exist");
-    }
-    auto joinResult=groupManager_.joinGroup(groupId,accountId.value());
+    
+    auto joinResult=groupManager_.joinGroup(groupId,session.accountId_);
     if(joinResult==JoinResult::ERR_NO_SUCH_GROUP){
         return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"no such group");
     }
@@ -342,10 +339,10 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     }
     session.joinedGroupIds_.insert(groupId);
     if(hasRepositories()){
-        auto result=repos_.groupRepo->addMember(groupId,accountId.value());
+        auto result=repos_.groupRepo->addMember(groupId,session.accountId_,session.username_);
         if(result.status!=storage::RepoStatus::Ok&&result.status!=storage::RepoStatus::AlreadyExists){
 
-            groupManager_.leaveGroup(groupId,accountId.value());//回滚内存状态
+            groupManager_.leaveGroup(groupId,session.accountId_);//回滚内存状态
             session.joinedGroupIds_.erase(groupId);
             return makeRepoError(req,result.status,"filed to persist group member");
         }
@@ -362,11 +359,7 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     if(auto errField=getStringField(req,"groupId",groupId)){
         return errField.value();
     }
-    auto accountId=sessionManager_.accountIdByConn(key);
-    if(!accountId){
-        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");
-    }
-    QuitResult quitResult=groupManager_.leaveGroup(groupId,accountId.value());
+    QuitResult quitResult=groupManager_.leaveGroup(groupId,session.accountId_);
     if(quitResult==QuitResult::ERR_NO_SUCH_GROUP){
         return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"No such group");
     }
@@ -377,11 +370,11 @@ im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Sessi
     session.joinedGroupIds_.erase(groupId);
     if (quitResult == QuitResult::OK_LEFT) {
     if (hasRepositories()) {
-        auto result = repos_.groupRepo->removeMember(groupId, accountId.value());
+        auto result = repos_.groupRepo->removeMember(groupId, session.accountId_);
 
         if (result.status != storage::RepoStatus::Ok &&
             result.status != storage::RepoStatus::NotFound) {
-            groupManager_.joinGroup(groupId, accountId.value());//回滚内存状态
+            groupManager_.joinGroup(groupId, session.accountId_);//回滚内存状态
             session.joinedGroupIds_.insert(groupId);
             return makeRepoError(req, result.status, "Failed to remove group member");
         }
@@ -415,25 +408,21 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     if(content.size()>imConfig_.maxMessageLen){
         return makeErr(req,im::ErrorCode::BAD_REQUEST,"Message content is too long");
     }
-    auto accountId=sessionManager_.accountIdByConn(key);
-    if(!accountId){
-        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");
-    }
-    if(!groupManager_.isMember(groupId.value(),accountId.value())){
+    if(!groupManager_.isMember(groupId.value(),session.accountId_)){
         return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
     uint64_t serverTsMs=nowMs();
     uint64_t msgId=nextMessageId();
     if(hasRepositories()){//保存消息
-        auto result=repos_.messageRepo->saveGroupMessage(msgId,groupId.value(),accountId.value(),content,serverTsMs);
+        auto result=repos_.messageRepo->saveGroupMessage(msgId,groupId.value(),session.accountId_,session.username_,content,serverTsMs);
         if(!result.ok()){
             return makeRepoError(req,result.status,"failed to save group message");
         }
     }
     //广播在线成员
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"from",session.username_},{"groupId",groupId.value()},{"content",content},{"msg_id",msgId}}};
-    BroadcastResult result=broadcastToGroup(groupId.value(),accountId.value(),key,pushMsg);
-    saveOfflineForGroupMembers(groupId.value(),accountId.value(),msgId);
+    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId.value()},{"content",content},{"msg_id",msgId}}};
+    BroadcastResult result=broadcastToGroup(groupId.value(),session.accountId_,key,pushMsg);
+    saveOfflineForGroupMembers(groupId.value(),session.accountId_,msgId);
     return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
 }
@@ -472,7 +461,7 @@ im::Response im::Imservice::handleListGroups(const Request& req,[[maybe_unused]]
     if(err.has_value()){
         return err.value();
     }
-    std::vector<std::string> groups=groupManager_.groupsOfUser(session.username_);
+    std::vector<std::string> groups=groupManager_.groupsOfUser(session.accountId_);
     return makeOk(req,MsgType::LIST_GROUPS_RESP,nlohmann::json{{"groupIds",groups},{"count",groups.size()}});
 }
 
@@ -786,7 +775,7 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     //返回JSON数组mwssages
     nlohmann::json messagesJson=nlohmann::json::array();
     for(const auto& msg:messages){
-        messagesJson.push_back(nlohmann::json{{"msg_id",msg.messageId},{"group_id",msg.groupId},{"from",msg.from},{ "content",msg.content},{"server_ts_ms",msg.serverTsMs}});
+        messagesJson.push_back(nlohmann::json{{"msg_id",msg.messageId},{"group_id",msg.groupId},{"sender_account_id",msg.senderAccountId},{"sender_username",msg.senderUsername},{"content",msg.content},{"server_ts_ms",msg.serverTsMs}});
     }
     return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"messages",messagesJson}});
 
@@ -901,7 +890,8 @@ im::Response im::Imservice::handleRegister(const Request& req,[[maybe_unused]]Co
     }
     auto result=authService_->registerUser(username,password);
     if(result.ok){
-        return makeOk(req,MsgType::REGISTER_RESP);
+        auto userInfo=result.user.value();
+        return makeOk(req,MsgType::REGISTER_RESP,nlohmann::json{{"userId",userInfo.userId},{"accountId",userInfo.accountId},{"username",userInfo.username}});
     }
     if(result.status==auth::AuthStatus::AlreadyExist){
         return makeErr(req,ErrorCode::USER_EXISTS,"User is alreadyexist");
@@ -1040,7 +1030,7 @@ im::Response im::Imservice::handleGetProfile(const Request& req,[[maybe_unused]]
     auto result=repos_.userProfileRepo->findByUserId(session.userId_);
     if(result){
         auto userProfile=result.value();
-        return makeOk(req,MsgType::GET_PROFILE_RESP,nlohmann::json{{"userId",userProfile.userId},{"username",userProfile.username},{"nickname",userProfile.nickname},{"avatarUrl",userProfile.avatarUrl},{"signature",userProfile.signature},{"updateAtMs",userProfile.updateAtMs}});
+        return makeOk(req,MsgType::GET_PROFILE_RESP,nlohmann::json{{"userId",userProfile.userId},{"accountId",userProfile.accountId},{"username",userProfile.username},{"nickname",userProfile.nickname},{"avatarUrl",userProfile.avatarUrl},{"signature",userProfile.signature},{"updateAtMs",userProfile.updateAtMs}});
     }
     
     return makeErr(req,ErrorCode::PROFILE_NOT_FOUND,"Failed to get profile");

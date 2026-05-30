@@ -69,3 +69,32 @@ std::optional<storage::UserAuthInfo> storage::SqlUserRepo::findAuthInfoByAccount
     }
     return std::nullopt;
 }
+
+std::optional<storage::UserAuthInfo> storage::SqlUserRepo::findByUserId(uint64_t userId)const{
+    auto conn=pool_->acquire();//获取连接
+    if(!conn){
+        return std::nullopt;
+    }
+    if(conn->connected()){
+        auto result=conn->queryPrepared("SELECT id,account_id,username,password_hash,password_salt,status FROM users WHERE id=? LIMIT 1",{userId});
+        if(!result.ok()||result.rows.empty()){
+            return std::nullopt;
+        }
+        UserAuthInfo info;
+        const auto& row=result.rows.front();
+        auto idPair=row.find("id");
+        info.userId=idPair!=row.end()?std::stoull(idPair->second):0;
+        auto usernamePair=row.find("username");
+        info.username=usernamePair!=row.end()?usernamePair->second:"";
+        auto accountPair=row.find("account_id");
+        info.accountId=accountPair!=row.end()?accountPair->second:"";
+        auto hashPair=row.find("password_hash");
+        info.passwordHash=hashPair!=row.end()?hashPair->second:"";
+        auto saltPair=row.find("password_salt");
+        info.passwordSalt=saltPair!=row.end()?saltPair->second:"";
+        auto statusPair = row.find("status");
+        info.status = statusPair != row.end() ? std::stoi(statusPair->second) : 0;
+        return info;
+    }
+    return std::nullopt;
+}

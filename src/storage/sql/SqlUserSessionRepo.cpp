@@ -17,7 +17,7 @@ storage::RepoResult storage::SqlUserSessionRepo::createSession(const storage::St
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO user_sessions(user_id,username,token_hash,expire_at_ms,created_at_ms,last_seen_at_ms,revoked) VALUES(?,?,?,?,?,?,0)",{session.userId,session.username,session.tokenHash,session.expireAtMs,session.createAtMs,session.lastSeenAtMs});
+        auto result=conn->executePrepared("INSERT INTO user_sessions(user_id,account_id,username,token_hash,expire_at_ms,created_at_ms,last_seen_at_ms,revoked) VALUES(?,?,?,?,?,?,?,0)",{session.userId,session.accountId,session.username,session.tokenHash,session.expireAtMs,session.createAtMs,session.lastSeenAtMs});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -37,12 +37,14 @@ std::optional<storage::StoredUserSession> storage::SqlUserSessionRepo::findByTok
         return std::nullopt;
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT user_id,username,token_hash,expire_at_ms,created_at_ms,last_seen_at_ms,revoked,revoked_at_ms FROM user_sessions WHERE token_hash=? LIMIT 1",{tokenHash});
+        auto result=conn->queryPrepared("SELECT user_id,account_id,username,token_hash,expire_at_ms,created_at_ms,last_seen_at_ms,revoked,revoked_at_ms FROM user_sessions WHERE token_hash=? LIMIT 1",{tokenHash});
         if(result.ok()&&!result.rows.empty()){
             const auto& row=result.rows.front();
             StoredUserSession session;
             auto userIdPair=row.find("user_id");
             session.userId=userIdPair!=row.end()?std::stoull(userIdPair->second):0;
+            auto accountIdPair=row.find("account_id");
+            session.accountId=accountIdPair!=row.end()?accountIdPair->second:"";
             auto usernamePair=row.find("username");
             session.username=usernamePair!=row.end()?usernamePair->second:"";
             auto tokenHashPair=row.find("token_hash");

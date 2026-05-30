@@ -39,12 +39,14 @@ std::optional<storage::UserProfile> storage::SqlUserProfileRepo::findByUserId(ui
         return std::nullopt;
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT user_id,username,nickname,avatar_url,signature,updated_at_ms FROM user_profiles WHERE user_id=? LIMIT 1",{userId});
+        auto result=conn->queryPrepared("SELECT user_id,account_id,username,nickname,avatar_url,signature,updated_at_ms FROM user_profiles WHERE user_id=? LIMIT 1",{userId});
         if(result.ok()&&!result.rows.empty()){
             const auto& row=result.rows.front();
             UserProfile profile;
             auto userIdPair=row.find("user_id");
             profile.userId=userIdPair!=row.end()?std::stoull(userIdPair->second):0;
+            auto accountIdPair=row.find("account_id");
+            profile.accountId=accountIdPair!=row.end()?accountIdPair->second:"";
             auto usernamePair=row.find("username");
             profile.username=usernamePair!=row.end()?usernamePair->second:"";
             auto nicknamePair=row.find("nickname");
@@ -69,12 +71,14 @@ std::optional<storage::UserProfile> storage::SqlUserProfileRepo::findByUsername(
         return std::nullopt;
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT user_id,username,nickname,avatar_url,signature,updated_at_ms FROM user_profiles WHERE username=? LIMIT 1",{username});
+        auto result=conn->queryPrepared("SELECT user_id,account_id,username,nickname,avatar_url,signature,updated_at_ms FROM user_profiles WHERE username=? LIMIT 1",{username});
         if(result.ok()&&!result.rows.empty()){
             const auto& row=result.rows.front();
             UserProfile profile;
             auto userIdPair=row.find("user_id");
             profile.userId=userIdPair!=row.end()?std::stoull(userIdPair->second):0;
+            auto accountIdPair=row.find("account_id");
+            profile.accountId=accountIdPair!=row.end()?accountIdPair->second:"";
             auto usernamePair=row.find("username");
             profile.username=usernamePair!=row.end()?usernamePair->second:"";
             auto nicknamePair=row.find("nickname");
