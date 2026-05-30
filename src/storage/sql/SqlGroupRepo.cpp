@@ -8,8 +8,8 @@ storage::SqlGroupRepo::SqlGroupRepo(std::shared_ptr<SqlConnectionPool> pool)
 
 }
 
-storage::RepoResult storage::SqlGroupRepo::createGroup(const std::string& groupId,const std::string& groupName,const std::string&owner){
-    if(groupId.empty()||groupName.empty()||owner.empty()){
+storage::RepoResult storage::SqlGroupRepo::createGroup(const std::string& groupId,const std::string& groupName,const std::string&ownerAccountId){
+    if(groupId.empty()||groupName.empty()||ownerAccountId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument};
     }
     auto conn=pool_->acquire();
@@ -17,7 +17,7 @@ storage::RepoResult storage::SqlGroupRepo::createGroup(const std::string& groupI
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO chat_groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,owner});
+        auto result=conn->executePrepared("INSERT INTO chat_groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,ownerAccountId});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -45,15 +45,12 @@ bool storage::SqlGroupRepo::groupExists(const std::string& groupId){
     return false;
 }
 
-storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,const std::string& accountId,const std::string& username){
+storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,const std::string& accountId){
     if(groupId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="groupId is empty"};
     }
     if(accountId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
-    }
-    if(username.empty()){
-        return RepoResult{.status=RepoStatus::InvalidArgument,.message="username is empty"};
     }
     if(!groupExists(groupId)){
         return RepoResult{.status=RepoStatus::NotFound,.message="Group not found"};
@@ -63,7 +60,7 @@ storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,c
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO group_members(group_id,account_id,username) VALUES(?,?,?)",{groupId,accountId,username});
+        auto result=conn->executePrepared("INSERT INTO group_members(group_id,account_id) VALUES(?,?)",{groupId,accountId});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -101,7 +98,7 @@ storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& group
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
 }
-std::vector<storage::GroupRepo::GroupMember> storage::SqlGroupRepo::listMembers(const std::string& groupId){
+std::vector<std::string> storage::SqlGroupRepo::listMembers(const std::string& groupId){
     if(groupId.empty()){
         return {};
     }
@@ -110,16 +107,14 @@ std::vector<storage::GroupRepo::GroupMember> storage::SqlGroupRepo::listMembers(
         return {};
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT account_id,username FROM group_members WHERE group_id=?",{groupId});
+        auto result=conn->queryPrepared("SELECT account_id FROM group_members WHERE group_id=?",{groupId});
         if(result.ok()){
-            std::vector<GroupMember> members;
+            std::vector<std::string> members;
             for(const auto& row:result.rows){
-                GroupMember member;
                 auto accountIdIt=row.find("account_id");
-                member.accountId=accountIdIt!=row.end()?accountIdIt->second:"";
-                auto usernameIt=row.find("username");
-                member.username=usernameIt!=row.end()?usernameIt->second:"";
-                members.emplace_back(std::move(member));
+                if(accountIdIt!=row.end()){
+                    members.emplace_back(accountIdIt->second);
+                }
             }
             return members;
         }
@@ -142,7 +137,7 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups
                 auto namePair=row.find("group_name");
                 groupSnapshot.groupName=namePair!=row.end()?namePair->second:"";
                 auto ownerPair=row.find("owner");
-                groupSnapshot.owner=ownerPair!=row.end()?ownerPair->second:"";
+                groupSnapshot.ownerAccountId=ownerPair!=row.end()?ownerPair->second:"";
                 groupSnapshots.emplace_back(std::move(groupSnapshot));
             }
             return groupSnapshots;
@@ -151,8 +146,8 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups
     return {};
 }
 
-storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& owner){
-    if(groupId.empty()||groupName.empty()||owner.empty()){
+storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId){
+    if(groupId.empty()||groupName.empty()||ownerAccountId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument};
     }
     auto conn=pool_->acquire();//获取连接
@@ -162,7 +157,7 @@ storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::strin
     SqlTransaction tx(*conn);//开启事务
     try{
         //插入群
-        auto result1=conn->executePrepared("INSERT INTO chat_groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,owner});
+        auto result1=conn->executePrepared("INSERT INTO chat_groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,ownerAccountId});
         if(!result1.ok()&&result1.error.find("Duplicate entry")!=std::string::npos){
             return RepoResult{.status=RepoStatus::AlreadyExists,.message="Group already exists"};
         }
@@ -171,7 +166,7 @@ storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::strin
 
         }
         //插入群主成员
-        auto result2=conn->executePrepared("INSERT INTO group_members(group_id,username) VALUES(?,?)",{groupId,owner});
+        auto result2=conn->executePrepared("INSERT INTO group_members(group_id,account_id) VALUES(?,?)",{groupId,ownerAccountId});
         if(result1.ok()&&result2.ok()){
             tx.commit();
             return RepoResult{.status=RepoStatus::Ok};

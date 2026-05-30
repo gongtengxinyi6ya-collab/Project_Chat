@@ -190,15 +190,15 @@ public:
         body["password"]=password;
         return body.dump();
     }
-    std::string buildLoginReq(ClientState& state,std::string username,std::string password){
+    std::string buildLoginReq(ClientState& state,std::string accountId,std::string password){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::LOGIN_REQ);
         body["req_id"]=state.allocReqId();
-        body["from"]=username;
+        body["from"]=accountId;
+        body["accountId"]=accountId;
         body["to"]="";
         body["seq"]=state.allocSeq();  
-        body["username"]=username;
         body["password"]=password;
         return body.dump();
     }
@@ -264,11 +264,11 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     CommandBuilder builder;
     if(line.rfind("/auth ",0)==0){
         std::string user=line.substr(6);
-        state.username=user;
+        state.accountId=user;
         return builder.buildAuthReq(state,user);
     }
     if(line.rfind("/dm ",0)==0){
-        if(state.username.empty()){
+        if(state.accountId.empty()){
             std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
@@ -282,7 +282,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         return builder.buildListUsersReq(state);
     }
     if(line.rfind("/gjoin ",0)==0){
-        if(state.username.empty()){
+        if(state.accountId.empty()){
             std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
@@ -290,14 +290,14 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         return builder.buildJoinReq(state,groupId);
     }
     if(line=="/gleave"){
-        if(state.username.empty()){
+        if(state.accountId.empty()){
             std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
         return builder.buildLeaveReq(state,std::nullopt);
     }
     if(line.rfind("/gleave ",0)==0){
-        if(state.username.empty()){
+        if(state.accountId.empty()){
             std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
@@ -306,7 +306,7 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     }
     
     if(line.rfind("/gsayto ",0)==0){
-        if(state.username.empty()){
+        if(state.accountId.empty()){
             std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
@@ -468,7 +468,7 @@ void printPretty(const std::string& payload,ClientState& state){
                 std::cout<<"ROOM_MSG_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             case im::MsgType::GROUP_MSG_PUSH:
-                std::cout<<"[Group: "<<json["data"]["groupId"].get<std::string>()<<"] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
+                std::cout<<"[Group: "<<json["data"]["groupId"].get<std::string>()<<"] "<<json["data"]["fromUsername"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
                 break;
             case im::MsgType::GROUP_MEMBERS_RESP:{
                 std::cout<<"Group members ("<<json["data"]["count"]<<" members in total) :"<<std::endl;
@@ -493,7 +493,7 @@ void printPretty(const std::string& payload,ClientState& state){
             case im::MsgType::GROUP_HISTORY_RESP:{
                 std::cout<<"Group history messages: "<<std::endl;
                 for(const auto& msg:json["data"]["messages"]){
-                    std::cout<<"[Group: "<<msg["groupId"].get<std::string>()<<"] "<<msg["from"].get<std::string>()<<": "<<msg["content"].get<std::string>()<<" (msgId: "<<msg["msgId"].get<uint64_t>()<<")"<<std::endl;
+                        std::cout<<"[Group: "<<msg["groupId"].get<std::string>()<<"] "<<msg["sender_username"].get<std::string>()<<": "<<msg["content"].get<std::string>()<<" (msgId: "<<msg["msgId"].get<uint64_t>()<<")"<<std::endl;
                 }
                 break;
             }

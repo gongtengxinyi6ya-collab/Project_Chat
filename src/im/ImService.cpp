@@ -150,7 +150,7 @@ void im::Imservice::loadFromRepositories(){
     std::vector<storage::GroupRepo::GroupSnapshot> groups=repos_.groupRepo->listGroups();
     for(const auto& group:groups){
         auto members=repos_.groupRepo->listMembers(group.groupId);
-        if(groupManager_.restoreGroup(group.groupId,group.groupName,group.owner,)){
+        if(groupManager_.restoreGroup(group.groupId,group.groupName,group.ownerAccountId,members)){
             restoreGroups++;
             restoreMembers+=members.size();
         }
@@ -339,7 +339,7 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     }
     session.joinedGroupIds_.insert(groupId);
     if(hasRepositories()){
-        auto result=repos_.groupRepo->addMember(groupId,session.accountId_,session.username_);
+        auto result=repos_.groupRepo->addMember(groupId,session.accountId_);
         if(result.status!=storage::RepoStatus::Ok&&result.status!=storage::RepoStatus::AlreadyExists){
 
             groupManager_.leaveGroup(groupId,session.accountId_);//回滚内存状态
@@ -812,7 +812,7 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]
         //检查repos_离线存储是否存在
         return makeErr(req,ErrorCode::BAD_REQUEST,"OfflineMessageRepo is not exist");
     }
-    std::string& username=session.username_;
+    std::string& accountId=session.accountId_;
     //解析limit
     size_t limit=20;
     if(req.body.contains("limit")){
@@ -830,7 +830,7 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]
     if(limit>200){
         limit=200;//限制limit最大值
     }
-    auto indexes=repos_.offlineMessageRepo->listOfflineMessage(username,limit);
+    auto indexes=repos_.offlineMessageRepo->listOfflineMessage(session.accountId_,limit);
     nlohmann::json indexJson=nlohmann::json::array();
     for(const auto& index:indexes){
         indexJson.emplace_back(nlohmann::json{{"msg_id",index.msgId},{"group_id",index.groupId}});
@@ -864,7 +864,7 @@ im::Response im::Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]
             return makeErr(req,ErrorCode::BAD_JSON,"Invalid msg_id in msg_ids");
         }
     }
-    auto result=repos_.offlineMessageRepo->ackOfflineMessage(session.username_,msgIds);
+    auto result=repos_.offlineMessageRepo->ackOfflineMessage(session.accountId_,msgIds);
     if(result.ok()){
         return makeOk(req,MsgType::OFFLINE_ACK_RESP,nlohmann::json{{"acked",msgIds.size()}});
     }

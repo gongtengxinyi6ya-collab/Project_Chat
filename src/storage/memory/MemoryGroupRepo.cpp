@@ -75,7 +75,7 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::MemoryGroupRepo::listGro
             GroupSnapshot groupSnapshot;
             groupSnapshot.groupId=it.second.groupId;
             groupSnapshot.groupName=it.second.groupName;
-            groupSnapshot.owner=it.second.owner;
+            groupSnapshot.ownerAccountId=it.second.owner;
             groupsBasicMess.emplace_back(std::move(groupSnapshot));
         }
         return groupsBasicMess;

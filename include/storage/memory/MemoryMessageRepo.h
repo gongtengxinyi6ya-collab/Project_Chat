@@ -11,7 +11,7 @@
 namespace storage{
 class MemoryMessageRepo:public storage::MessageRepo{
 public:
-    storage::SaveMessageResult saveGroupMessage(uint64_t,const std::string& groupId,const std::string&from,const std::string&content,uint64_t serverTsMs)override;//保存群消息
+    storage::SaveMessageResult saveGroupMessage(uint64_t,const std::string& groupId,const std::string& senderAccountId,const std::string& ,const std::string&content,uint64_t serverTsMs)override;//保存群消息
     std::vector<MessageRecord> listGroupMessages(const std::string&groupId,uint64_t beforeMsgId,size_t limit)override;//查询群历史消息，最多返回limit条
 private:
     std::unordered_map<std::string,std::vector<MessageRecord>> groupMessages_;//groupId映射消息列表

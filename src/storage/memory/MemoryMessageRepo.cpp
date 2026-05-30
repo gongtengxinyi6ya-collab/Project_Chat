@@ -7,7 +7,7 @@ storage::SaveMessageResult storage::MemoryMessageRepo::saveGroupMessage(uint64_t
     MessageRecord record;
     record.messageId=msgId;
     record.groupId=groupId;
-    record.from=from;
+    record.senderAccountId=from;
     record.content=content;
     record.serverTsMs=serverTsMs;
     {
