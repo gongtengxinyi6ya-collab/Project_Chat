@@ -3,6 +3,7 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnectionGuard.h"
 #include <chrono>
+#include <unordered_set>
 
 storage::SqlUserProfileRepo::SqlUserProfileRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
@@ -94,7 +95,14 @@ std::optional<storage::UserProfile> storage::SqlUserProfileRepo::findByUsername(
     }
     return std::nullopt;
 }
-
+std::vector<storage::UserProfile> storage::SqlUserProfileRepo::findByAccountIds(const std::vector<std::string>& accountIds)const{
+    if(accountIds.empty()){
+        return {};
+    }
+    //去重
+    std::unordered_set<std::string> accountIdsSet(accountIds.begin(),accountIds.end());
+    
+}
 storage::RepoResult storage::SqlUserProfileRepo::updateProfile(uint64_t userId,const std::string& nickname,const std::string& avatarUrl,const std::string& signature,int64_t updateAtMs){
     if(userId==0||nickname.empty()||updateAtMs==0){
         return RepoResult{.status=RepoStatus::InvalidArgument};
