@@ -1,6 +1,6 @@
 #include "storage/memory/MemoryUserRepo.h"
 
-storage::RepoResult storage::MemoryUserRepo::createUser(const std::string& accountId,const std::string&username,const std::string& password,const std::string& passwordSalt){
+storage::RepoResult storage::MemoryUserRepo::createUser([[maybe_unused]]const std::string& accountId,const std::string&username,[[maybe_unused]]const std::string& password,[[maybe_unused]]const std::string& passwordSalt){
      storage::
     RepoResult result;
     if(username.empty()){
@@ -35,6 +35,6 @@ std::optional<storage::UserAuthInfo> storage::MemoryUserRepo::findAuthInfoByAcco
     }
     return std::nullopt;
 }
-std::optional<storage::UserAuthInfo> storage::MemoryUserRepo::findByUserId(uint64_t userId)const{
-    
+std::optional<storage::UserAuthInfo> storage::MemoryUserRepo::findByUserId([[maybe_unused]]uint64_t userId)const{
+    return std::nullopt;
 }

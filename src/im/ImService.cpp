@@ -318,7 +318,7 @@ im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string
    
 }
 
-im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Session& session){
+im::Response im::Imservice::handleJoin(const im::Request & req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);//登录门禁
     if(err.has_value()){
         return err.value();
@@ -350,7 +350,7 @@ im::Response im::Imservice::handleJoin(const im::Request & req,ConnKey key,Sessi
     return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",true},{"alreadyIn",false}});
 }
 
-im::Response im::Imservice::handleLeave(const im::Request& req,ConnKey key,Session& session){
+im::Response im::Imservice::handleLeave(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -812,7 +812,6 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]
         //检查repos_离线存储是否存在
         return makeErr(req,ErrorCode::BAD_REQUEST,"OfflineMessageRepo is not exist");
     }
-    std::string& accountId=session.accountId_;
     //解析limit
     size_t limit=20;
     if(req.body.contains("limit")){

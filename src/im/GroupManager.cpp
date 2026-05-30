@@ -87,10 +87,10 @@ bool im::GroupManager::restoreGroup(const std::string& groupId,const std::string
     if(!exists(groupId)){
         Group g(groupId,groupName,ownerAccountId);
         for(auto& member:members){
-            if(!g.addMember(ownerAccountId)){
+            if(!g.addMember(member)){
                 continue;
             }
-            accountIdGroups_[ownerAccountId].insert(groupId);//恢复成员成功时同步添加映射
+            accountIdGroups_[member].insert(groupId);//恢复成员成功时同步添加映射
         }
         groupsById_.emplace(groupId,std::move(g));//同步保存群
     }

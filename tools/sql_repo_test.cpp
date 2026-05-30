@@ -9,6 +9,11 @@
 #include "storage/sql/SqlGroupRepo.h"
 #include "storage/sql/SqlMessageRepo.h"
 #include "security/PasswordHasher.h"
+#include "storage/sql/SqlOfflineMessageRepo.h"
+#include "storage/sql/SqlUserSessionRepo.h"
+#include "storage/sql/SqlUserProfileRepo.h"
+#include "auth/AuthService.h"
+
 
 int main(){
     auto config=AppConfig::loadFromFile("config/config.json");
@@ -42,14 +47,18 @@ int main(){
     bundle.userRepo=std::make_shared<storage::SqlUserRepo>(pool);
     bundle.groupRepo=std::make_shared<storage::SqlGroupRepo>(pool);
     bundle.messageRepo=std::make_shared<storage::SqlMessageRepo>(pool);
+    bundle.offlineMessageRepo=std::make_shared<storage::SqlOfflineMessageRepo>(pool);
+    bundle.userSessionRepo=std::make_shared<storage::SqlUserSessionRepo>(pool);
+    bundle.userProfileRepo=std::make_shared<storage::SqlUserProfileRepo>(pool);
     if(!bundle.valid()){
         LOG_ERROR("Failed to create RepositoryBundle");
         return -1;
     }
+    
     //测试用户创建
     security::PasswordHasher hasher(16,"SHA256");
     auto hashResult=hasher.hashPassword("TestPassword123");
-    auto userId=bundle.userRepo->createUser("testuser", hashResult.hash, hashResult.salt);
+    auto userId=bundle.userRepo->createUser("im12345678","testuser", hashResult.hash, hashResult.salt);
     if(!userId.ok()){
         LOG_ERROR("Failed to create user: "+userId.message);
     }
@@ -83,7 +92,7 @@ int main(){
     }
     //测试保存消息
     uint64_t msgId=static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
-    auto saveResult=bundle.messageRepo->saveGroupMessage(msgId,"testgroup","testuser","Hello, World!",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    auto saveResult=bundle.messageRepo->saveGroupMessage(msgId,"testgroup","im12345678","testuser","Hello, World!",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
     if(!saveResult.ok()){
         LOG_ERROR("Failed to save message: "+saveResult.message);
     }
@@ -92,6 +101,6 @@ int main(){
     auto messages=bundle.messageRepo->listGroupMessages("testgroup",0,10);
     LOG_INFO("Group messages: ");
     for(const auto& msg:messages){
-        LOG_INFO(" - ["+std::to_string(msg.messageId)+"] "+msg.from+": "+msg.content);
+        LOG_INFO(" - ["+std::to_string(msg.messageId)+"] "+msg.senderAccountId+": "+msg.content);
     }
 }

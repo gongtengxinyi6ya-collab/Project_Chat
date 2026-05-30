@@ -1,13 +1,14 @@
 #include "storage/memory/MemoryMessageRepo.h"
 
-storage::SaveMessageResult storage::MemoryMessageRepo::saveGroupMessage(uint64_t msgId,const std::string& groupId,const std::string& from,const std::string& content,uint64_t serverTsMs){
-    if(groupId.empty()||from.empty()||content.empty()){
+storage::SaveMessageResult storage::MemoryMessageRepo::saveGroupMessage(uint64_t msgId,const std::string& groupId,const std::string& senderAccountId,const std::string& senderUsername,const std::string& content,uint64_t serverTsMs){
+    if(groupId.empty()||senderAccountId.empty()||content.empty()){
         return {RepoStatus::InvalidArgument,0,""};
     }
     MessageRecord record;
     record.messageId=msgId;
     record.groupId=groupId;
-    record.senderAccountId=from;
+    record.senderAccountId=senderAccountId;
+    record.senderUsername=senderUsername;
     record.content=content;
     record.serverTsMs=serverTsMs;
     {
@@ -39,7 +40,8 @@ std::vector<storage::MessageRepo::MessageRecord> storage::MemoryMessageRepo::lis
         auto pos=std::lower_bound(messages.begin(),messages.end(),beforeMsgId,[](const MessageRecord& msg,uint64_t id){
             return msg.messageId<id;
         });
-        if(std::distance(messages.begin(),pos)>limit){
+        auto index=static_cast<size_t>(std::distance(messages.begin(),pos));
+        if(index>limit){
             res.insert(res.end(),std::prev(pos,limit),pos);//迭代器从pos向前移动limit位置
         }
         else{

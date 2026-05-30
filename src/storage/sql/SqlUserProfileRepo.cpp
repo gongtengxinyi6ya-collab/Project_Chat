@@ -105,7 +105,6 @@ storage::RepoResult storage::SqlUserProfileRepo::updateProfile(uint64_t userId,c
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         auto result=conn->executePrepared("UPDATE user_profiles SET nickname=?,avatar_url=?,signature=?,updated_at_ms=? WHERE user_id=?",{nickname,avatarUrl,signature,updateAtMs,userId});
         if(result.ok()&&result.affectedRows!=0){
             return RepoResult{.status=RepoStatus::Ok};
