@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include "storage/RepoResult.h"
-
+#include <vector>
 /*屏蔽资料数据具体存储实现*/
 namespace storage{
 /*数据库中用户的公开基础资料*/

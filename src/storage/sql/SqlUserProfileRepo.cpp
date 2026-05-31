@@ -4,7 +4,7 @@
 #include "storage/sql/SqlConnectionGuard.h"
 #include <chrono>
 #include <unordered_set>
-
+#include <unordered_map>
 storage::SqlUserProfileRepo::SqlUserProfileRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
