@@ -1084,15 +1084,16 @@ im::Response im::Imservice::handleUpdateProfile(const Request& req,[[maybe_unuse
 }
 
 nlohmann::json im::Imservice::buildMemberProfileList(const std::vector<std::string>& accountIds){
+    storage::UserProfile emptyUserProfile;
     if(!repos_.userProfileRepo){
-        return nlohmann::json{{"AccountIds",accountIds}};
+        return nlohmann::json{{"accountId",emptyUserProfile.accountId},{"username",emptyUserProfile.username},{"nickname",emptyUserProfile.nickname},{"avatarUrl",emptyUserProfile.avatarUrl},{"signature",emptyUserProfile.signature}};
     }
     auto result=repos_.userProfileRepo->findByAccountIds(accountIds);
     if(result.empty()){
-        return nlohmann::json{{"AccountIds",accountIds}};
+        return nlohmann::json{{"accountId",emptyUserProfile.accountId},{"username",emptyUserProfile.username},{"nickname",emptyUserProfile.nickname},{"avatarUrl",emptyUserProfile.avatarUrl},{"signature",emptyUserProfile.signature}};
     }
     std::unordered_map<std::string,storage::UserProfile> userProfileMap;
-    storage::UserProfile emptyUserProfile;
+    
     //
     for(const auto& userProfile:result){
         userProfileMap[userProfile.accountId]=userProfile;

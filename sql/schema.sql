@@ -103,3 +103,15 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     UNIQUE KEY uk_user_profiles_account_id (account_id),
     KEY idx_user_profiles_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS friend_relations (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    account_id VARCHAR(32) NOT NULL,
+    friend_account_id VARCHAR(32) NOT NULL,
+    created_at_ms BIGINT UNSIGNED NOT NULL,
+    status TINYINT NOT NULL DEFAULT 1,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_friend_relation (account_id, friend_account_id),
+    KEY idx_friend_relations_account (account_id),
+    KEY idx_friend_relations_friend (friend_account_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
