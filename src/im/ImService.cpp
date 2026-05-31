@@ -444,8 +444,11 @@ im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_un
     if(errInGroup.has_value()){
         return errInGroup.value();
     }
-    std::vector<std::string> members=groupManager_.members(groupId.value());
-    return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId.value()},{"count",members.size()},{"members",members}});
+    //获取群成员账号id
+    auto accountIds=groupManager_.members(groupId.value());
+    //同步查成员账号资料
+    auto membersJson=buildMemberProfileList(accountIds);
+    return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId.value()},{"count",accountIds.size()},{"members",membersJson}});
 
 }
 
@@ -1078,4 +1081,31 @@ im::Response im::Imservice::handleUpdateProfile(const Request& req,[[maybe_unuse
         return makeErr(req,ErrorCode::PROFILE_NOT_FOUND,"Failed to get profile");
     }
     return makeErr(req,ErrorCode::INTERNAL,"Failed to update profile");
+}
+
+nlohmann::json im::Imservice::buildMemberProfileList(const std::vector<std::string>& accountIds){
+    if(!repos_.userProfileRepo){
+        return nlohmann::json{{"AccountIds",accountIds}};
+    }
+    auto result=repos_.userProfileRepo->findByAccountIds(accountIds);
+    if(result.empty()){
+        return nlohmann::json{{"AccountIds",accountIds}};
+    }
+    std::unordered_map<std::string,storage::UserProfile> userProfileMap;
+    storage::UserProfile emptyUserProfile;
+    //
+    for(const auto& userProfile:result){
+        userProfileMap[userProfile.accountId]=userProfile;
+    }
+    nlohmann::json profileList=nlohmann::json::array();
+    for(const auto& accountId:accountIds){
+        if(userProfileMap.find(accountId)!=userProfileMap.end()){
+            const auto& profile=userProfileMap[accountId];
+            profileList.push_back(nlohmann::json{{"accountId",accountId},{"username",profile.username},{"nickname",profile.nickname},{"avatarUrl",profile.avatarUrl},{"signature",profile.signature}});
+        }
+        else{//如果没找到用户资料，返回accountId和username字段，其他字段为空
+            profileList.push_back(nlohmann::json{{"accountId",accountId},{"username",emptyUserProfile.username},{"nickname",emptyUserProfile.nickname},{"avatarUrl",emptyUserProfile.avatarUrl},{"signature",emptyUserProfile.signature}});
+        }
+    }
+    return profileList;
 }

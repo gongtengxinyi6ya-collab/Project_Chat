@@ -472,9 +472,22 @@ void printPretty(const std::string& payload,ClientState& state){
                 break;
             case im::MsgType::GROUP_MEMBERS_RESP:{
                 std::cout<<"Group members ("<<json["data"]["count"]<<" members in total) :"<<std::endl;
-                for(const auto& member:json["data"]["members"]){
-                    std::cout<<member.get<std::string>()<<std::endl;
+                for (const auto& member : json["data"]["members"]) {
+                    if (member.is_string()) {
+                    std::cout << member.get<std::string>() << std::endl;
+                }else {
+                std::string accountId = member.value("accountId", "");
+                std::string nickname = member.value("nickname", "");
+                std::string username = member.value("username", "");
+
+                std::string display = !nickname.empty() ? nickname : username;
+                std::cout << accountId;
+                if (!display.empty()) {
+                     std::cout << " (" << display << ")";
                 }
+                std::cout << std::endl;
+    }
+}
                 break;
             }
             case im::MsgType::GROUP_EVENT_PUSH:

@@ -100,7 +100,58 @@ std::vector<storage::UserProfile> storage::SqlUserProfileRepo::findByAccountIds(
         return {};
     }
     //去重
-    std::unordered_set<std::string> accountIdsSet(accountIds.begin(),accountIds.end());
+    std::unordered_set<std::string> accountIdsSet;
+    std::vector<SqlParam> params;
+    for(const auto& accountId:accountIds){
+        if(accountIdsSet.insert(accountId).second){
+            params.emplace_back(accountId);
+        }
+    }
+    if(params.empty()){
+        return {};
+    }
+    //根据数量拼接SQL占位符号
+    std::string placeholders;
+    placeholders.reserve(params.size()*2);
+    for(size_t i=0;i<params.size();i++){
+        if(i==0){
+            placeholders+="?";
+        }
+        else{
+            placeholders+=",?";
+        }
+    }
+    auto conn=pool_->acquire();
+    if(!conn){
+        return {};
+    }
+    if(conn->connected()){
+        auto result=conn->queryPrepared("SELECT user_id,account_id,username,nickname,avatar_url,signature,updated_at_ms FROM user_profiles WHERE account_id IN("+placeholders+")",params);
+        if(result.ok()&&!result.rows.empty()){
+            std::vector<UserProfile> userProfileLists;
+            for(const auto& row:result.rows){
+                UserProfile profile;
+                auto userIdPair=row.find("user_id");
+                profile.userId=userIdPair!=row.end()?std::stoull(userIdPair->second):0;
+                auto accountIdPair=row.find("account_id");
+                profile.accountId=accountIdPair!=row.end()?accountIdPair->second:"";
+                auto usernamePair=row.find("username");
+                profile.username=usernamePair!=row.end()?usernamePair->second:"";
+                auto nicknamePair=row.find("nickname");
+                profile.nickname=nicknamePair!=row.end()?nicknamePair->second:"";
+                auto avatarUrlPair=row.find("avatar_url");
+                profile.avatarUrl=avatarUrlPair!=row.end()?avatarUrlPair->second:"";
+                auto signaturePair=row.find("signature");
+                profile.signature=signaturePair!=row.end()?signaturePair->second:"";
+                auto updatedAtPair=row.find("updated_at_ms");
+                profile.updateAtMs=updatedAtPair!=row.end()?std::stoll(updatedAtPair->second):0;
+                userProfileLists.push_back(std::move(profile));
+            }
+            return userProfileLists;
+        }
+    }
+    return {};
+
     
 }
 storage::RepoResult storage::SqlUserProfileRepo::updateProfile(uint64_t userId,const std::string& nickname,const std::string& avatarUrl,const std::string& signature,int64_t updateAtMs){

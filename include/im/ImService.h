@@ -127,6 +127,6 @@ private:
     //用户资料接口
     Response handleGetProfile(const Request& req,ConnKey key,Session& session);//当前已登录用户查询自己的资料
     Response handleUpdateProfile(const Request& req,ConnKey key,Session& session);//当前登录用户修改自己的公开资料
-    
+    nlohmann::json buildMemberProfileList(const std::vector<std::string>&accountIds);//把GroupManager返回的accountId列表转换为客户端可展示的成员资料
 };
 }
