@@ -45,6 +45,10 @@ enum class MsgType:uint16_t{
     GET_PROFILE_RESP,//返回自己的资料
     UPDATE_PROFILE_REQ,//修改资料请求
     UPDATE_PROFILE_RESP,//修改资料响应
+    SEARCH_USER_REQ,//搜索好友请求
+    SEARCH_USER_RESP,//搜索好友响应
+    LIST_FRIENDS_REQ,//列出好友列表请求
+    LIST_FRIENDS_RESP,
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -132,6 +136,14 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::UPDATE_PROFILE_REQ;
         case 41:
             return MsgType::UPDATE_PROFILE_RESP;
+        case 42:
+            return MsgType::SEARCH_USER_REQ;
+        case 43:
+            return MsgType::SEARCH_USER_RESP;
+        case 44:            
+            return MsgType::LIST_FRIENDS_REQ;
+        case 45:            
+            return MsgType::LIST_FRIENDS_RESP;
         case 255:
             return MsgType::ERR;
         

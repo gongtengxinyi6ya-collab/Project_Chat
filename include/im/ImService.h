@@ -21,12 +21,16 @@
 #include "logger/LogLevel.h"
 #include "storage/RepositoryBundle.h"
 #include "storage/RepoResult.h"
-#include "auth/AuthService.h"
+
 class TcpConnection;
 
 /*唯一业务入口
 */
+namespace auth{
+    class AuthService;
+}
 namespace im{
+    class FriendService;//好友关系类向前声明
 class Imservice{
 public:
     class BroadcastResult{
@@ -128,5 +132,10 @@ private:
     Response handleGetProfile(const Request& req,ConnKey key,Session& session);//当前已登录用户查询自己的资料
     Response handleUpdateProfile(const Request& req,ConnKey key,Session& session);//当前登录用户修改自己的公开资料
     nlohmann::json buildMemberProfileList(const std::vector<std::string>&accountIds);//把GroupManager返回的accountId列表转换为客户端可展示的成员资料
+
+    //好友相关接口
+    std::unique_ptr<FriendService> friendService_;
+    Response handleSearchUser(const Request& req,ConnKey key,Session& session);//提交好友搜索请求
+    Response handleListFriends(const Request& req,ConnKey key,Session& session);
 };
 }

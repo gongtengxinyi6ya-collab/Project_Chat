@@ -8,7 +8,7 @@
 #include "auth/AuthService.h"
 #include "auth/AuthResult.h"
 #include "security/PasswordHasher.h"
-
+#include "im/FriendService.h"
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
@@ -696,6 +696,10 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleGetProfile(req,key,session);
         case im::MsgType::UPDATE_PROFILE_REQ:
             return handleUpdateProfile(req,key,session);
+        case im::MsgType::SEARCH_USER_REQ:
+            return handleSearchUser(req,key,session);
+        case im::MsgType::LIST_FRIENDS_REQ:
+            return handleListFriends(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -1109,4 +1113,50 @@ nlohmann::json im::Imservice::buildMemberProfileList(const std::vector<std::stri
         }
     }
     return profileList;
+}
+
+//好友相关接口
+im::Response im::Imservice::handleSearchUser(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    //读取账号
+    std::string accountId;
+    auto getAccountId=getStringField(req,"accountId",accountId);
+    if(getAccountId){
+        return getAccountId.value();
+    }
+    if(!friendService_){
+        return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
+    }
+    //搜索好友
+    auto result=friendService_->findUser(accountId);
+    if(!result){
+        //搜索不到
+        return makeErr(req,ErrorCode::USER_NOT_FOUND,"Failed to find the user");
+    }
+    auto profile=result.value();
+    return makeOk(req,MsgType::SEARCH_USER_RESP,nlohmann::json{{"accountId",accountId},{"username",profile.username},{"nickname",profile.nickname},{"avatarUrl",profile.avatarUrl},{"signature",profile.signature}});
+
+}
+
+im::Response im::Imservice::handleListFriends(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    if(!friendService_){
+        return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
+    }
+    const auto& result=friendService_->listFriends(session.accountId_);
+    if(result.empty()){
+        return makeErr(req,ErrorCode::USER_NOT_FOUND,"Failed to get list of friends");
+    }
+    nlohmann::json friendList=nlohmann::json::array();
+    for(const auto& friendInfo:result){
+        friendList.push_back(nlohmann::json{{"accountId",friendInfo.accountId},{"username",friendInfo.username},{"nickname",friendInfo.nickname},{"avatarUrl",friendInfo.avatarUrl},{"signature",friendInfo.signature}});
+    }
+    return makeOk(req,MsgType::LIST_FRIENDS_RESP,nlohmann::json{{"friends",friendList},{"count",friendList.size()}});
+    
 }

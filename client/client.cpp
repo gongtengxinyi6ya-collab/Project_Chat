@@ -253,6 +253,27 @@ public:
         }
         return body.dump();
     }
+    std::string buildSearchUserReq(ClientState& state,std::string accountId){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::SEARCH_USER_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;    
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        body["accountId"]=accountId;
+        return body.dump();
+    }
+    std::string buildListFriendsReq(ClientState& state){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::LIST_FRIENDS_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;    
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        return body.dump();
+    }
 };
 //把/auth jason,/dm tom hello,/list,/gjoin room,/gleave ,/gmembers,/gls,/gsay 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
@@ -400,7 +421,13 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         }
         return builder.buildUpdateProfileReq(state,nickname.empty()?std::nullopt:std::optional<std::string>(nickname),avatarUrl.empty()?std::nullopt:std::optional<std::string>(avatarUrl),signature.empty()?std::nullopt:std::optional<std::string>(signature));
     }
-
+    if(line.rfind("/searchuser ",0)==0){
+        std::string accountId=line.substr(12);
+        return builder.buildSearchUserReq(state,accountId);
+    }
+    if(line.rfind("/listfriends ",0)==0){
+        return builder.buildListFriendsReq(state);
+    }
     return std::nullopt;
 }
 //尝试parse JSON,按type分类打印摘要，失败则原样输出
@@ -615,6 +642,44 @@ void printPretty(const std::string& payload,ClientState& state){
                     if(json["data"].contains("signature")&&json["data"]["signature"].is_string()){
                         std::cout<<"New signature: "<<json["data"]["signature"].get<std::string>()<<std::endl;
                     }
+                }
+                break;
+            }
+            case im::MsgType::SEARCH_USER_RESP:{
+                std::cout<<"SEARCH_USER_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                if(json["ok"].get<bool>()){
+                    std::cout<<"User profile: "<<std::endl;
+                    if(json["data"].contains("accountId")&&json["data"]["accountId"].is_string()){
+                        std::cout<<"AccountId: "<<json["data"]["accountId"].get<std::string>()<<std::endl;
+                    }
+                    if(json["data"].contains("username")&&json["data"]["username"].is_string()){
+                        std::cout<<"Username: "<<json["data"]["username"].get<std::string>()<<std::endl;
+                    }
+                    if(json["data"].contains("nickname")&&json["data"]["nickname"].is_string()){
+                        std::cout<<"Nickname: "<<json["data"]["nickname"].get<std::string>()<<std::endl;
+                    }
+                    if(json["data"].contains("avatarUrl")&&json["data"]["avatarUrl"].is_string()){
+                        std::cout<<"AvatarUrl: "<<json["data"]["avatarUrl"].get<std::string>()<<std::endl;
+                    }
+                    if(json["data"].contains("signature")&&json["data"]["signature"].is_string()){
+                        std::cout<<"Signature: "<<json["data"]["signature"].get<std::string>()<<std::endl;
+                    }
+                }
+                break;
+            }
+            case im::MsgType::LIST_FRIENDS_RESP:{
+                std::cout<<"Friends list: "<<std::endl;
+                for (const auto& friendInfo : json["data"]["friends"]) {
+                    std::string accountId = friendInfo.value("accountId", "");
+                    std::string nickname = friendInfo.value("nickname", "");
+                    std::string username = friendInfo.value("username", "");
+
+                    std::string display = !nickname.empty() ? nickname : username;
+                    std::cout << accountId;
+                    if (!display.empty()) {
+                        std::cout << " (" << display << ")";
+                    }
+                    std::cout << std::endl;
                 }
                 break;
             }
