@@ -115,3 +115,29 @@ CREATE TABLE IF NOT EXISTS friend_relations (
     KEY idx_friend_relations_account (account_id),
     KEY idx_friend_relations_friend (friend_account_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS friend_requests (
+    request_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    requester_account_id VARCHAR(32) NOT NULL,
+    receiver_account_id VARCHAR(32) NOT NULL,
+    status TINYINT NOT NULL DEFAULT 0,
+    created_at_ms BIGINT UNSIGNED NOT NULL,
+    handled_at_ms BIGINT UNSIGNED NULL,
+
+    pending_pair_key VARCHAR(65)
+        GENERATED ALWAYS AS (
+            CASE
+                WHEN status = 0 THEN CONCAT(
+                    LEAST(requester_account_id, receiver_account_id),
+                    '#',
+                    GREATEST(requester_account_id, receiver_account_id)
+                )
+                ELSE NULL
+            END
+        ) STORED,
+
+    PRIMARY KEY (request_id),
+    UNIQUE KEY uk_friend_requests_pending_pair (pending_pair_key),
+    KEY idx_friend_requests_receiver_status (receiver_account_id, status),
+    KEY idx_friend_requests_requester_status (requester_account_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

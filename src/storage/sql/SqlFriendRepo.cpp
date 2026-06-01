@@ -35,7 +35,7 @@ storage::RepoResult storage::SqlFriendRepo::addFriendPair(const std::string& acc
         if(!result1.ok()&&result1.error.find("Duplicate entry")!=std::string::npos){
             return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
         }
-        auto result2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,create_at_ms,status) VALUES(?,?,?,1) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{friendAccountId,accountId,createAtMs,createAtMs});
+        auto result2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,created_at_ms,status) VALUES(?,?,?,1) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{friendAccountId,accountId,createAtMs,createAtMs});
         if(!result2.ok()&&result2.error.find("Duplicate entry")!=std::string::npos){
             return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
         }

@@ -5,11 +5,12 @@
 后续映射到im::ErrorCode*/
 namespace storage{
 enum class RepoStatus{
-    Ok,
-    AlreadyExists,
-    NotFound,
-    InvalidArgument,
-    SqlError
+    Ok,//成功
+    AlreadyExists,//唯一键冲突
+    NotFound,//查询不到
+    InvalidArgument,//参数非法
+    SqlError,//SQL执行异常
+    Internal,//内部未知错误
 };
 
 class RepoResult{
