@@ -136,6 +136,8 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
         security::PasswordHasher passwordHash(16,"SHA256");
         security::TokenManager tokenManager;
         authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash,tokenManager,repos_.userSessionRepo,repos_.userProfileRepo);
+    }
+    if(repos_.friendRepo&&repos_.userProfileRepo){
         friendService_=std::make_unique<im::FriendService>(repos_.friendRepo,repos_.userProfileRepo);
     }
 }
@@ -1152,9 +1154,7 @@ im::Response im::Imservice::handleListFriends(const Request& req,[[maybe_unused]
         return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
     }
     const auto& result=friendService_->listFriends(session.accountId_);
-    if(result.empty()){
-        return makeErr(req,ErrorCode::USER_NOT_FOUND,"Failed to get list of friends");
-    }
+    
     nlohmann::json friendList=nlohmann::json::array();
     for(const auto& friendInfo:result){
         friendList.push_back(nlohmann::json{{"accountId",friendInfo.accountId},{"username",friendInfo.username},{"nickname",friendInfo.nickname},{"avatarUrl",friendInfo.avatarUrl},{"signature",friendInfo.signature}});

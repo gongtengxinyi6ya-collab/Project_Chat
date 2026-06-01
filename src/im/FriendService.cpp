@@ -2,7 +2,7 @@
 #include "storage/FriendRepo.h"
 #include <stdexcept>
 im::FriendService::FriendService(std::shared_ptr<storage::FriendRepo> friendRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo){
-    if(friendRepo||userProfileRepo){
+    if(!friendRepo||!userProfileRepo){
         throw std::invalid_argument("Repo is empty");
     }
     friendRepo_=std::move(friendRepo);
@@ -30,7 +30,7 @@ std::vector<storage::UserProfile> im::FriendService::listFriends(const std::stri
     if(!friendRepo_||!userProfileRepo_){
         return {};
     }
-    auto friendAccountIds=friendRepo_->listFriendccountIds(accountId);
+    auto friendAccountIds=friendRepo_->listFriendAccountIds(accountId);
     //获取profile列表
     return userProfileRepo_->findByAccountIds(friendAccountIds);
 }

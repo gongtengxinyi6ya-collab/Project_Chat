@@ -11,7 +11,7 @@ public:
     RepoResult addFriendPair(const std::string& accountId,const std::string& friendAccountId,int64_t createAtMs)override;
     RepoResult removeFriendPair(const std::string& accountId,const std::string&friendAccountId)override;//删除好友
     bool areFriends(const std::string& accountId,const std::string& friendAccountId)const override; //查询好友关系是否有效
-    std::vector<std::string> listFriendccountIds(const std::string& accountId)const override;//查询好友账号列表
+    std::vector<std::string> listFriendAccountIds(const std::string& accountId)const override;//查询好友账号列表
 
 private:
     std::shared_ptr<SqlConnectionPool> pool_;//复用现有的MySQL连接池

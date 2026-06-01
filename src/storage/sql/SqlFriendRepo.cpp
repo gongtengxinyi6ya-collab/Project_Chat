@@ -31,11 +31,11 @@ storage::RepoResult storage::SqlFriendRepo::addFriendPair(const std::string& acc
          //开启事务
         SqlTransaction transaction(*conn);//开启事务
         //插入双向关系；
-        auto result1=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,create_at_ms,status) VALUES(?,?,?,1)",{accountId,friendAccountId,createAtMs});
+        auto result1=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,created_at_ms,status) VALUES(?,?,?,1) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{accountId,friendAccountId,createAtMs,createAtMs});
         if(!result1.ok()&&result1.error.find("Duplicate entry")!=std::string::npos){
             return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
         }
-        auto result2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,create_at_ms,status) VALUES(?,?,?,1)",{friendAccountId,accountId,createAtMs});
+        auto result2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,create_at_ms,status) VALUES(?,?,?,1) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{friendAccountId,accountId,createAtMs,createAtMs});
         if(!result2.ok()&&result2.error.find("Duplicate entry")!=std::string::npos){
             return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
         }
@@ -70,11 +70,11 @@ storage::RepoResult storage::SqlFriendRepo::removeFriendPair(const std::string& 
         //软删除双向关系
         auto result1=conn->executePrepared("UPDATE friend_relations SET status=2 WHERE account_id=? AND friend_account_id=?",{accountId,friendAccountId});
         if(!result1.ok()||result1.affectedRows==0){
-            return RepoResult{.status=RepoStatus::SqlError,.message=result1.error};
+            return RepoResult{.status=RepoStatus::NotFound,.message=result1.error};
         }
         auto result2=conn->executePrepared("UPDATE friend_relations SET status=2 WHERE account_id=? AND friend_account_id=?",{friendAccountId,accountId});
         if(!result2.ok()||result2.affectedRows==0){
-            return RepoResult{.status=RepoStatus::SqlError,.message=result2.error};
+            return RepoResult{.status=RepoStatus::NotFound,.message=result2.error};
         }
         transaction.commit();
         return RepoResult{.status=RepoStatus::Ok};
@@ -93,13 +93,13 @@ bool storage::SqlFriendRepo::areFriends(const std::string&accountId,const std::s
         return false;
     }
     auto result=conn->queryPrepared("SELECT id FROM friend_relations WHERE account_id=? AND friend_account_id=? AND status=1 LIMIT 1",{accountId,friendAccountId});
-    if(result.ok()){
+    if(result.ok()&&!result.rows.empty()){
         return true;
     }
     return false;
 }
 
-std::vector<std::string> storage::SqlFriendRepo::listFriendccountIds(const std::string& accountId)const{
+std::vector<std::string> storage::SqlFriendRepo::listFriendAccountIds(const std::string& accountId)const{
     if(accountId.empty()){
         return {};
     }
@@ -112,7 +112,7 @@ std::vector<std::string> storage::SqlFriendRepo::listFriendccountIds(const std::
     if(result.ok()&&!result.rows.empty()){
         std::vector<std::string> friendAccountIds;
         for(const auto& row:result.rows){
-            auto it=row.find("account_id");
+            auto it=row.find("friend_account_id");
             if(it!=row.end()){
                 friendAccountIds.emplace_back(it->second);
             }
