@@ -43,7 +43,7 @@ storage::RepoResult storage::SqlFriendRepo::addFriendPair(const std::string& acc
             transaction.commit();
             return RepoResult{.status=RepoStatus::Ok};
         }
-        retuen RepoResult{.stauts=RepoStatus::SqlError};
+        return RepoResult{.status=RepoStatus::SqlError};
     }catch(const std::exception&e){
         return RepoResult{.status=RepoStatus::SqlError,.message=e.what()};
     }
@@ -82,4 +82,42 @@ storage::RepoResult storage::SqlFriendRepo::removeFriendPair(const std::string& 
         return RepoResult{.status=RepoStatus::SqlError,.message=e.what()};
     }
     
+}
+
+bool storage::SqlFriendRepo::areFriends(const std::string&accountId,const std::string& friendAccountId)const{
+    if(accountId.empty()||friendAccountId.empty()){
+        return false;
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return false;
+    }
+    auto result=conn->queryPrepared("SELECT id FROM friend_relations WHERE account_id=? AND friend_account_id=? AND status=1 LIMIT 1",{accountId,friendAccountId});
+    if(result.ok()){
+        return true;
+    }
+    return false;
+}
+
+std::vector<std::string> storage::SqlFriendRepo::listFriendccountIds(const std::string& accountId)const{
+    if(accountId.empty()){
+        return {};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {};
+    }
+    //查询指定用户好友列表
+    auto result=conn->queryPrepared("SELECT friend_account_id FROM friend_relations WHERE account_id=? AND status=1 ORDER BY id ASC",{accountId});
+    if(result.ok()&&!result.rows.empty()){
+        std::vector<std::string> friendAccountIds;
+        for(const auto& row:result.rows){
+            auto it=row.find("account_id");
+            if(it!=row.end()){
+                friendAccountIds.emplace_back(it->second);
+            }
+        }
+        return friendAccountIds;
+    }
+    return {};
 }
