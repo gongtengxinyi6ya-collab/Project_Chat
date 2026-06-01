@@ -55,6 +55,7 @@ public:
     using SendToConnKeyFn=std::function<SendResult (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
 
     explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig());
+    ~Imservice();
     void setSendToConnKey(SendToConnKeyFn fn);
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射

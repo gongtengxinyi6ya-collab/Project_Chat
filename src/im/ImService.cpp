@@ -14,6 +14,7 @@ im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supported
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
     sendToConnKey_=std::move(fn);
 }
+im::Imservice::~Imservice()=default;
 void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const std::string &payload){
     ConnKey key=conn->fd();
     auto &session=sessionManager_.getOrCreate(key);
@@ -135,6 +136,7 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
         security::PasswordHasher passwordHash(16,"SHA256");
         security::TokenManager tokenManager;
         authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash,tokenManager,repos_.userSessionRepo,repos_.userProfileRepo);
+        friendService_=std::make_unique<im::FriendService>(repos_.friendRepo,repos_.userProfileRepo);
     }
 }
 bool im::Imservice::hasRepositories()const{
