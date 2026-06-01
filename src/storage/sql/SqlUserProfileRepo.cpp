@@ -175,3 +175,33 @@ storage::RepoResult storage::SqlUserProfileRepo::updateProfile(uint64_t userId,c
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to update userProfile"};
 }
+std::optional<storage::UserProfile> storage::SqlUserProfileRepo::findByAccountId(const std::string&accountId)const{
+    if(accountId.empty()){
+        return std::nullopt;
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return std::nullopt;
+    }
+    auto result=conn->queryPrepared("SELECT user_id,account_id,username,nickname,avatar_url,signature,updated_at_ms FROM user_profiles WHERE account_id=? LIMIT 1",{accountId});
+    if(result.ok()&&!result.rows.empty()){
+        UserProfile profile;
+        const auto& row=result.rows.front();
+        auto userIdPair=row.find("user_id");
+        profile.userId=userIdPair!=row.end()?std::stoull(userIdPair->second):0;
+        auto accountIdPair=row.find("account_id");
+        profile.accountId=accountIdPair!=row.end()?accountIdPair->second:"";
+        auto usernamePair=row.find("username");
+        profile.username=usernamePair!=row.end()?usernamePair->second:"";
+        auto nicknamePair=row.find("nickname");
+        profile.nickname=nicknamePair!=row.end()?nicknamePair->second:"";
+        auto avatarUrlPair=row.find("avatar_url");
+        profile.avatarUrl=avatarUrlPair!=row.end()?avatarUrlPair->second:"";
+        auto signaturePair=row.find("signature");
+        profile.signature=signaturePair!=row.end()?signaturePair->second:"";
+        auto updatedAtPair=row.find("updated_at_ms");
+        profile.updateAtMs=updatedAtPair!=row.end()?std::stoll(updatedAtPair->second):0;
+        return profile;
+    }
+    return std::nullopt;
+}

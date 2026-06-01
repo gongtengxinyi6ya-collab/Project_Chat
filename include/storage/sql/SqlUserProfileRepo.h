@@ -13,7 +13,7 @@ public:
     std::optional<UserProfile> findByUsername(const std::string& username)const override;//按账号名查询资料
     std::vector<UserProfile> findByAccountIds(const std::vector<std::string>& accountIds)const override;//批量根据accountId查询用户资料
     RepoResult updateProfile(uint64_t userId,const std::string& nickname,const std::string& avatarUrl,const std::string& signature,int64_t updateAtMs)override;//更新自己资料
-
+    std::optional<UserProfile> findByAccountId(const std::string& accountId)const override;//单用户精确查询
 private:
     std::shared_ptr<SqlConnectionPool> pool_;
 };
