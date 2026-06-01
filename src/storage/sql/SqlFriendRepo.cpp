@@ -3,3 +3,83 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlTransaction.h"
+
+storage::SqlFriendRepo::SqlFriendRepo(std::shared_ptr<SqlConnectionPool> pool):
+pool_(std::move(pool)){
+
+}
+storage::RepoResult storage::SqlFriendRepo::addFriendPair(const std::string& accountId,const std::string& friendAccountId,int64_t createAtMs)
+{
+    //校验账号非空
+    if(accountId.empty()||friendAccountId.empty()){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
+    }
+    //禁止自己加自己
+    if(accountId==friendAccountId){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="Can not add yourself"};
+    }
+    auto conn=pool_->acquire();//获取连接
+    if(!conn){
+        return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
+    }
+    if(!conn->connected()){
+        return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
+    }
+   
+    
+    try{
+         //开启事务
+        SqlTransaction transaction(*conn);//开启事务
+        //插入双向关系；
+        auto result1=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,create_at_ms,status) VALUES(?,?,?,1)",{accountId,friendAccountId,createAtMs});
+        if(!result1.ok()&&result1.error.find("Duplicate entry")!=std::string::npos){
+            return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
+        }
+        auto result2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,create_at_ms,status) VALUES(?,?,?,1)",{friendAccountId,accountId,createAtMs});
+        if(!result2.ok()&&result2.error.find("Duplicate entry")!=std::string::npos){
+            return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
+        }
+        if(result1.ok()&&result2.ok()){
+            transaction.commit();
+            return RepoResult{.status=RepoStatus::Ok};
+        }
+        retuen RepoResult{.stauts=RepoStatus::SqlError};
+    }catch(const std::exception&e){
+        return RepoResult{.status=RepoStatus::SqlError,.message=e.what()};
+    }
+
+}
+storage::RepoResult storage::SqlFriendRepo::removeFriendPair(const std::string& accountId,const std::string& friendAccountId){
+    if(accountId.empty()||friendAccountId.empty()){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
+    }
+    //禁止自己加自己
+    if(accountId==friendAccountId){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="Can not remove yourself"};
+    }
+    auto conn=pool_->acquire();//获取连接
+    if(!conn){
+        return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
+    }
+    if(!conn->connected()){
+        return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
+    }
+    try{
+        //开启事务
+        SqlTransaction transaction(*conn);
+        //软删除双向关系
+        auto result1=conn->executePrepared("UPDATE friend_relations SET status=2 WHERE account_id=? AND friend_account_id=?",{accountId,friendAccountId});
+        if(!result1.ok()||result1.affectedRows==0){
+            return RepoResult{.status=RepoStatus::SqlError,.message=result1.error};
+        }
+        auto result2=conn->executePrepared("UPDATE friend_relations SET status=2 WHERE account_id=? AND friend_account_id=?",{friendAccountId,accountId});
+        if(!result2.ok()||result2.affectedRows==0){
+            return RepoResult{.status=RepoStatus::SqlError,.message=result2.error};
+        }
+        transaction.commit();
+        return RepoResult{.status=RepoStatus::Ok};
+    }catch(const std::exception& e){
+        return RepoResult{.status=RepoStatus::SqlError,.message=e.what()};
+    }
+    
+}
