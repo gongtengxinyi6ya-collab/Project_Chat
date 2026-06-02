@@ -53,7 +53,7 @@ storage::RepoValueResult<uint64_t> im::FriendService::sendRequest(const std::str
         return {.status=storage::RepoStatus::InvalidArgument};
     }
     if(from==to){
-        return {.status=storage::RepoStatus::InvalidArgument,.message="Can not add yourself"};
+        return {.status=storage::RepoStatus::CannotAddYourself,.message="Can not add yourself"};
     }
     //搜索目标用户是否存在
     auto searchUser=findUser(to);

@@ -10,6 +10,7 @@ enum class RepoStatus{
     NotFound,//查询不到
     InvalidArgument,//参数非法
     SqlError,//SQL执行异常
+    CannotAddYourself,
     Internal,//内部未知错误
 };
 

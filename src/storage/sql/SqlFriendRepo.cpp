@@ -16,7 +16,7 @@ storage::RepoResult storage::SqlFriendRepo::addFriendPair(const std::string& acc
     }
     //禁止自己加自己
     if(accountId==friendAccountId){
-        return RepoResult{.status=RepoStatus::InvalidArgument,.message="Can not add yourself"};
+        return RepoResult{.status=RepoStatus::CannotAddYourself,.message="Can not add yourself"};
     }
     auto conn=pool_->acquire();//获取连接
     if(!conn){

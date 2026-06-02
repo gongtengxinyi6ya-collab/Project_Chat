@@ -1168,3 +1168,119 @@ im::Response im::Imservice::handleListFriends(const Request& req,[[maybe_unused]
     return makeOk(req,MsgType::LIST_FRIENDS_RESP,nlohmann::json{{"friends",friendList},{"count",friendList.size()}});
     
 }
+
+//好友请求接口
+im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    std::string targetAccountId;
+    auto getAccountId=getStringField(req,"targetAccountId",targetAccountId);
+    if(getAccountId){
+        return getAccountId.value();
+    }
+    if(!friendService_){
+        return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
+    }
+    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto result=friendService_->sendRequest(session.accountId_,targetAccountId,nowMs);
+    if(!result.ok()){
+        if(result.status==storage::RepoStatus::CannotAddYourself){
+            return makeErr(req,ErrorCode::CANNOT_ADD_SELF,"can not add yourself");
+        }
+        if(result.status==storage::RepoStatus::AlreadyExists){
+            return makeErr(req,ErrorCode::ALREADY_FRIENDS,"The user is already your friend");
+        }
+        return makeErr(req,ErrorCode::INTERNAL,result.message);
+    }
+    return makeOk(req,MsgType::SEND_FRIEND_REQUEST_RESP,nlohmann::json{"requestId",result.value.value()});
+}
+
+im::Response im::Imservice::handleListFriendRequests(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    
+    if(!friendService_){
+        return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
+    }
+    auto result=friendService_->listIncomingRequests(session.accountId_);
+    if(result.empty()){
+        return makeOk(req,MsgType::LIST_FRIEND_REQUEST_RESP);
+    }
+    nlohmann::json friendRequestView=nlohmann::json::array();
+    for(const auto& view:result){
+        friendRequestView.push_back(nlohmann::json{{"requestId",view.requestId},{"accountId",view.requesterAccountId},{"username",view.username},{"nickname",view.nickname},{"avatarUrl",view.avatarUrl},{"createdAtMs",view.createdAtMs}});
+    }
+    return makeOk(req,MsgType::LIST_FRIEND_REQUEST_RESP,nlohmann::json{{"requests",friendRequestView},{"count",friendRequestView.size()}});
+}
+im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    
+    if(!friendService_){
+        return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
+    }
+    uint64_t requestId;
+    if(req.body.contains("requestId")){
+        if(req.body["requestId"].is_number_unsigned()){
+            requestId=req.body["requestId"].get<uint64_t>();
+        }
+        else if(req.body["requestId"].is_number_integer()&&req.body["requestId"].get<int64_t>()>=0){
+            requestId=static_cast<uint64_t>(req.body["requestId"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid requestId");
+        }
+    }
+    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto result=friendService_->acceptRequest(session.accountId_,requestId,nowMs);
+    if(!result.ok()){
+        if(result.status==storage::RepoStatus::NotFound){
+            return makeErr(req,ErrorCode::FRIEND_REQUEST_NOT_FOUND,"The request was not found");
+        }
+        if(result.status==storage::RepoStatus::AlreadyExists){
+            return makeErr(req,ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED,"The request has already been handled");
+        }
+        return makeErr(req,ErrorCode::INTERNAL,result.message);
+    }
+    return makeOk(req,MsgType::ACCEPT_FRIEND_REQUEST_RESP,nlohmann::json{"requestId",requestId});
+}
+im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    
+    if(!friendService_){
+        return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
+    }
+    uint64_t requestId;
+    if(req.body.contains("requestId")){
+        if(req.body["requestId"].is_number_unsigned()){
+            requestId=req.body["requestId"].get<uint64_t>();
+        }
+        else if(req.body["requestId"].is_number_integer()&&req.body["requestId"].get<int64_t>()>=0){
+            requestId=static_cast<uint64_t>(req.body["requestId"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid requestId");
+        }
+    }
+    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto result=friendService_->rejectRequest(session.accountId_,requestId,nowMs);
+    if(!result.ok()){
+        if(result.status==storage::RepoStatus::NotFound){
+            return makeErr(req,ErrorCode::FRIEND_REQUEST_NOT_FOUND,"The request was not found");
+        }
+        if(result.status==storage::RepoStatus::AlreadyExists){
+            return makeErr(req,ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED,"The request has already been handled");
+        }
+        return makeErr(req,ErrorCode::INTERNAL,result.message);
+    }
+    return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{"requestId",requestId});
+}

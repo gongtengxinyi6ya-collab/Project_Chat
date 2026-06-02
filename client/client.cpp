@@ -274,6 +274,49 @@ public:
         body["seq"]=state.allocSeq();  
         return body.dump();
     }
+    std::string buildSendFriendRequestReq(ClientState& state,std::string targetAccountId){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::SEND_FRIEND_REQUEST_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;    
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        body["targetAccountId"]=targetAccountId;
+        return body.dump();
+    }
+    std::string buildListFriendRequestReq(ClientState& state){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::LIST_FRIEND_REQUEST_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;    
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        return body.dump();
+    }
+    std::string buildAcceptFriendRequestReq(ClientState& state,std::string requestId){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::ACCEPT_FRIEND_REQUEST_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;    
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        body["requestId"]=requestId;
+        return body.dump();
+    }
+    std::string buildRejectFriendRequestReq(ClientState& state,std::string requestId){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::REJECT_FRIEND_REQUEST_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;    
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        body["requestId"]=requestId;
+        return body.dump();
+    }
 };
 //把/auth jason,/dm tom hello,/list,/gjoin room,/gleave ,/gmembers,/gls,/gsay 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
@@ -425,8 +468,23 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         std::string accountId=line.substr(12);
         return builder.buildSearchUserReq(state,accountId);
     }
-    if(line.rfind("/listfriends ",0)==0){
+    if(line.rfind("/listfriends",0)==0){
         return builder.buildListFriendsReq(state);
+    }
+    if(line.rfind("/sendfriendrequest ",0)==0){
+        std::string targetAccountId=line.substr(19);
+        return builder.buildSendFriendRequestReq(state,targetAccountId);
+    }
+    if(line.rfind("/listfriendrequests",0)==0){
+        return builder.buildListFriendRequestReq(state);
+    }
+    if(line.rfind("/acceptfriendrequest ",0)==0){
+        std::string requestId=line.substr(22);
+        return builder.buildAcceptFriendRequestReq(state,requestId);
+    }
+    if(line.rfind("/rejectfriendrequest ",0)==0){
+        std::string requestId=line.substr(22);  
+        return builder.buildRejectFriendRequestReq(state,requestId);
     }
     return std::nullopt;
 }
@@ -681,6 +739,32 @@ void printPretty(const std::string& payload,ClientState& state){
                     }
                     std::cout << std::endl;
                 }
+                break;
+            }
+            case im::MsgType::SEND_FRIEND_REQUEST_RESP:{
+                std::cout<<"SEND_FRIEND_REQUEST_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            }
+            case im::MsgType::LIST_FRIEND_REQUEST_RESP:{
+                std::cout<<"Friend requests: "<<std::endl;
+                for (const auto& request : json["data"]["requests"]) {
+                    std::string requestId = request.value("requestId", "");
+                    std::string fromAccountId = request.value("fromAccountId", "");
+                    std::string fromNickname = request.value("fromNickname", "");
+                    std::string fromUsername = request.value("fromUsername", "");
+                    std::cout << "Request ID: " << requestId << std::endl;
+                    std::cout << "From Account ID: " << fromAccountId << std::endl;
+                    std::cout << "From Nickname: " << fromNickname << std::endl;
+                    std::cout << "From Username: " << fromUsername << std::endl;
+                }
+                break;
+            }
+            case im::MsgType::ACCEPT_FRIEND_REQUEST_RESP:{
+                std::cout<<"ACCEPT_FRIEND_REQUEST_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            }
+            case im::MsgType::REJECT_FRIEND_REQUEST_RESP:{
+                std::cout<<"REJECT_FRIEND_REQUEST_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             }
             default:

@@ -15,7 +15,7 @@ storage::RepoValueResult<uint64_t> storage::SqlFriendRequestRepo::createPendingR
     }
     //禁止自己申请自己
     if(requester==receiver){
-        return {.status=RepoStatus::InvalidArgument,.message="Can not join yourself"};
+        return {.status=RepoStatus::CannotAddYourself,.message="Can not join yourself"};
     }
     auto conn=pool_->acquire();
     if(!conn||!conn->connected()){

@@ -137,6 +137,12 @@ private:
     //好友相关接口
     std::unique_ptr<FriendService> friendService_;
     Response handleSearchUser(const Request& req,ConnKey key,Session& session);//提交好友搜索请求
-    Response handleListFriends(const Request& req,ConnKey key,Session& session);
+    Response handleListFriends(const Request& req,ConnKey key,Session& session);//获取好友列表
+
+    //好友请求接口
+    Response handleSendFriendRequest(const Request& req,ConnKey key,Session& session);//提交好友申请
+    Response handleListFriendRequests(const Request& req,ConnKey key,Session& session);//请求当前账号收到的待处理申请
+    Response handleAcceptFriendRequest(const Request& req,ConnKey key,Session& session);//同意申请并创建双向关系
+    Response handleRejectFriendRequest(const Request& req,ConnKey key,Session& session);//拒绝好友申请
 };
 }
