@@ -79,6 +79,36 @@ storage::SqlResult storage::SqlConnection::executePrepared(const std::string& sq
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
+uint64_t storage::SqlConnection::fetchLastInsertId(){
+    auto stmt=std::unique_ptr<sql::Statement>(conn_->createStatement());
+    //执行查询上一次插入id
+    auto resultSet=std::unique_ptr<sql::ResultSet>(stmt->executeQuery("SELECT LAST_INSERT_ID()"));
+    if(!resultSet->next()){
+        throw std::runtime_error("LAST_INSERT_ID() returned no row");
+    }
+    //读取结果集第一行
+    return resultSet->getUInt64(1);
+}
+storage::SqlResult storage::SqlConnection::executePreParedInsert(const std::string& sql,const std::vector<SqlParam>& params){
+    if(!connected_||!conn_){
+        return SqlResult{.success=false,.error="not connected"};
+    }
+    try{
+        auto stmt=std::unique_ptr<sql::PreparedStatement>(conn_->prepareStatement(sql));
+        for(size_t i=0;i<params.size();i++){
+            params[i].bind(stmt.get(),static_cast<int>(i+1));
+        }
+        uint64_t affectedRows=stmt->executeUpdate();
+        if(affectedRows==0){
+            return SqlResult{.success=true,.affectedRows=0,.lastInsertId=0};
+        }
+        uint64_t lastInsertId=fetchLastInsertId();
+        return SqlResult{.success=true,.affectedRows=affectedRows,.lastInsertId=lastInsertId};
+    }catch(const sql::SQLException& e){
+        return SqlResult{.success=false,.error=e.what()};
+    }
+    return SqlResult{.success=false,.error="unknown error"};
+}
 storage::SqlResult storage::SqlConnection::queryPrepared(const std::string& sql,const std::vector<SqlParam>& params){
     if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not conncted"};
