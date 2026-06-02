@@ -737,6 +737,10 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
             return im::ErrorCode::INTERNAL;
         case storage::RepoStatus::NotFound:
             return im::ErrorCode::NO_SUCH_GROUP;
+        case storage::RepoStatus::CannotAddYourself:
+            return im::ErrorCode::CANNOT_ADD_SELF;
+        case storage::RepoStatus::AlreadyFriends:
+            return im::ErrorCode::ALREADY_FRIENDS;
     }
     return im::ErrorCode::INTERNAL;
 }
@@ -1197,7 +1201,7 @@ im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_u
         if(result.status==storage::RepoStatus::CannotAddYourself){
             return makeErr(req,ErrorCode::CANNOT_ADD_SELF,"can not add yourself");
         }
-        if(result.status==storage::RepoStatus::AlreadyExists){
+        if(result.status==storage::RepoStatus::AlreadyFriends){
             return makeErr(req,ErrorCode::ALREADY_FRIENDS,"The user is already your friend");
         }
         return makeErr(req,ErrorCode::INTERNAL,result.message);
@@ -1245,6 +1249,9 @@ im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe
             return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid requestId");
         }
     }
+    else{
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing requestId");
+    }
     auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     auto result=friendService_->acceptRequest(session.accountId_,requestId,nowMs);
     if(!result.ok()){
@@ -1267,7 +1274,7 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
     if(!friendService_){
         return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
     }
-    uint64_t requestId;
+    uint64_t requestId=0;
     if(req.body.contains("requestId")){
         if(req.body["requestId"].is_number_unsigned()){
             requestId=req.body["requestId"].get<uint64_t>();
@@ -1276,8 +1283,11 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
             requestId=static_cast<uint64_t>(req.body["requestId"].get<int64_t>());
         }
         else{
-            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid requestId");
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid requestId");
         }
+    }
+    else{
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing requestId");
     }
     auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     auto result=friendService_->rejectRequest(session.accountId_,requestId,nowMs);

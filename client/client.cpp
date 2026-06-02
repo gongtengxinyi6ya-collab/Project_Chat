@@ -479,11 +479,15 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         return builder.buildListFriendRequestReq(state);
     }
     if(line.rfind("/acceptfriendrequest ",0)==0){
-        std::string requestId=line.substr(22);
+        std::string requestId=line.substr(21);
+        //捕获requestId,非数字时会抛出异常，外层捕获后提示解析失败
+        if(requestId.empty()){
+            return std::nullopt;
+        }
         return builder.buildAcceptFriendRequestReq(state,requestId);
     }
     if(line.rfind("/rejectfriendrequest ",0)==0){
-        std::string requestId=line.substr(22);  
+        std::string requestId=line.substr(21);  
         return builder.buildRejectFriendRequestReq(state,requestId);
     }
     return std::nullopt;

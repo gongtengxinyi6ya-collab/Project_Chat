@@ -44,11 +44,11 @@ storage::RepoValueResult<std::vector<storage::FriendRequest>>  storage::SqlFrien
     }
     const auto& result=conn->queryPrepared("SELECT request_id,requester_account_id,receiver_account_id,status,created_at_ms,handled_at_ms  FROM friend_requests WHERE receiver_account_id=? AND status=0 ORDER BY request_id ASC",{receiver});
     if(!result.ok()){
-        if(result.rows.empty()){
-            return {.status=RepoStatus::NotFound};
-        }
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
+    if(result.rows.empty()){
+            return {.status=RepoStatus::NotFound};
+        }
     std::vector<FriendRequest> friendRequests;
     for(const auto& row:result.rows){
         FriendRequest friendRequest;
@@ -74,7 +74,7 @@ storage::RepoValueResult<std::vector<storage::FriendRequest>>  storage::SqlFrien
         }
         auto handledAtIt=row.find("handled_at_ms");
         if(handledAtIt!=row.end()){
-            if(handledAtIt->second.empty()){
+            if(handledAtIt->second.empty()||handledAtIt->second=="NULL"){
                 friendRequest.handledAtMs=std::nullopt;
             }
             else{
@@ -96,11 +96,11 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     }
     const auto& result=conn->queryPrepared("SELECT request_id,requester_account_id,receiver_account_id,status,created_at_ms,handled_at_ms  FROM friend_requests WHERE request_id=? AND status=0 LIMIT 1",{requestId});
     if(!result.ok()){
-        if(result.rows.empty()){
-            return {.status=RepoStatus::NotFound};
-        }
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
+    if(result.rows.empty()){
+        return {.status=RepoStatus::NotFound};
+        }
     const auto& row=result.rows.front();
     FriendRequest friendRequest;
     auto requestIdIt=row.find("request_id");
@@ -125,7 +125,7 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     }
     auto handledAtIt=row.find("handled_at_ms");
     if(handledAtIt!=row.end()){
-        if(handledAtIt->second.empty()){
+        if(handledAtIt->second.empty()||handledAtIt->second=="NULL"){
             friendRequest.handledAtMs=std::nullopt;
         }
         else{
