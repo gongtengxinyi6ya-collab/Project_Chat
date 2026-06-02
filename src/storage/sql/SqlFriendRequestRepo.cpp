@@ -74,7 +74,12 @@ storage::RepoValueResult<std::vector<storage::FriendRequest>>  storage::SqlFrien
         }
         auto handledAtIt=row.find("handled_at_ms");
         if(handledAtIt!=row.end()){
-            friendRequest.handledAtMs=std::stoll(handledAtIt->second);
+            if(handledAtIt->second.empty()){
+                friendRequest.handledAtMs=std::nullopt;
+            }
+            else{
+                friendRequest.handledAtMs=std::stoll(handledAtIt->second);
+            }
         }
         friendRequests.emplace_back(std::move(friendRequest));
     }
@@ -82,7 +87,7 @@ storage::RepoValueResult<std::vector<storage::FriendRequest>>  storage::SqlFrien
 }
 
 storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::findById(uint64_t requestId){
-    if(requestId=0){
+    if(requestId==0){
         return {.status=RepoStatus::InvalidArgument};
     }
     auto conn=pool_->acquire();
@@ -120,7 +125,12 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     }
     auto handledAtIt=row.find("handled_at_ms");
     if(handledAtIt!=row.end()){
-        friendRequest.handledAtMs=std::stoll(handledAtIt->second);
+        if(handledAtIt->second.empty()){
+            friendRequest.handledAtMs=std::nullopt;
+        }
+        else{
+            friendRequest.handledAtMs=std::stoll(handledAtIt->second);
+        }
     }
     return {.status=RepoStatus::Ok,.value=friendRequest};
 
@@ -134,15 +144,14 @@ storage::RepoResult storage::SqlFriendRequestRepo::rejectPending(uint64_t reques
         return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
     }
     //只允许拒绝状态为Pending的申请
-    auto result=conn->executePrepared("UPDATE friend_requests SET status=2,handled_at_ms=? WHERE request_id=? AND receiver_account_it=? AND status=0",{requestId,receiver,nowMs});
+    auto result=conn->executePrepared("UPDATE friend_requests SET status=2,handled_at_ms=? WHERE request_id=? AND receiver_account_id=? AND status=0",{nowMs,requestId,receiver});
     if(!result.ok()){
-        if(result.affectedRows=0){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+        
+    }
+    if(result.affectedRows==0){
             return {.status=RepoStatus::NotFound,.message="Failed to update"};
         }
-        else{
-            return {.status=RepoStatus::SqlError,.message=result.error};
-        }
-    }
     return RepoResult{.status=RepoStatus::Ok};
 }
 storage::RepoResult storage::SqlFriendRequestRepo::acceptPendingAndCreateFriendPair(uint64_t requestId,const std::string& receiver,int64_t nowMs){
@@ -160,17 +169,17 @@ storage::RepoResult storage::SqlFriendRequestRepo::acceptPendingAndCreateFriendP
         //查询并校验申请存在
         auto requestResult=conn->queryPrepared("SELECT requester_account_id,receiver_account_id,status FROM friend_requests WHERE request_id=? FOR UPDATE",{requestId});
         if(!requestResult.ok()){
-            if(requestResult.rows.empty()){
-                return {.status=RepoStatus::NotFound};
-            }
             return {.status=RepoStatus::SqlError,.message=requestResult.error};
         }
+        if(requestResult.rows.empty()){
+            return {.status=RepoStatus::NotFound};
+            }
         //校验操作匹配且状态为pending
         std::string requestAccountId;
         std::string receiveAccountId;
-        FriendRequestStatus status;
+        FriendRequestStatus status{FriendRequestStatus::Pending};
         const auto& row=requestResult.rows.front();
-        auto requestPair=row.find("request_account_id");
+        auto requestPair=row.find("requester_account_id");
         if(requestPair!=row.end()){
             requestAccountId=requestPair->second;
         }
@@ -191,11 +200,11 @@ storage::RepoResult storage::SqlFriendRequestRepo::acceptPendingAndCreateFriendP
         //执行同意申请
         auto acceptResult=conn->executePrepared("UPDATE friend_requests SET status=1,handled_at_ms=? WHERE request_id=? AND status=0",{nowMs,requestId});
         if(!acceptResult.ok()){
-            if(acceptResult.affectedRows=0){
-                return {.status=RepoStatus::NotFound,.message="Failed to update"};
-            }
             return {.status=RepoStatus::SqlError,.message=acceptResult.error};
         }
+        if(acceptResult.affectedRows==0){
+                return {.status=RepoStatus::NotFound,.message="Failed to update"};
+            }
         //执行双向添加好友
         auto insertResult1=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,status,created_at_ms) VALUES(?,?,1,?) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{requestAccountId,receiveAccountId,nowMs,nowMs});
         if(!insertResult1.ok()){

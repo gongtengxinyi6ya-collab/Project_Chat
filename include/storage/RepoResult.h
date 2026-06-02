@@ -11,6 +11,7 @@ enum class RepoStatus{
     InvalidArgument,//参数非法
     SqlError,//SQL执行异常
     CannotAddYourself,
+    AlreadyFriends,
     Internal,//内部未知错误
 };
 

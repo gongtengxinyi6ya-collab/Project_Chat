@@ -62,7 +62,7 @@ storage::RepoValueResult<uint64_t> im::FriendService::sendRequest(const std::str
     }
     //校验双方尚未成为好友
     if(areFriends(from,to)){
-        return {.status=storage::RepoStatus::AlreadyExists,.message="The user is already your friend"};
+        return {.status=storage::RepoStatus::AlreadyFriends,.message="The user is already your friend"};
     }
     if(!friendRequestRepo_){
         return {.status=storage::RepoStatus::Internal,.message="friendRequestRepo is empty"};

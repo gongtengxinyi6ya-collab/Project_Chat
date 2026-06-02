@@ -710,6 +710,14 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleSearchUser(req,key,session);
         case im::MsgType::LIST_FRIENDS_REQ:
             return handleListFriends(req,key,session);
+        case im::MsgType::SEND_FRIEND_REQUEST_REQ:
+            return handleSendFriendRequest(req,key,session);
+        case im::MsgType::LIST_FRIEND_REQUEST_REQ:
+            return handleListFriendRequests(req,key,session);
+        case im::MsgType::ACCEPT_FRIEND_REQUEST_REQ:
+            return handleAcceptFriendRequest(req,key,session);
+        case im::MsgType::REJECT_FRIEND_REQUEST_REQ:
+            return handleRejectFriendRequest(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -1194,7 +1202,7 @@ im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_u
         }
         return makeErr(req,ErrorCode::INTERNAL,result.message);
     }
-    return makeOk(req,MsgType::SEND_FRIEND_REQUEST_RESP,nlohmann::json{"requestId",result.value.value()});
+    return makeOk(req,MsgType::SEND_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",result.value.value()}});
 }
 
 im::Response im::Imservice::handleListFriendRequests(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
@@ -1208,7 +1216,7 @@ im::Response im::Imservice::handleListFriendRequests(const Request& req,[[maybe_
     }
     auto result=friendService_->listIncomingRequests(session.accountId_);
     if(result.empty()){
-        return makeOk(req,MsgType::LIST_FRIEND_REQUEST_RESP);
+        return makeOk(req,MsgType::LIST_FRIEND_REQUEST_RESP,nlohmann::json{{"requests",nlohmann::json::array()},{"count",0}});
     }
     nlohmann::json friendRequestView=nlohmann::json::array();
     for(const auto& view:result){
@@ -1225,7 +1233,7 @@ im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe
     if(!friendService_){
         return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
     }
-    uint64_t requestId;
+    uint64_t requestId=0;
     if(req.body.contains("requestId")){
         if(req.body["requestId"].is_number_unsigned()){
             requestId=req.body["requestId"].get<uint64_t>();
@@ -1234,7 +1242,7 @@ im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe
             requestId=static_cast<uint64_t>(req.body["requestId"].get<int64_t>());
         }
         else{
-            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid requestId");
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid requestId");
         }
     }
     auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -1248,7 +1256,7 @@ im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe
         }
         return makeErr(req,ErrorCode::INTERNAL,result.message);
     }
-    return makeOk(req,MsgType::ACCEPT_FRIEND_REQUEST_RESP,nlohmann::json{"requestId",requestId});
+    return makeOk(req,MsgType::ACCEPT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
 }
 im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
@@ -1282,5 +1290,5 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
         }
         return makeErr(req,ErrorCode::INTERNAL,result.message);
     }
-    return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{"requestId",requestId});
+    return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
 }

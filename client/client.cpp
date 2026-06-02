@@ -303,7 +303,7 @@ public:
         body["from"]=state.accountId;    
         body["to"]="";
         body["seq"]=state.allocSeq();  
-        body["requestId"]=requestId;
+        body["requestId"]=std::stoull(requestId);
         return body.dump();
     }
     std::string buildRejectFriendRequestReq(ClientState& state,std::string requestId){
@@ -314,7 +314,7 @@ public:
         body["from"]=state.accountId;    
         body["to"]="";
         body["seq"]=state.allocSeq();  
-        body["requestId"]=requestId;
+        body["requestId"]=std::stoull(requestId);
         return body.dump();
     }
 };
@@ -468,14 +468,14 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         std::string accountId=line.substr(12);
         return builder.buildSearchUserReq(state,accountId);
     }
-    if(line.rfind("/listfriends",0)==0){
+    if(line=="/listfriends"){
         return builder.buildListFriendsReq(state);
     }
     if(line.rfind("/sendfriendrequest ",0)==0){
         std::string targetAccountId=line.substr(19);
         return builder.buildSendFriendRequestReq(state,targetAccountId);
     }
-    if(line.rfind("/listfriendrequests",0)==0){
+    if(line=="/listfriendrequests"){
         return builder.buildListFriendRequestReq(state);
     }
     if(line.rfind("/acceptfriendrequest ",0)==0){
@@ -748,10 +748,10 @@ void printPretty(const std::string& payload,ClientState& state){
             case im::MsgType::LIST_FRIEND_REQUEST_RESP:{
                 std::cout<<"Friend requests: "<<std::endl;
                 for (const auto& request : json["data"]["requests"]) {
-                    std::string requestId = request.value("requestId", "");
-                    std::string fromAccountId = request.value("fromAccountId", "");
-                    std::string fromNickname = request.value("fromNickname", "");
-                    std::string fromUsername = request.value("fromUsername", "");
+                    uint64_t requestId = request.value("requestId", 0);
+                    std::string fromAccountId = request.value("accountId", "");
+                    std::string fromNickname = request.value("nickname", "");
+                    std::string fromUsername = request.value("username", "");
                     std::cout << "Request ID: " << requestId << std::endl;
                     std::cout << "From Account ID: " << fromAccountId << std::endl;
                     std::cout << "From Nickname: " << fromNickname << std::endl;
