@@ -137,8 +137,8 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
         security::TokenManager tokenManager;
         authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash,tokenManager,repos_.userSessionRepo,repos_.userProfileRepo);
     }
-    if(repos_.friendRepo&&repos_.userProfileRepo){
-        friendService_=std::make_unique<im::FriendService>(repos_.friendRepo,repos_.userProfileRepo);
+    if(repos_.friendRepo&&repos_.userProfileRepo&&repos_.friendRequestRepo){
+        friendService_=std::make_unique<im::FriendService>(repos_.friendRepo,repos_.userProfileRepo,repos_.friendRequestRepo);
     }
 }
 bool im::Imservice::hasRepositories()const{
@@ -572,6 +572,12 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
         case im::ErrorCode::AVATAR_URL_TOO_LONG:
         case im::ErrorCode::SIGNATURE_TOO_LONG:
         case im::ErrorCode::NICKNAME_INVALID:
+        case im::ErrorCode::CANNOT_ADD_SELF:
+        case im::ErrorCode::ALREADY_FRIENDS:
+        case im::ErrorCode::FRIEND_REQUEST_EXISTS:
+        case im::ErrorCode::FRIEND_REQUEST_NOT_FOUND:
+        case im::ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED:
+        case im::ErrorCode::FRIEND_REQUEST_FORBIDDEN:
             return LogLevel::WARN;
         case im::ErrorCode::INTERNAL:
             return LogLevel::ERROR;

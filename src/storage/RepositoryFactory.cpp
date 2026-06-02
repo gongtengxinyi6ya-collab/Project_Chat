@@ -12,6 +12,7 @@
 #include "storage/sql/SqlUserSessionRepo.h"
 #include "storage/sql/SqlUserProfileRepo.h"
 #include "storage/sql/SqlFriendRepo.h"
+#include "storage/sql/SqlFriendRequestRepo.h"
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& dbConfig){
     auto pool=std::make_shared<SqlConnectionPool>(dbConfig);
     if(!pool->start()){
@@ -28,6 +29,7 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
     bundle.userSessionRepo=std::make_shared<SqlUserSessionRepo>(pool);
     bundle.userProfileRepo=std::make_shared<SqlUserProfileRepo>(pool);
     bundle.friendRepo=std::make_shared<SqlFriendRepo>(pool);
+    bundle.friendRequestRepo=std::make_shared<SqlFriendRequestRepo>(pool);
     return bundle;
 }
 #else

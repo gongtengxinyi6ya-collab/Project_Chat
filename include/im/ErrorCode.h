@@ -28,6 +28,12 @@ enum class ErrorCode: uint16_t{
     NICKNAME_INVALID,//昵称为空或超长
     SIGNATURE_TOO_LONG,//签名长度超过限制
     AVATAR_URL_TOO_LONG,//头像URL长度超过限制
+    CANNOT_ADD_SELF,//不能添加自己为好友
+    ALREADY_FRIENDS,//已经是好友关系
+    FRIEND_REQUEST_EXISTS,//已经有未处理的好友申请
+    FRIEND_REQUEST_NOT_FOUND,//没有找到好友申请
+    FRIEND_REQUEST_ALREADY_HANDLED,//好友申请已经被处理
+    FRIEND_REQUEST_FORBIDDEN,//没有权限处理好友申请
     INTERNAL//服务器内部错误
 
 };
@@ -82,6 +88,18 @@ inline const char* errCodeToString(ErrorCode code){
             return "Signature is too long";
         case ErrorCode::AVATAR_URL_TOO_LONG:
             return "Avatar URL is too long";
+        case ErrorCode::CANNOT_ADD_SELF:
+            return "Cannot add self as friend";
+        case ErrorCode::ALREADY_FRIENDS:
+            return "Already friends";
+        case ErrorCode::FRIEND_REQUEST_EXISTS:
+            return "Friend request already exists";
+        case ErrorCode::FRIEND_REQUEST_NOT_FOUND:
+            return "Friend request not found";
+        case ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED:
+            return "Friend request already handled";
+        case ErrorCode::FRIEND_REQUEST_FORBIDDEN:
+            return "Friend request forbidden";
         default:
             return "Unknown Error Code";
     }
