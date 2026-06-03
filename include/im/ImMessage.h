@@ -25,8 +25,8 @@ struct Response{
     uint64_t req_id;
     MsgType type;//响应类型,可以和请求类型相同也可以不同,比如请求是AUTH_REQ响应是AUTH_RESP
     bool ok;//请求是否成功
-    im::ErrorCode code;//错误码
-    std::string msg;//错误信息
+    im::ErrorCode code{im::ErrorCode::OK};//错误码
+    std::string msg{};//错误信息
     nlohmann::json data;//扩展返回字段
 };
 }

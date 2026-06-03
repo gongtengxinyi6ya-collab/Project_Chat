@@ -762,6 +762,8 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
             return im::ErrorCode::FRIEND_REQUEST_FORBIDDEN;
         case storage::RepoStatus::NotFriends:
             return im::ErrorCode::NOT_FRIENDS;
+        case storage::RepoStatus::Internal:
+            return im::ErrorCode::INTERNAL;
     }
     return im::ErrorCode::INTERNAL;
 }
@@ -1245,10 +1247,13 @@ im::Imservice::AccountPushResult im::Imservice::pushToAccount(const std::string&
             break;
         case SendResult::Closed:
             pushResult.closed++;
+            break;
         case SendResult::NoSuchConnection:
             pushResult.noSuchConnection++;
+            break;
         case SendResult::Overloaded:
             pushResult.overloaded++;
+            break;
         default:
             break;
         }
