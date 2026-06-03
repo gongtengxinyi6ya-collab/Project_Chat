@@ -49,14 +49,17 @@ enum class MsgType:uint16_t{
     SEARCH_USER_RESP,//搜索好友响应
     LIST_FRIENDS_REQ,//列出好友列表请求
     LIST_FRIENDS_RESP,
-    SEND_FRIEND_REQUEST_REQ,
+    SEND_FRIEND_REQUEST_REQ,//发送好友申请请求
     SEND_FRIEND_REQUEST_RESP,
-    LIST_FRIEND_REQUEST_REQ,
+    LIST_FRIEND_REQUEST_REQ,//列出好友申请请求
     LIST_FRIEND_REQUEST_RESP,
-    ACCEPT_FRIEND_REQUEST_REQ,
+    ACCEPT_FRIEND_REQUEST_REQ,//接收好友申请
     ACCEPT_FRIEND_REQUEST_RESP,
-    REJECT_FRIEND_REQUEST_REQ,
+    REJECT_FRIEND_REQUEST_REQ,//拒绝好友申请
     REJECT_FRIEND_REQUEST_RESP,
+    REMOVE_FRIEND_REQ,//删除好友请求
+    REMOVE_FRIEND_RESP,
+    FRIEND_EVENT_PUSH,//好友事件推送，如被添加，被删除等
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -168,6 +171,12 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::REJECT_FRIEND_REQUEST_REQ;
         case 53:
             return MsgType::REJECT_FRIEND_REQUEST_RESP;
+        case 54:
+            return MsgType::REMOVE_FRIEND_REQ;
+        case 55:
+            return MsgType::REMOVE_FRIEND_RESP;
+        case 56:
+            return MsgType::FRIEND_EVENT_PUSH;
         case 255:
             return MsgType::ERR;
         

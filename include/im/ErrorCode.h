@@ -35,6 +35,8 @@ enum class ErrorCode: uint16_t{
     FRIEND_REQUEST_ALREADY_HANDLED,//好友申请已经被处理
     FRIEND_REQUEST_FORBIDDEN,//没有权限处理好友申请
     NOT_FRIENDS,//不存在有效好友关系
+    RECIPIENT_OFFLINE,//接收方不在线
+    DELIVERY_OVERLOADED,//消息发送过快导致服务器发送队列积压
     INTERNAL//服务器内部错误
 
 };
@@ -103,6 +105,10 @@ inline const char* errCodeToString(ErrorCode code){
             return "Friend request forbidden";
         case ErrorCode::NOT_FRIENDS:
             return "Not friends";
+        case ErrorCode::RECIPIENT_OFFLINE:
+            return "Recipient is offline";
+        case ErrorCode::DELIVERY_OVERLOADED:
+            return "Server is overloaded, try again later";
         default:
             return "Unknown Error Code";
     }

@@ -1186,7 +1186,45 @@ im::Response im::Imservice::handleListFriends(const Request& req,[[maybe_unused]
     return makeOk(req,MsgType::LIST_FRIENDS_RESP,nlohmann::json{{"friends",friendList},{"count",friendList.size()}});
     
 }
+im::Imservice::AccountPushResult im::Imservice::pushToAccount(const std::string& targetAccountId,im::Response& push){
+    //获取用户账号的全部ConnKey
+    auto keys=sessionManager_.connKeysByAccountId(targetAccountId);
+    if(keys.empty()){
+        return AccountPushResult{};
+    }
+    decorate(push);
+    //获取协议字符串
+    auto pushString=encodeResponse(push);
+    AccountPushResult pushResult;
+    for(const auto& key:keys){//遍历key进行推送
+        auto sendResult=sendPush(key,pushString);
+        switch (sendResult)
+        {//根据SendResult累加统计
+        case SendResult::Ok:
+            pushResult.sent++;
+            break;
+        case SendResult::Closed:
+            pushResult.closed++;
+        case SendResult::NoSuchConnection:
+            pushResult.noSuchConnection++;
+        case SendResult::Overloaded:
+            pushResult.overloaded++;
+        default:
+            break;
+        }
+    }
+    return pushResult;
+}
 
+im::Imservice::AccountPushResult im::Imservice::notifyFriendEvent(const std::string&targetAccountId,const std::string&event,nlohmann::json data){
+    data["event"]=event;
+    Response push{.ver=1,.req_id=0,.type=MsgType::FRIEND_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.data=std::move(data)};
+    auto pushResult=pushToAccount(targetAccountId,push);
+    if(!pushResult.delivered()){//推送失败只记录日志，不回滚
+        LOG_WARN("Failed to push to accountId");
+    };
+    return pushResult;
+}
 //好友请求接口
 im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);

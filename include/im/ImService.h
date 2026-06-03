@@ -51,6 +51,16 @@ public:
         Overloaded//输出缓冲区过载
     };
 
+    //账号级推送结果
+    struct AccountPushResult{
+        size_t sent{0};//成功推送的设备数量
+        size_t noSuchConnection{0};//已失效的连接数量
+        size_t closed{0};//已经关闭连接数量
+        size_t overloaded{0};//满连接数量
+        size_t failed()const{return noSuchConnection+closed+overloaded;}//返回失败设备总数
+        bool delivered()const{return sent>0;}//是否至少投递到一个设备
+    };
+
     using ConnKey=int;//连接标识
     using SendToConnKeyFn=std::function<SendResult (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
 
@@ -138,7 +148,8 @@ private:
     std::unique_ptr<FriendService> friendService_;
     Response handleSearchUser(const Request& req,ConnKey key,Session& session);//提交好友搜索请求
     Response handleListFriends(const Request& req,ConnKey key,Session& session);//获取好友列表
-
+    AccountPushResult pushToAccount(const std::string&targetAccount,im::Response&push);//将一条消息推送给目标账号当前在线的全部设备
+    AccountPushResult notifyFriendEvent(const std::string&targetAccountId,const std::string&event,nlohmann::json data);//统一发送好友模块事件，避免在多个handler中重复拼装推送消息
     //好友请求接口
     Response handleSendFriendRequest(const Request& req,ConnKey key,Session& session);//提交好友申请
     Response handleListFriendRequests(const Request& req,ConnKey key,Session& session);//请求当前账号收到的待处理申请
