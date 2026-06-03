@@ -86,15 +86,14 @@ storage::RepoValueResult<std::vector<storage::FriendRequest>>  storage::SqlFrien
     return {.status=RepoStatus::Ok,.value=friendRequests};
 }
 
-storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::findById(uint64_t requestId){
+storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::findById(SqlConnection& conn, uint64_t requestId){
     if(requestId==0){
         return {.status=RepoStatus::InvalidArgument};
     }
-    auto conn=pool_->acquire();
-    if(!conn||!conn->connected()){
+    if(!conn.connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
     }
-    const auto& result=conn->queryPrepared("SELECT request_id,requester_account_id,receiver_account_id,status,created_at_ms,handled_at_ms  FROM friend_requests WHERE request_id=? FOR UPDATELIMIT 1",{requestId});
+    const auto& result=conn.queryPrepared("SELECT request_id,requester_account_id,receiver_account_id,status,created_at_ms,handled_at_ms  FROM friend_requests WHERE request_id=? FOR UPDATELIMIT 1",{requestId});
     if(!result.ok()){
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
@@ -143,17 +142,46 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
     }
-    //只允许拒绝状态为Pending的申请
-    auto result=conn->executePrepared("UPDATE friend_requests SET status=2,handled_at_ms=? WHERE request_id=? AND receiver_account_id=? AND status=0",{nowMs,requestId,receiver});
-    if(!result.ok()){//数据库异常
-        return {.status=RepoStatus::SqlError,.message=result.error};
+    try{
+        //开启事务
+        SqlTransaction transaction(*conn);
+        //查询并校验申请存在
+        auto requestResult=findById(*conn, requestId);
+        if(!requestResult.ok()||!requestResult.value){
+            return requestResult;
+        }
+        const auto& friendRequestValue=requestResult.value.value();
+        FriendRequest friendRequest;
+        friendRequest.requestId=friendRequestValue.requestId;
+        friendRequest.requestAccountId=friendRequestValue.requestAccountId;
+        friendRequest.receiveAccountId=friendRequestValue.receiveAccountId;
+        friendRequest.status=friendRequestValue.status;
+        //只允许拒绝状态为Pending的申请
+        if(friendRequest.status!=FriendRequestStatus::Pending){
+            return {.status=RepoStatus::AlreadyHandled};
+        }
+        //校验操作匹配
+        if(friendRequest.receiveAccountId!=receiver){
+            return {.status=RepoStatus::Forbidden,.message="You have no right to handle this request"};
+        }
+        //只允许拒绝状态为Pending的申请
+        auto result=conn->executePrepared("UPDATE friend_requests SET status=2,handled_at_ms=? WHERE request_id=? AND receiver_account_id=? AND status=0",{nowMs,requestId,receiver});
+        if(!result.ok()){//数据库异常
+            return {.status=RepoStatus::SqlError,.message=result.error};
         
+        }
+        //找不到申请
+        if(result.affectedRows==0){
+            return {.status=RepoStatus::NotFound,.message="Failed to update"};
+         }
+        //全部成功后提交事务
+        transaction.commit();
+        friendRequest.status=FriendRequestStatus::Rejected;
+        friendRequest.handledAtMs=nowMs;
+        return {.status=RepoStatus::Ok,.value=friendRequest};
+    }catch(const std::exception& e){
+        return {.status=RepoStatus::Internal,.message=e.what()};
     }
-    //找不到申请
-    if(result.affectedRows==0){
-        return {.status=RepoStatus::NotFound,.message="Failed to update"};
-    }
-    return {.status=RepoStatus::Ok,};
 }
 storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::acceptPendingAndCreateFriendPair(uint64_t requestId,const std::string& receiver,int64_t nowMs){
     if(requestId==0||receiver.empty()){
@@ -164,11 +192,10 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
         return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
     }
     //查询并校验申请存在
-    auto requestResult=findById(requestId);
+    auto requestResult=findById(*conn, requestId);
     if(!requestResult.ok()||!requestResult.value){
         return requestResult;
     }
-
     const auto& friendRequestValue=requestResult.value.value();
     FriendRequest friendRequest;
     friendRequest.requestId=friendRequestValue.requestId;
@@ -181,28 +208,26 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     try{
         //开启事务
         SqlTransaction transaction(*conn);
+        //查询并校验申请存在
+        auto requestResult=findById(*conn, requestId);
+        if(!requestResult.ok()||!requestResult.value){
+            return requestResult;
+        }
+        const auto& friendRequestValue=requestResult.value.value();
+        FriendRequest friendRequest;
+        friendRequest.requestId=friendRequestValue.requestId;
+        friendRequest.requestAccountId=friendRequestValue.requestAccountId;
+        friendRequest.receiveAccountId=friendRequestValue.receiveAccountId;
+        friendRequest.status=friendRequestValue.status;
+        friendRequest.createdAtMs=friendRequestValue.createdAtMs;
+        if(friendRequest.status!=FriendRequestStatus::Pending){
+            return {.status=RepoStatus::AlreadyHandled};
+        }
         //校验操作匹配且状态为pending
-        std::string requestAccountId;
-        std::string receiveAccountId;
-        FriendRequestStatus status{FriendRequestStatus::Pending};
-        auto requestPair=row.find("requester_account_id");
-        if(requestPair!=row.end()){
-            requestAccountId=requestPair->second;
+        if(friendRequest.receiveAccountId!=receiver){
+            return {.status=RepoStatus::Forbidden,.message="You have no right to handle this request"};
         }
-        if(requestAccountId.empty()){
-            return {.status=RepoStatus::NotFound,.message="requestAccountId is empty"};
-        }
-        auto receivePair=row.find("receiver_account_id");
-        if(receivePair!=row.end()){
-            receiveAccountId=receivePair->second;
-        }
-        auto statusPair=row.find("status");
-        if(statusPair!=row.end()){
-            status=friendRequestStatusFromInt(std::stoi(statusPair->second));
-        }
-        if(receiver!=receiveAccountId||status!=FriendRequestStatus::Pending){
-            return {.status=RepoStatus::NotFound};
-        }
+        
         //执行同意申请
         auto acceptResult=conn->executePrepared("UPDATE friend_requests SET status=1,handled_at_ms=? WHERE request_id=? AND status=0",{nowMs,requestId});
         if(!acceptResult.ok()){
@@ -212,24 +237,26 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
                 return {.status=RepoStatus::NotFound,.message="Failed to update"};
             }
         //执行双向添加好友
-        auto insertResult1=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,status,created_at_ms) VALUES(?,?,1,?) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{requestAccountId,receiveAccountId,nowMs,nowMs});
+        auto insertResult1=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,status,created_at_ms) VALUES(?,?,1,?) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{friendRequest.requestAccountId,friendRequest.receiveAccountId,nowMs,nowMs});
         if(!insertResult1.ok()){
             if(insertResult1.error.find("Duplicate entry")!=std::string::npos){
-                return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
+                return {.status=RepoStatus::AlreadyExists,.message="already exists"};
             }
-            return RepoResult{.status=RepoStatus::SqlError,.message=insertResult1.error};
+            return {.status=RepoStatus::SqlError,.message=insertResult1.error};
         }
-        auto insertResult2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,status,created_at_ms) VALUES(?,?,1,?) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{receiveAccountId,requestAccountId,nowMs,nowMs});
+        auto insertResult2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,status,created_at_ms) VALUES(?,?,1,?) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{friendRequest.receiveAccountId,friendRequest.requestAccountId,nowMs,nowMs});
         if(!insertResult2.ok()){
             if(insertResult2.error.find("Duplicate entry")!=std::string::npos){
-                return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
+                return {.status=RepoStatus::AlreadyExists,.message="already exists"};
             }
-            return RepoResult{.status=RepoStatus::SqlError,.message=insertResult2.error};
+            return {.status=RepoStatus::SqlError,.message=insertResult2.error};
         }
         //全部成功后提交事务
         transaction.commit();
-        return RepoResult{.status=RepoStatus::Ok};
+        friendRequest.status=FriendRequestStatus::Accepted;
+        friendRequest.handledAtMs=nowMs;
+        return {.status=RepoStatus::Ok,.value=friendRequest};
     }catch(const std::exception& e){
-        return RepoResult{.status=RepoStatus::SqlError,.message=e.what()};
+        return {.status=RepoStatus::SqlError,.message=e.what()};
     }
 }
