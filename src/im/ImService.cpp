@@ -1186,6 +1186,31 @@ im::Response im::Imservice::handleListFriends(const Request& req,[[maybe_unused]
     return makeOk(req,MsgType::LIST_FRIENDS_RESP,nlohmann::json{{"friends",friendList},{"count",friendList.size()}});
     
 }
+im::Response im::Imservice::handleRemoveFriend(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    std::string targetAccountId;
+    auto getAccountId=getStringField(req,"targetAccountId",targetAccountId);
+    if(getAccountId){
+        return getAccountId.value();
+    }
+    if(!friendService_){
+        return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
+    }
+    auto result=friendService_->removeFriend(session.accountId_,targetAccountId);
+    if(!result.ok()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    //推送好友事件通知对方被删除了好友
+    auto pushResult=notifyFriendEvent(targetAccountId,"friendRemoved",nlohmann::json{{"accountId",session.accountId_},{"username",session.username_}});
+    if(!pushResult.delivered()){//推送失败只记录日志，不回滚
+        LOG_WARN("Failed to push friend removed event to"+targetAccountId);
+    }
+    return makeOk(req,MsgType::REMOVE_FRIEND_RESP,nlohmann::json{{"accountId",targetAccountId},{"removed",true}});
+    
+}
 im::Imservice::AccountPushResult im::Imservice::pushToAccount(const std::string& targetAccountId,im::Response& push){
     //获取用户账号的全部ConnKey
     auto keys=sessionManager_.connKeysByAccountId(targetAccountId);
@@ -1220,9 +1245,6 @@ im::Imservice::AccountPushResult im::Imservice::notifyFriendEvent(const std::str
     data["event"]=event;
     Response push{.ver=1,.req_id=0,.type=MsgType::FRIEND_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.data=std::move(data)};
     auto pushResult=pushToAccount(targetAccountId,push);
-    if(!pushResult.delivered()){//推送失败只记录日志，不回滚
-        LOG_WARN("Failed to push to accountId");
-    };
     return pushResult;
 }
 //好友请求接口
@@ -1249,6 +1271,10 @@ im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_u
             return makeErr(req,ErrorCode::ALREADY_FRIENDS,"The user is already your friend");
         }
         return makeErr(req,ErrorCode::INTERNAL,result.message);
+    }
+    auto pushResult=notifyFriendEvent(targetAccountId,"friendRequestReceived",nlohmann::json{{"requestId",result.value.value()},{"requesterAccountId",session.accountId_},{"username",session.username_}});
+    if(!pushResult.delivered()){//推送失败只记录日志，不回滚
+        LOG_WARN("Failed to push friend request event to"+targetAccountId);
     }
     return makeOk(req,MsgType::SEND_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",result.value.value()}});
 }
@@ -1307,6 +1333,10 @@ im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe
         }
         return makeErr(req,ErrorCode::INTERNAL,result.message);
     }
+    auto pushResult=notifyFriendEvent(result.value.value().requestAccountId,"friendRequestAccepted",nlohmann::json{{"accountId",session.accountId_},{"username",session.username_}});
+    if(!pushResult.delivered()){//推送失败只记录日志，不回滚
+        LOG_WARN("Failed to push friend request accepted event to"+result.value.value().requestAccountId);
+    }
     return makeOk(req,MsgType::ACCEPT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
 }
 im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
@@ -1343,6 +1373,10 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
             return makeErr(req,ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED,"The request has already been handled");
         }
         return makeErr(req,ErrorCode::INTERNAL,result.message);
+    }
+    auto pushResult=notifyFriendEvent(result.value.value().requestAccountId,"friendRequestRejected",nlohmann::json{{"accountId",session.accountId_},{"username",session.username_}});
+    if(!pushResult.delivered()){//推送失败只记录日志，不回滚
+        LOG_WARN("Failed to push friend request rejected event to"+result.value.value().requestAccountId);
     }
     return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
 }

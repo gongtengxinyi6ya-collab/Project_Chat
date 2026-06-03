@@ -148,6 +148,7 @@ private:
     std::unique_ptr<FriendService> friendService_;
     Response handleSearchUser(const Request& req,ConnKey key,Session& session);//提交好友搜索请求
     Response handleListFriends(const Request& req,ConnKey key,Session& session);//获取好友列表
+    Response handleRemoveFriend(const Request& req,ConnKey key,Session& session);//删除好友
     AccountPushResult pushToAccount(const std::string&targetAccount,im::Response&push);//将一条消息推送给目标账号当前在线的全部设备
     AccountPushResult notifyFriendEvent(const std::string&targetAccountId,const std::string&event,nlohmann::json data);//统一发送好友模块事件，避免在多个handler中重复拼装推送消息
     //好友请求接口
