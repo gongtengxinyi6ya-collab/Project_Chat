@@ -175,7 +175,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
     }
-    auto keys=sessionManager_.connKeysByAccountId(req.from);
+    auto keys=sessionManager_.connKeysByAccountId(session.accountId_);
     if(keys.empty()){
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"Recipient user is not online");
     }
@@ -741,6 +741,12 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
             return im::ErrorCode::CANNOT_ADD_SELF;
         case storage::RepoStatus::AlreadyFriends:
             return im::ErrorCode::ALREADY_FRIENDS;
+        case storage::RepoStatus::AlreadyHandled:
+            return im::ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED;
+        case storage::RepoStatus::Forbidden:
+            return im::ErrorCode::FRIEND_REQUEST_FORBIDDEN;
+        case storage::RepoStatus::NotFriends:
+            return im::ErrorCode::NOT_FRIENDS;
     }
     return im::ErrorCode::INTERNAL;
 }
@@ -896,7 +902,7 @@ im::Response im::Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]
     if(result.ok()){
         return makeOk(req,MsgType::OFFLINE_ACK_RESP,nlohmann::json{{"acked",msgIds.size()}});
     }
-    return makeErr(req,ErrorCode::BAD_REQUEST,"Failed to ack msgIds");
+    return makeRepoError(req,result.status,result.message);
 }
 
 

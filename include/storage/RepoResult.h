@@ -10,8 +10,11 @@ enum class RepoStatus{
     NotFound,//查询不到
     InvalidArgument,//参数非法
     SqlError,//SQL执行异常
-    CannotAddYourself,
-    AlreadyFriends,
+    CannotAddYourself,//禁止添加自己
+    AlreadyFriends,//已经是好友
+    AlreadyHandled,//申请已经处理
+    Forbidden,//无权处理申请
+    NotFriends,//不存在有效好友关系
     Internal,//内部未知错误
 };
 

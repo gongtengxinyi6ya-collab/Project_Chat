@@ -31,8 +31,8 @@ public:
     virtual RepoValueResult<uint64_t> createPendingRequest(const std::string&requester,const std::string& receiver,int64_t nowMs)=0;//插入待处理申请
     virtual RepoValueResult<std::vector<FriendRequest>> listPendingIncoming(const std::string& receiver)=0;//查询接收人尚未处理的申请
     virtual RepoValueResult<FriendRequest> findById(uint64_t requestId)=0;//查询指定申请
-    virtual RepoResult rejectPending(uint64_t requestId,const std::string& receiver,int64_t nowMs)=0;//拒绝状态为待处理的申请
-    virtual RepoResult acceptPendingAndCreateFriendPair(uint64_t requestId,const std::string& receiver,int64_t nowMs)=0;//事务内同意申请并建立好友关系
+    virtual RepoValueResult<FriendRequest> rejectPending(uint64_t requestId,const std::string& receiver,int64_t nowMs)=0;//拒绝状态为待处理的申请
+    virtual RepoValueResult<FriendRequest> acceptPendingAndCreateFriendPair(uint64_t requestId,const std::string& receiver,int64_t nowMs)=0;//事务内同意申请并建立好友关系
 };
 
 inline FriendRequestStatus friendRequestStatusFromInt(int v){

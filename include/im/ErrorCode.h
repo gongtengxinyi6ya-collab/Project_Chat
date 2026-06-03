@@ -34,6 +34,7 @@ enum class ErrorCode: uint16_t{
     FRIEND_REQUEST_NOT_FOUND,//没有找到好友申请
     FRIEND_REQUEST_ALREADY_HANDLED,//好友申请已经被处理
     FRIEND_REQUEST_FORBIDDEN,//没有权限处理好友申请
+    NOT_FRIENDS,//不存在有效好友关系
     INTERNAL//服务器内部错误
 
 };
@@ -100,6 +101,8 @@ inline const char* errCodeToString(ErrorCode code){
             return "Friend request already handled";
         case ErrorCode::FRIEND_REQUEST_FORBIDDEN:
             return "Friend request forbidden";
+        case ErrorCode::NOT_FRIENDS:
+            return "Not friends";
         default:
             return "Unknown Error Code";
     }

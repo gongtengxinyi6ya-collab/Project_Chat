@@ -94,13 +94,13 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
     }
-    const auto& result=conn->queryPrepared("SELECT request_id,requester_account_id,receiver_account_id,status,created_at_ms,handled_at_ms  FROM friend_requests WHERE request_id=? AND status=0 LIMIT 1",{requestId});
+    const auto& result=conn->queryPrepared("SELECT request_id,requester_account_id,receiver_account_id,status,created_at_ms,handled_at_ms  FROM friend_requests WHERE request_id=? FOR UPDATELIMIT 1",{requestId});
     if(!result.ok()){
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
     if(result.rows.empty()){
         return {.status=RepoStatus::NotFound};
-        }
+    }
     const auto& row=result.rows.front();
     FriendRequest friendRequest;
     auto requestIdIt=row.find("request_id");
@@ -135,7 +135,7 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     return {.status=RepoStatus::Ok,.value=friendRequest};
 
 }
-storage::RepoResult storage::SqlFriendRequestRepo::rejectPending(uint64_t requestId,const std::string&receiver,int64_t nowMs){
+storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::rejectPending(uint64_t requestId,const std::string&receiver,int64_t nowMs){
     if(requestId==0||receiver.empty()){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -145,16 +145,17 @@ storage::RepoResult storage::SqlFriendRequestRepo::rejectPending(uint64_t reques
     }
     //只允许拒绝状态为Pending的申请
     auto result=conn->executePrepared("UPDATE friend_requests SET status=2,handled_at_ms=? WHERE request_id=? AND receiver_account_id=? AND status=0",{nowMs,requestId,receiver});
-    if(!result.ok()){
+    if(!result.ok()){//数据库异常
         return {.status=RepoStatus::SqlError,.message=result.error};
         
     }
+    //找不到申请
     if(result.affectedRows==0){
-            return {.status=RepoStatus::NotFound,.message="Failed to update"};
-        }
-    return RepoResult{.status=RepoStatus::Ok};
+        return {.status=RepoStatus::NotFound,.message="Failed to update"};
+    }
+    return {.status=RepoStatus::Ok,};
 }
-storage::RepoResult storage::SqlFriendRequestRepo::acceptPendingAndCreateFriendPair(uint64_t requestId,const std::string& receiver,int64_t nowMs){
+storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::acceptPendingAndCreateFriendPair(uint64_t requestId,const std::string& receiver,int64_t nowMs){
     if(requestId==0||receiver.empty()){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -162,23 +163,28 @@ storage::RepoResult storage::SqlFriendRequestRepo::acceptPendingAndCreateFriendP
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
     }
-    
+    //查询并校验申请存在
+    auto requestResult=findById(requestId);
+    if(!requestResult.ok()||!requestResult.value){
+        return requestResult;
+    }
+
+    const auto& friendRequestValue=requestResult.value.value();
+    FriendRequest friendRequest;
+    friendRequest.requestId=friendRequestValue.requestId;
+    friendRequest.requestAccountId=friendRequestValue.requestAccountId;
+    friendRequest.receiveAccountId=friendRequestValue.receiveAccountId;
+    friendRequest.status=friendRequestValue.status;
+    if(friendRequest.status!=FriendRequestStatus::Pending){
+        return {.status=RepoStatus::AlreadyHandled};
+    }
     try{
         //开启事务
         SqlTransaction transaction(*conn);
-        //查询并校验申请存在
-        auto requestResult=conn->queryPrepared("SELECT requester_account_id,receiver_account_id,status FROM friend_requests WHERE request_id=? FOR UPDATE",{requestId});
-        if(!requestResult.ok()){
-            return {.status=RepoStatus::SqlError,.message=requestResult.error};
-        }
-        if(requestResult.rows.empty()){
-            return {.status=RepoStatus::NotFound};
-            }
         //校验操作匹配且状态为pending
         std::string requestAccountId;
         std::string receiveAccountId;
         FriendRequestStatus status{FriendRequestStatus::Pending};
-        const auto& row=requestResult.rows.front();
         auto requestPair=row.find("requester_account_id");
         if(requestPair!=row.end()){
             requestAccountId=requestPair->second;
