@@ -797,13 +797,13 @@ void printPretty(const std::string& payload,ClientState& state){
                     std::cout<<"[FRIEND REQUEST] "<<json["data"]["requesterAccountId"].get<std::string>()<<" ("<<json["data"]["username"].get<std::string>()<<") sent you a friend request. Request ID: "<<json["data"]["requestId"].get<uint64_t>()<<std::endl;
                 }
                 else if(event=="friendRequestAccepted"){
-                    std::cout<<"[FRIEND EVENT] "<<json["data"]["fromAccountId"].get<std::string>()<<" ("<<json["data"]["fromNickname"].get<std::string>()<<") accepted your friend request."<<std::endl;
+                    std::cout<<"[FRIEND EVENT] "<<json["data"]["accountId"].get<std::string>()<<" ("<<json["data"]["username"].get<std::string>()<<") accepted your friend request."<<std::endl;
                 }
                 else if(event=="friendRequestRejected"){
-                    std::cout<<"[FRIEND EVENT] "<<json["data"]["fromAccountId"].get<std::string>()<<" ("<<json["data"]["fromNickname"].get<std::string>()<<") rejected your friend request."<<std::endl;
+                    std::cout<<"[FRIEND EVENT] "<<json["data"]["accountId"].get<std::string>()<<" ("<<json["data"]["username"].get<std::string>()<<") rejected your friend request."<<std::endl;
                 }
                 else if(event=="friendRemoved"){
-                    std::cout<<"[FRIEND EVENT] "<<json["data"]["fromAccountId"].get<std::string>()<<" ("<<json["data"]["fromNickname"].get<std::string>()<<") removed you from friends."<<std::endl;
+                    std::cout<<"[FRIEND EVENT] "<<json["data"]["accountId"].get<std::string>()<<" ("<<json["data"]["username"].get<std::string>()<<") removed you from friends."<<std::endl;
                 }
                 break;
             }

@@ -175,10 +175,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
     }
-    auto keys=sessionManager_.connKeysByAccountId(req.to);
-    if(keys.empty()){
-        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"Recipient user is not online");
-    }
+
     if(!friendService_){
         return makeErr(req,im::ErrorCode::INTERNAL,"Friend service is not available");
     }
@@ -198,14 +195,13 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     //构造推送消息
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
     auto pushResult=pushToAccount(req.to,pushMsg);
-    if(!pushResult.delivered()){
-        if(pushResult.closed==keys.size()){//所有连接都已关闭，说明用户已下线
+    if(pushResult.sent==0){
+        if(pushResult.noSuchConnection>0){
             return makeErr(req,im::ErrorCode::RECIPIENT_OFFLINE,"Recipient user is not online");
         }
-        else if(pushResult.overloaded>0){
+        else if(pushResult.closed>0||pushResult.overloaded>0){
             return makeErr(req,im::ErrorCode::DELIVERY_OVERLOADED,"Message delivery overloaded, please try again later");
         }
-         //部分连接推送失败，记录日志但不影响发送结果
     }
     return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"delivered",pushResult.delivered()}});
 
@@ -1219,7 +1215,7 @@ im::Response im::Imservice::handleRemoveFriend(const Request& req,[[maybe_unused
     auto result=friendService_->removeFriend(session.accountId_,targetAccountId);
     if(!result.ok()){
         if(result.status==storage::RepoStatus::NotFound){
-            return makeErr(req,ErrorCode::NO_SUCH_USER,"The target user is not your friend");
+            return makeErr(req,ErrorCode::NOT_FRIENDS,"The target user is not your friend");
         }
         return makeRepoError(req,result.status,result.message);
     }
@@ -1348,10 +1344,7 @@ im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe
         if(result.status==storage::RepoStatus::NotFound){
             return makeErr(req,ErrorCode::FRIEND_REQUEST_NOT_FOUND,"The request was not found");
         }
-        if(result.status==storage::RepoStatus::AlreadyExists){
-            return makeErr(req,ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED,"The request has already been handled");
-        }
-        return makeErr(req,ErrorCode::INTERNAL,result.message);
+        return makeRepoError(req,result.status,result.message);
     }
     auto pushResult=notifyFriendEvent(result.value.value().requestAccountId,"friendRequestAccepted",nlohmann::json{{"accountId",session.accountId_},{"username",session.username_}});
     if(!pushResult.delivered()){//推送失败只记录日志，不回滚
@@ -1387,7 +1380,7 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
     auto result=friendService_->rejectRequest(session.accountId_,requestId,nowMs);
     if(!result.ok()){
         if(result.status==storage::RepoStatus::NotFound){
-            return makeErr(req,ErrorCode::NO_SUCH_USER,"The request was not found");
+            return makeErr(req,ErrorCode::FRIEND_REQUEST_NOT_FOUND,"The request was not found");
         }
         return makeRepoError(req,result.status,result.message);
     }
