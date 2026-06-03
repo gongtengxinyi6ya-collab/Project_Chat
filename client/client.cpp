@@ -325,7 +325,7 @@ public:
         body["from"]=state.accountId;    
         body["to"]="";
         body["seq"]=state.allocSeq();  
-        body["friendAccountId"]=friendAccountId;
+        body["targetAccountId"]=friendAccountId;
         return body.dump();
     }
 };
@@ -794,7 +794,7 @@ void printPretty(const std::string& payload,ClientState& state){
                 //根据data.event分类打印
                 std::string event=json["data"]["event"].get<std::string>();
                 if(event=="friendRequestReceived"){
-                    std::cout<<"[FRIEND REQUEST] "<<json["data"]["fromAccountId"].get<std::string>()<<" ("<<json["data"]["fromNickname"].get<std::string>()<<") sent you a friend request. Request ID: "<<json["data"]["requestId"].get<uint64_t>()<<std::endl;
+                    std::cout<<"[FRIEND REQUEST] "<<json["data"]["requesterAccountId"].get<std::string>()<<" ("<<json["data"]["username"].get<std::string>()<<") sent you a friend request. Request ID: "<<json["data"]["requestId"].get<uint64_t>()<<std::endl;
                 }
                 else if(event=="friendRequestAccepted"){
                     std::cout<<"[FRIEND EVENT] "<<json["data"]["fromAccountId"].get<std::string>()<<" ("<<json["data"]["fromNickname"].get<std::string>()<<") accepted your friend request."<<std::endl;

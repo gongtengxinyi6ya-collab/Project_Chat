@@ -93,7 +93,7 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     if(!conn.connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
     }
-    const auto& result=conn.queryPrepared("SELECT request_id,requester_account_id,receiver_account_id,status,created_at_ms,handled_at_ms  FROM friend_requests WHERE request_id=? FOR UPDATELIMIT 1",{requestId});
+    const auto& result=conn.queryPrepared("SELECT request_id,requester_account_id,receiver_account_id,status,created_at_ms,handled_at_ms  FROM friend_requests WHERE request_id=? LIMIT 1 FOR UPDATE",{requestId});
     if(!result.ok()){
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
@@ -191,20 +191,7 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
     }
-    //查询并校验申请存在
-    auto requestResult=findById(*conn, requestId);
-    if(!requestResult.ok()||!requestResult.value){
-        return requestResult;
-    }
-    const auto& friendRequestValue=requestResult.value.value();
-    FriendRequest friendRequest;
-    friendRequest.requestId=friendRequestValue.requestId;
-    friendRequest.requestAccountId=friendRequestValue.requestAccountId;
-    friendRequest.receiveAccountId=friendRequestValue.receiveAccountId;
-    friendRequest.status=friendRequestValue.status;
-    if(friendRequest.status!=FriendRequestStatus::Pending){
-        return {.status=RepoStatus::AlreadyHandled};
-    }
+    
     try{
         //开启事务
         SqlTransaction transaction(*conn);

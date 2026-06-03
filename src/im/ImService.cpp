@@ -175,7 +175,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
     }
-    auto keys=sessionManager_.connKeysByAccountId(session.accountId_);
+    auto keys=sessionManager_.connKeysByAccountId(req.to);
     if(keys.empty()){
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"Recipient user is not online");
     }
@@ -1218,6 +1218,9 @@ im::Response im::Imservice::handleRemoveFriend(const Request& req,[[maybe_unused
     }
     auto result=friendService_->removeFriend(session.accountId_,targetAccountId);
     if(!result.ok()){
+        if(result.status==storage::RepoStatus::NotFound){
+            return makeErr(req,ErrorCode::NO_SUCH_USER,"The target user is not your friend");
+        }
         return makeRepoError(req,result.status,result.message);
     }
     //推送好友事件通知对方被删除了好友
@@ -1284,13 +1287,10 @@ im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_u
     auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     auto result=friendService_->sendRequest(session.accountId_,targetAccountId,nowMs);
     if(!result.ok()){
-        if(result.status==storage::RepoStatus::CannotAddYourself){
-            return makeErr(req,ErrorCode::CANNOT_ADD_SELF,"can not add yourself");
+        if(result.status==storage::RepoStatus::NotFound){
+            return makeErr(req,ErrorCode::NO_SUCH_USER,"The target user was not found");
         }
-        if(result.status==storage::RepoStatus::AlreadyFriends){
-            return makeErr(req,ErrorCode::ALREADY_FRIENDS,"The user is already your friend");
-        }
-        return makeErr(req,ErrorCode::INTERNAL,result.message);
+        return makeRepoError(req,result.status,result.message);
     }
     auto pushResult=notifyFriendEvent(targetAccountId,"friendRequestReceived",nlohmann::json{{"requestId",result.value.value()},{"requesterAccountId",session.accountId_},{"username",session.username_}});
     if(!pushResult.delivered()){//推送失败只记录日志，不回滚
@@ -1387,12 +1387,9 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
     auto result=friendService_->rejectRequest(session.accountId_,requestId,nowMs);
     if(!result.ok()){
         if(result.status==storage::RepoStatus::NotFound){
-            return makeErr(req,ErrorCode::FRIEND_REQUEST_NOT_FOUND,"The request was not found");
+            return makeErr(req,ErrorCode::NO_SUCH_USER,"The request was not found");
         }
-        if(result.status==storage::RepoStatus::AlreadyExists){
-            return makeErr(req,ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED,"The request has already been handled");
-        }
-        return makeErr(req,ErrorCode::INTERNAL,result.message);
+        return makeRepoError(req,result.status,result.message);
     }
     auto pushResult=notifyFriendEvent(result.value.value().requestAccountId,"friendRequestRejected",nlohmann::json{{"accountId",session.accountId_},{"username",session.username_}});
     if(!pushResult.delivered()){//推送失败只记录日志，不回滚
