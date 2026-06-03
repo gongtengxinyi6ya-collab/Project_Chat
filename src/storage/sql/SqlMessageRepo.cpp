@@ -66,3 +66,65 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
         }
     return {};
 }
+
+storage::SaveMessageResult storage::SqlMessageRepo::saveDirectMessage(uint64_t msgId,const std::string&conversationKey,const std::string&senderAccountId,const std::string& receiverAccountId,const std::string& senderUsername,const std::string&content,uint64_t serverTsMs){
+    if(msgId==0||conversationKey.empty()||senderAccountId.empty()||receiverAccountId.empty()||content.empty()){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connected the Database"};
+    }
+    auto result=conn->executePrepared("INSERT INTO direct_messages (msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms) VALUES(?,?,?,?,?,?,?))",{msgId,conversationKey,senderAccountId,receiverAccountId,senderUsername,content,serverTsMs});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    return {.status=RepoStatus::Ok,.messageId=msgId};
+
+}
+std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
+    if(conversationKey.empty()){
+        return {};
+    }
+    if(limit>200){//限制limit
+        limit=200;
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {};
+    }
+    SqlResult result;
+    if(beforeMsgId==0){
+        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation=? ORDERBY msg_id DESC LIMIT ?",{conversationKey,limit});
+    }
+    else{
+        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation=? AND msg_id<? ORDERBY msg_id DESC LIMIT ?",{conversationKey,beforeMsgId,limit});
+    }
+    if(!result.ok()){
+        return {};
+    }
+    if(result.rows.empty()){
+        return {};
+    }
+    std::vector<MessageRepo::DirectMessageRecord> messages;
+    for(auto& row:result.rows){
+        DirectMessageRecord message;
+        auto conversationPair=row.find("conversation_key");
+        message.conversationKey=conversationPair!=row.end()?conversationPair->second:"";
+        auto msgIdPair=row.find("msg_id");
+        message.messageId=msgIdPair!=row.end()?std::stoull(msgIdPair->second):0;//数据库结果从string转为uint64_t
+        auto senderAccountIdPair=row.find("sender_account_id");
+        message.senderAccountId=senderAccountIdPair!=row.end()?senderAccountIdPair->second:"";
+        auto receiverAccountIdPair=row.find("receiver_account_id");
+        message.receiverAccountId=receiverAccountIdPair!=row.end()?receiverAccountIdPair->second:"";
+        
+        auto senderUsernamePair=row.find("sender_username");
+        message.senderUsername=senderUsernamePair!=row.end()?senderUsernamePair->second:"";
+        auto contentPair=row.find("content");
+        message.content=contentPair!=row.end()?contentPair->second:"";
+        auto serverTsMsPair=row.find("server_ts_ms");
+        message.serverTsMs=serverTsMsPair!=row.end()?std::stoull(serverTsMsPair->second):0;
+        messages.emplace_back(std::move(message));
+    }
+    return messages;
+}

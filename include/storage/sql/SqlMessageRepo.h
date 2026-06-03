@@ -14,6 +14,8 @@ public:
     explicit SqlMessageRepo(std::shared_ptr<SqlConnectionPool> pool);
     SaveMessageResult saveGroupMessage(uint64_t msgId,const std::string& groupId,const std::string& senderAccountId,const std::string& senderUsername,const std::string& content,uint64_t serverTsMs) override;
     std::vector<MessageRecord> listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit)override;//查询群历史消息
+    SaveMessageResult saveDirectMessage(uint64_t msgId,const std::string&conversationKey,const std::string&senderAccountId,const std::string& receiverAccountId,const std::string& senderUsername,const std::string&content,uint64_t serverTsMs) override;//保存私聊消息
+    std::vector<DirectMessageRecord> listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit) override;//查询某个私聊会话的历史消息
 private:
     std::shared_ptr<SqlConnectionPool> pool_;
 };

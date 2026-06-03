@@ -68,7 +68,20 @@ CREATE TABLE IF NOT EXISTS offline_messages(
     KEY idx_offline_account_id_msg (account_id, msg_id),
     KEY idx_offline_group_id (group_id)
 )ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
+ALTER TABLE offline_messages
+ADD COLUMN msg_type TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '1=group,2=direct';
+ALTER TABLE offline_messages
+MODIFY COLUMN group_id VARCHAR(64) NULL;
+ALTER TABLE offline_messages
+ADD COLUMN peer_account_id VARCHAR(64) NULL AFTER group_id;
+ALTER TABLE offline_messages
+RENAME COLUMN username TO account_id;
+ALTER TABLE offline_messages
+ADD UNIQUE KEY uk_offline_account_type_msg (
+    account_id,
+    msg_type,
+    msg_id
+);
 CREATE TABLE IF NOT EXISTS user_sessions (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id BIGINT UNSIGNED NOT NULL,
@@ -140,4 +153,29 @@ CREATE TABLE IF NOT EXISTS friend_requests (
     UNIQUE KEY uk_friend_requests_pending_pair (pending_pair_key),
     KEY idx_friend_requests_receiver_status (receiver_account_id, status),
     KEY idx_friend_requests_requester_status (requester_account_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS direct_messages (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    msg_id BIGINT UNSIGNED NOT NULL,
+    conversation_key VARCHAR(140) NOT NULL,
+    sender_account_id VARCHAR(64) NOT NULL,
+    receiver_account_id VARCHAR(64) NOT NULL,
+    sender_username VARCHAR(64) NOT NULL,
+    content TEXT NOT NULL,
+    server_ts_ms BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_direct_msg_id (msg_id),
+    KEY idx_direct_conversation_msg (
+        conversation_key,
+        msg_id
+    ),
+    KEY idx_direct_receiver_msg (
+        receiver_account_id,
+        msg_id
+    ),
+    KEY idx_direct_sender_msg (
+        sender_account_id,
+        msg_id
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

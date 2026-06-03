@@ -79,3 +79,24 @@ storage::RepoResult storage::SqlOfflineMessageRepo::ackOfflineMessage(const std:
     return RepoResult{.status=RepoStatus::SqlError};
 
 }
+
+storage::RepoResult storage::SqlOfflineMessageRepo::saveOfflineDirectMessage(const std::string& accountId,uint64_t msgId,const std::string& peerAccountId){
+    if(accountId.empty()||peerAccountId.empty()||msgId==0){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();//获取链接
+    if(!conn){
+        return RepoResult{.status=RepoStatus::SqlError,.message="Failed to require a conn"};
+    }
+    if(conn->connected()){
+        auto result=conn->executePrepared("INSERT INTO offline_messages(account_id,msg_type,msg_id,peer_account_id,group_id) VALUES(?,2,?,?,NULL)",{accountId,msgId,peerAccountId});
+        if(!result.ok()&&result.error.find("Duplicate entry")!=std::string::npos){
+            //重复保存离线索引作为幂等处理
+            return RepoResult{.status=RepoStatus::Ok,.message="Offline message already exists"};
+        }
+        if(!result.ok()){
+            return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
+        }
+    }
+    return RepoResult{.status=RepoStatus::Ok,.message="Offline message saved successfully"};
+}
