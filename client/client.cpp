@@ -317,6 +317,17 @@ public:
         body["requestId"]=std::stoull(requestId);
         return body.dump();
     }
+    std::string buildRemoveFriendReq(ClientState& state,std::string friendAccountId){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::REMOVE_FRIEND_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;    
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        body["friendAccountId"]=friendAccountId;
+        return body.dump();
+    }
 };
 //把/auth jason,/dm tom hello,/list,/gjoin room,/gleave ,/gmembers,/gls,/gsay 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
@@ -489,6 +500,10 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
     if(line.rfind("/rejectfriendrequest ",0)==0){
         std::string requestId=line.substr(21);  
         return builder.buildRejectFriendRequestReq(state,requestId);
+    }
+    if(line.rfind("/removefriend ",0)==0){
+        std::string friendAccountId=line.substr(14);  
+        return builder.buildRemoveFriendReq(state,friendAccountId);
     }
     return std::nullopt;
 }
@@ -769,6 +784,27 @@ void printPretty(const std::string& payload,ClientState& state){
             }
             case im::MsgType::REJECT_FRIEND_REQUEST_RESP:{
                 std::cout<<"REJECT_FRIEND_REQUEST_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            }
+            case im::MsgType::REMOVE_FRIEND_RESP:{
+                std::cout<<"REMOVE_FRIEND_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
+                break;
+            }
+            case im::MsgType::FRIEND_EVENT_PUSH:{
+                //根据data.event分类打印
+                std::string event=json["data"]["event"].get<std::string>();
+                if(event=="friendRequestReceived"){
+                    std::cout<<"[FRIEND REQUEST] "<<json["data"]["fromAccountId"].get<std::string>()<<" ("<<json["data"]["fromNickname"].get<std::string>()<<") sent you a friend request. Request ID: "<<json["data"]["requestId"].get<uint64_t>()<<std::endl;
+                }
+                else if(event=="friendRequestAccepted"){
+                    std::cout<<"[FRIEND EVENT] "<<json["data"]["fromAccountId"].get<std::string>()<<" ("<<json["data"]["fromNickname"].get<std::string>()<<") accepted your friend request."<<std::endl;
+                }
+                else if(event=="friendRequestRejected"){
+                    std::cout<<"[FRIEND EVENT] "<<json["data"]["fromAccountId"].get<std::string>()<<" ("<<json["data"]["fromNickname"].get<std::string>()<<") rejected your friend request."<<std::endl;
+                }
+                else if(event=="friendRemoved"){
+                    std::cout<<"[FRIEND EVENT] "<<json["data"]["fromAccountId"].get<std::string>()<<" ("<<json["data"]["fromNickname"].get<std::string>()<<") removed you from friends."<<std::endl;
+                }
                 break;
             }
             default:

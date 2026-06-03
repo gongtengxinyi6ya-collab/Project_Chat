@@ -179,22 +179,35 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     if(keys.empty()){
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"Recipient user is not online");
     }
+    if(!friendService_){
+        return makeErr(req,im::ErrorCode::INTERNAL,"Friend service is not available");
+    }
+    auto userProfile=friendService_->findUser(req.to);
+    if(!userProfile){
+        return makeErr(req,ErrorCode::NO_SUCH_USER,"no such user");
+    }
+    //确认是否好友关系
+    if(!friendService_->areFriends(session.accountId_,req.to)){
+        return makeErr(req,ErrorCode::NOT_FRIENDS,"not your friends");
+    }
     //取文本
     std::string content;
     if(auto errField=getStringField(req,"content",content)){
         return errField.value();
     }
     //构造推送消息
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"from",session.username_},{"to",req.to},{"content",content}}};
-    decorate(pushMsg,std::nullopt,req.req_id);//推送消息也携带client_req_id，方便客户端关联请求和推送
-    std::string payload=encodeResponse(pushMsg);
-    for(const auto& targetKey:keys){
-        SendResult res=sendPush(targetKey,payload);
-        if(res!=SendResult::Ok){
-            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Failed to deliver message, recipient is offline or overloaded");
+    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
+    auto pushResult=pushToAccount(req.to,pushMsg);
+    if(!pushResult.delivered()){
+        if(pushResult.closed==keys.size()){//所有连接都已关闭，说明用户已下线
+            return makeErr(req,im::ErrorCode::RECIPIENT_OFFLINE,"Recipient user is not online");
         }
+        else if(pushResult.overloaded>0){
+            return makeErr(req,im::ErrorCode::DELIVERY_OVERLOADED,"Message delivery overloaded, please try again later");
+        }
+         //部分连接推送失败，记录日志但不影响发送结果
     }
-    return makeOk(req,im::MsgType::DM_RESP);
+    return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"delivered",pushResult.delivered()}});
 
 }
 
@@ -718,6 +731,8 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleAcceptFriendRequest(req,key,session);
         case im::MsgType::REJECT_FRIEND_REQUEST_REQ:
             return handleRejectFriendRequest(req,key,session);
+        case im::MsgType::REMOVE_FRIEND_REQ:
+            return handleRemoveFriend(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
