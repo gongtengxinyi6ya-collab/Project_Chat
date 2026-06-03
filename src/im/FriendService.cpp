@@ -47,6 +47,22 @@ bool im::FriendService::areFriends(const std::string& accountId,const std::strin
     }
     return friendRepo_->areFriends(accountId,targetAccountId);
 }
+storage::RepoResult im::FriendService::removeFriend(const std::string& accountId,const std::string&targetAccountId){
+    if(accountId.empty()||targetAccountId.empty()){
+        return {.status=storage::RepoStatus::InvalidArgument};
+    }
+    if(accountId==targetAccountId){
+        return {.status=storage::RepoStatus::InvalidArgument,.message="can not remove yourself"};
+    }
+    if(!areFriends(accountId,targetAccountId)){
+        return {.status=storage::RepoStatus::NotFriends};
+    }
+    if(!friendRepo_){
+        return {.status=storage::RepoStatus::Internal};
+    }
+    return friendRepo_->removeFriendPair(accountId,targetAccountId);
+}
+
 storage::RepoValueResult<uint64_t> im::FriendService::sendRequest(const std::string&from,const std::string& to,int64_t nowMs){
     //校验参数
     if(from.empty()||to.empty()){
@@ -114,7 +130,7 @@ std::vector<im::FriendRequestView> im::FriendService::listIncomingRequests(const
     }
     return views;
 }
-storage::RepoResult im::FriendService::acceptRequest(const std::string& accountId,uint64_t requestId,int64_t nowMs){
+storage::RepoValueResult<storage::FriendRequest> im::FriendService::acceptRequest(const std::string& accountId,uint64_t requestId,int64_t nowMs){
     if(accountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument};
     }
@@ -123,7 +139,7 @@ storage::RepoResult im::FriendService::acceptRequest(const std::string& accountI
     }
     return friendRequestRepo_->acceptPendingAndCreateFriendPair(requestId,accountId,nowMs);
 }
-storage::RepoResult im::FriendService::rejectRequest(const std::string& accountId,uint64_t requestId,int64_t nowMs){
+storage::RepoValueResult<storage::FriendRequest> im::FriendService::rejectRequest(const std::string& accountId,uint64_t requestId,int64_t nowMs){
     if(accountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument};
     }

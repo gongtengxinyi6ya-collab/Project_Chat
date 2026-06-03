@@ -68,11 +68,11 @@ storage::RepoResult storage::SqlFriendRepo::removeFriendPair(const std::string& 
         //开启事务
         SqlTransaction transaction(*conn);
         //软删除双向关系
-        auto result1=conn->executePrepared("UPDATE friend_relations SET status=2 WHERE account_id=? AND friend_account_id=?",{accountId,friendAccountId});
+        auto result1=conn->executePrepared("UPDATE friend_relations SET status=2 WHERE account_id=? AND friend_account_id=? AND status=1",{accountId,friendAccountId});
         if(!result1.ok()||result1.affectedRows==0){
             return RepoResult{.status=RepoStatus::NotFound,.message=result1.error};
         }
-        auto result2=conn->executePrepared("UPDATE friend_relations SET status=2 WHERE account_id=? AND friend_account_id=?",{friendAccountId,accountId});
+        auto result2=conn->executePrepared("UPDATE friend_relations SET status=2 WHERE account_id=? AND friend_account_id=? AND status=1",{friendAccountId,accountId});
         if(!result2.ok()||result2.affectedRows==0){
             return RepoResult{.status=RepoStatus::NotFound,.message=result2.error};
         }
