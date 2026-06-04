@@ -95,10 +95,10 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     }
     SqlResult result;
     if(beforeMsgId==0){
-        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation=? ORDERBY msg_id DESC LIMIT ?",{conversationKey,limit});
+        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation=? ORDER BY msg_id DESC LIMIT ?",{conversationKey,limit});
     }
     else{
-        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation=? AND msg_id<? ORDERBY msg_id DESC LIMIT ?",{conversationKey,beforeMsgId,limit});
+        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation=? AND msg_id<? ORDER BY msg_id DESC LIMIT ?",{conversationKey,beforeMsgId,limit});
     }
     if(!result.ok()){
         return {};
