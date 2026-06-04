@@ -50,3 +50,65 @@ std::vector<storage::MessageRepo::MessageRecord> storage::MemoryMessageRepo::lis
     }
     return res;
 }
+storage::SaveMessageResult storage::MemoryMessageRepo::saveDirectMessage(uint64_t msgId,const std::string&conversationKey,const std::string&senderAccountId,const std::string& receiverAccountId,const std::string& senderUsername,const std::string&content,uint64_t serverTsMs){
+    if(conversationKey.empty()||senderAccountId.empty()||receiverAccountId.empty()||content.empty()){
+        return {RepoStatus::InvalidArgument,0,""};
+    }
+    DirectMessageRecord record;
+    record.messageId=msgId;
+    record.conversationKey=conversationKey;
+    record.senderAccountId=senderAccountId;
+    record.receiverAccountId=receiverAccountId;
+    record.senderUsername=senderUsername;
+    record.content=content;
+    record.serverTsMs=serverTsMs;
+    {
+        std::lock_guard lk(mutex_);
+        groupMessages_[conversationKey].push_back({msgId,"",senderAccountId,senderUsername,content,serverTsMs});//私聊消息也存储在groupMessages_中，groupId使用conversationKey占位
+    }
+    return {RepoStatus::Ok,record.messageId,""};
+}
+std::vector<storage::MessageRepo::DirectMessageRecord> storage::MemoryMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
+    if(conversationKey.empty()){
+        return {};
+    }
+    std::lock_guard lk(mutex_);
+    auto it=groupMessages_.find(conversationKey);
+    if(it==groupMessages_.end()){
+        return {};
+    }
+    std::vector<DirectMessageRecord> res;
+    const auto& messages=it->second;
+    if(beforeMsgId==0){
+        if(messages.size()>limit){
+            for(auto iter=std::prev(messages.end(),limit);iter!=messages.end();++iter){
+                const auto& msg=*iter;
+                res.push_back({msg.messageId,msg.groupId,msg.senderAccountId,conversationKey,msg.senderUsername,msg.content,msg.serverTsMs});
+            }
+        }
+        else{
+            for(const auto& msg:messages){
+                res.push_back({msg.messageId,msg.groupId,msg.senderAccountId,conversationKey,msg.senderUsername,msg.content,msg.serverTsMs});
+            }
+        }
+    }
+    else{
+        auto pos=std::lower_bound(messages.begin(),messages.end(),beforeMsgId,[](const MessageRecord& msg,uint64_t id){
+            return msg.messageId<id;
+        });
+        auto index=static_cast<size_t>(std::distance(messages.begin(),pos));
+        if(index>limit){
+            for(auto iter=std::prev(pos,limit);iter!=pos;++iter){
+                const auto& msg=*iter;
+                res.push_back({msg.messageId,msg.groupId,msg.senderAccountId,conversationKey,msg.senderUsername,msg.content,msg.serverTsMs});
+            }
+        }
+        else{
+            for(auto iter=messages.begin();iter!=pos;++iter){
+                const auto& msg=*iter;
+                res.push_back({msg.messageId,msg.groupId,msg.senderAccountId,conversationKey,msg.senderUsername,msg.content,msg.serverTsMs});
+            }
+        }
+    }
+    return res;
+}

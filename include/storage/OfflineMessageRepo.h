@@ -32,6 +32,8 @@ inline std::string offlineMessageTypeToString(OfflineMessageType type){
             return "Group";
         case OfflineMessageType::Direct:
             return "Direct";
+        default:
+            return "Group";
     }
 }
 }
