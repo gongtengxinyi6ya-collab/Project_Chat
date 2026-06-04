@@ -129,7 +129,8 @@ private:
     void saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromUser,uint64_t msgId);//群消息发送后，为离线群成员记录离线索引
     im::Response handleOfflinelist(const Request& req,ConnKey key,Session& session);//客户端拉取自己的离线消息索引
     im::Response handleOfflineAck(const Request& req,ConnKey key,Session& session);//客户端确认离线消息已经处理，服务端删除离线索引
-
+    im::Response handleDmHistory(const Request& req,ConnKey key,Session& session);//获取私聊历史消息
+    
     //注册登录
     std::unique_ptr<auth::AuthService> authService_;//
     Response handleRegister(const Request& req,ConnKey key,Session& session);//处理客户端注册
@@ -151,6 +152,8 @@ private:
     Response handleRemoveFriend(const Request& req,ConnKey key,Session& session);//删除好友
     AccountPushResult pushToAccount(const std::string&targetAccount,im::Response&push);//将一条消息推送给目标账号当前在线的全部设备
     AccountPushResult notifyFriendEvent(const std::string&targetAccountId,const std::string&event,nlohmann::json data);//统一发送好友模块事件，避免在多个handler中重复拼装推送消息
+    std::string buildDirectConversationKey(const std::string& accountA,const std::string& accountB)const;//生成AB两人私聊会话key
+
     //好友请求接口
     Response handleSendFriendRequest(const Request& req,ConnKey key,Session& session);//提交好友申请
     Response handleListFriendRequests(const Request& req,ConnKey key,Session& session);//请求当前账号收到的待处理申请

@@ -60,6 +60,8 @@ enum class MsgType:uint16_t{
     REMOVE_FRIEND_REQ,//删除好友请求
     REMOVE_FRIEND_RESP,
     FRIEND_EVENT_PUSH,//好友事件推送，如被添加，被删除等
+    DM_HISTORY_REQ,//私聊历史消息请求
+    DM_HISTORY_RESP,
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -177,6 +179,10 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::REMOVE_FRIEND_RESP;
         case 56:
             return MsgType::FRIEND_EVENT_PUSH;
+        case 57:
+            return MsgType::DM_HISTORY_REQ;
+        case 58:
+            return MsgType::DM_HISTORY_RESP;
         case 255:
             return MsgType::ERR;
         

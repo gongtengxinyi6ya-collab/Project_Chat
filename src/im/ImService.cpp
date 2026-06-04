@@ -175,7 +175,11 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
     }
-
+    //取文本
+    std::string content;
+    if(auto errField=getStringField(req,"content",content)){
+        return errField.value();
+    }
     if(!friendService_){
         return makeErr(req,im::ErrorCode::INTERNAL,"Friend service is not available");
     }
@@ -187,15 +191,26 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     if(!friendService_->areFriends(session.accountId_,req.to)){
         return makeErr(req,ErrorCode::NOT_FRIENDS,"not your friends");
     }
-    //取文本
-    std::string content;
-    if(auto errField=getStringField(req,"content",content)){
-        return errField.value();
+    //生成消息id和时间
+    uint64_t msgId=nextMessageId();
+    uint64_t serverTsMs=nowMs();
+    //保存私聊消息
+    std::string conversationKey=buildDirectConversationKey(session.accountId_,req.to);
+    if(!repos_.messageRepo){
+       return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not available");
     }
+     auto result=repos_.messageRepo->saveDirectMessage(msgId,conversationKey,session.accountId_,req.to,session.username_,content,serverTsMs);
+        if(!result.ok()){
+            return makeErr(req,ErrorCode::INTERNAL,result.message);
+        }
     //构造推送消息
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
+    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"msgId",msgId},{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
     auto pushResult=pushToAccount(req.to,pushMsg);
-    if(pushResult.sent==0){
+    if(pushResult.sent==0){//目标账号没有任何设备收到
+        auto resultOffline=repos_.offlineMessageRepo->saveOfflineDirectMessage(req.to,msgId,session.accountId_);
+        if(!resultOffline.ok()){
+            LOG_WARN("Failed to save offlineMessage: "+content);
+        }
         if(pushResult.noSuchConnection>0){
             return makeErr(req,im::ErrorCode::RECIPIENT_OFFLINE,"Recipient user is not online");
         }
@@ -203,7 +218,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
             return makeErr(req,im::ErrorCode::DELIVERY_OVERLOADED,"Message delivery overloaded, please try again later");
         }
     }
-    return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"delivered",pushResult.delivered()}});
+    return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
 
 }
 
@@ -1265,6 +1280,14 @@ im::Imservice::AccountPushResult im::Imservice::notifyFriendEvent(const std::str
     Response push{.ver=1,.req_id=0,.type=MsgType::FRIEND_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.data=std::move(data)};
     auto pushResult=pushToAccount(targetAccountId,push);
     return pushResult;
+}
+std::string im::Imservice::buildDirectConversationKey(const std::string& accountA,const std::string& accountB)const{
+    if(accountA<accountB){
+        return accountA+"#"+accountB;
+    }
+    else{
+        return accountB+"#"+accountA;
+    }
 }
 //好友请求接口
 im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
