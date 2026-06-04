@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS offline_messages(
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     account_id VARCHAR(32) NOT NULL,
     msg_id BIGINT UNSIGNED NOT NULL,
-    group_id VARCHAR(64) NOT NULL,
+    group_id VARCHAR(64) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_offline_user_msg (account_id, msg_id),
@@ -70,12 +70,10 @@ CREATE TABLE IF NOT EXISTS offline_messages(
 )ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ALTER TABLE offline_messages
 ADD COLUMN msg_type TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '1=group,2=direct';
-ALTER TABLE offline_messages
-MODIFY COLUMN group_id VARCHAR(64) NULL;
+
 ALTER TABLE offline_messages
 ADD COLUMN peer_account_id VARCHAR(64) NULL AFTER group_id;
-ALTER TABLE offline_messages
-RENAME COLUMN username TO account_id;
+
 ALTER TABLE offline_messages
 ADD UNIQUE KEY uk_offline_account_type_msg (
     account_id,
