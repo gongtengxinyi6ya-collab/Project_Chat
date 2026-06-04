@@ -36,16 +36,31 @@ std::vector<storage::OfflineMessageIndex> storage::SqlOfflineMessageRepo::listOf
         return {};
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT msg_id,group_id FROM offline_messages WHERE account_id=? ORDER BY id ASC LIMIT ?",{accountId,limit});
+        auto result=conn->queryPrepared("SELECT msg_id,group_id,msg_type,peer_accountId FROM offline_messages WHERE account_id=? ORDER BY id ASC LIMIT ?",{accountId,limit});
         if(result.ok()){
             std::vector<OfflineMessageIndex> offlineMessages;
             for(auto& row:result.rows){
                 OfflineMessageIndex offlineMessage;
                 auto msgIdPair=row.find("msg_id");
                 offlineMessage.msgId=msgIdPair!=row.end()?std::stoull(msgIdPair->second):0;
+                auto msgTypePair=row.find("msg_type");
+                if(msgTypePair!=row.end()){
+                    if(std::stoi(msgTypePair->second)==1){
+                        offlineMessage.type=OfflineMessageType::Group;
+                    }
+                    else{
+                        offlineMessage.type=OfflineMessageType::Direct;
+                    }
+                }
+                auto peerAccountIdPair=row.find("peer_account_id");
+                if(peerAccountIdPair!=row.end()){
+                    offlineMessage.peerAccountId=peerAccountIdPair->second;
+                }
                 auto groupIdPair=row.find("group_id");
                 offlineMessage.groupId=groupIdPair!=row.end()?groupIdPair->second:"";
+
                 offlineMessages.emplace_back(std::move(offlineMessage));
+
             }
             return offlineMessages;
         }

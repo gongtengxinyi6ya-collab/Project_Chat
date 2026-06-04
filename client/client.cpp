@@ -546,7 +546,7 @@ void printPretty(const std::string& payload,ClientState& state){
                 std::cout<<"AUTH_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             case im::MsgType::DM_PUSH:
-                std::cout<<"[DM] "<<json["data"]["from"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
+                std::cout<<"[DM] "<<json["data"]["fromAAccountId"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
                 break;
             case im::MsgType::DM_RESP:
                 std::cout<<"DM_RESP: "<<(json["ok"].get<bool>()?"delivered":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;

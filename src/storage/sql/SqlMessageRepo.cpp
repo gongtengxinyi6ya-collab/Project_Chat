@@ -75,7 +75,7 @@ storage::SaveMessageResult storage::SqlMessageRepo::saveDirectMessage(uint64_t m
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connected the Database"};
     }
-    auto result=conn->executePrepared("INSERT INTO direct_messages (msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms) VALUES(?,?,?,?,?,?,?))",{msgId,conversationKey,senderAccountId,receiverAccountId,senderUsername,content,serverTsMs});
+    auto result=conn->executePrepared("INSERT INTO direct_messages (msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms) VALUES(?,?,?,?,?,?,?)",{msgId,conversationKey,senderAccountId,receiverAccountId,senderUsername,content,serverTsMs});
     if(!result.ok()){
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
@@ -95,10 +95,10 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     }
     SqlResult result;
     if(beforeMsgId==0){
-        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation=? ORDER BY msg_id DESC LIMIT ?",{conversationKey,limit});
+        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation_key=? ORDER BY msg_id DESC LIMIT ?",{conversationKey,limit});
     }
     else{
-        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation=? AND msg_id<? ORDER BY msg_id DESC LIMIT ?",{conversationKey,beforeMsgId,limit});
+        result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation_key=? AND msg_id<? ORDER BY msg_id DESC LIMIT ?",{conversationKey,beforeMsgId,limit});
     }
     if(!result.ok()){
         return {};

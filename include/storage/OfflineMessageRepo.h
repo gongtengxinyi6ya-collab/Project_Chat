@@ -26,4 +26,12 @@ public:
     virtual std::vector<OfflineMessageIndex> listOfflineMessage(const std::string& accountId,size_t limit)=0;//查询用户的离线消息索引
     virtual RepoResult ackOfflineMessage(const std::string& accountId,const std::vector<uint64_t>& msgId)=0;//客户端确认后删除离线消息索引
 };
+inline std::string offlineMessageTypeToString(OfflineMessageType type){
+    switch(type){
+        case OfflineMessageType::Group:
+            return "Group";
+        case OfflineMessageType::Direct:
+            return "Direct";
+    }
+}
 }

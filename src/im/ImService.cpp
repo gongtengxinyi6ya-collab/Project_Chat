@@ -207,16 +207,14 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"msgId",msgId},{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
     auto pushResult=pushToAccount(req.to,pushMsg);
     if(pushResult.sent==0){//目标账号没有任何设备收到
+        if(!repos_.messageRepo){
+            return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not available");
+    }
         auto resultOffline=repos_.offlineMessageRepo->saveOfflineDirectMessage(req.to,msgId,session.accountId_);
         if(!resultOffline.ok()){
             LOG_WARN("Failed to save offlineMessage: "+content);
         }
-        if(pushResult.noSuchConnection>0){
-            return makeErr(req,im::ErrorCode::RECIPIENT_OFFLINE,"Recipient user is not online");
-        }
-        else if(pushResult.closed>0||pushResult.overloaded>0){
-            return makeErr(req,im::ErrorCode::DELIVERY_OVERLOADED,"Message delivery overloaded, please try again later");
-        }
+        return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"queuedOffline",true},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
     }
     return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"queuedOffline",false},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
 
@@ -744,6 +742,8 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleRejectFriendRequest(req,key,session);
         case im::MsgType::REMOVE_FRIEND_REQ:
             return handleRemoveFriend(req,key,session);
+        case im::MsgType::DM_HISTORY_REQ:
+            return handleDmHistory(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -858,12 +858,12 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
     if(!friendService_){
         return makeErr(req,im::ErrorCode::INTERNAL,"Friend service is not available");
     }
-    auto userProfile=friendService_->findUser(req.to);
+    auto userProfile=friendService_->findUser(peerAccountId);
     if(!userProfile){
         return makeErr(req,ErrorCode::NO_SUCH_USER,"no such user");
     }
     //确认是否好友关系
-    if(!friendService_->areFriends(session.accountId_,req.to)){
+    if(!friendService_->areFriends(session.accountId_,peerAccountId)){
         return makeErr(req,ErrorCode::NOT_FRIENDS,"not your friends");
     }
     //解析beforeMsgId,limit
@@ -902,7 +902,7 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
         return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not avaiable");
     }
     auto result=repos_.messageRepo->listDirectMessages(conversationKey,beforeMsgId,limit);
-    if(!result.empty()){
+    if(result.empty()){
         return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"messages",""}});
     }
     nlohmann::json messagesJson=nlohmann::json::array();
@@ -964,7 +964,7 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]
     nlohmann::json indexJson=nlohmann::json::array();
     for(const auto& index:indexes){
         if(index.type==storage::OfflineMessageType::Group){
-             indexJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type",index.type},{"groupId",index.groupId}});
+             indexJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type",storage::offlineMessageTypeToString(index.type)},{"groupId",index.groupId}});
         }
         else if(index.type==storage::OfflineMessageType::Direct){
              indexJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type",index.type},{"peerAccountId",index.peerAccountId}});
