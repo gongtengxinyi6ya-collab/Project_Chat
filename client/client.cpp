@@ -328,6 +328,18 @@ public:
         body["targetAccountId"]=friendAccountId;
         return body.dump();
     }
+    std::string buildDmHistoryReq(ClientState& state,std::string peerAccountId,uint64_t beforeMsgId){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::DM_HISTORY_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;    
+        body["to"]="";
+        body["seq"]=state.allocSeq();  
+        body["peerAccountId"]=peerAccountId;
+        body["beforeMsgId"]=beforeMsgId;
+        return body.dump();
+    }
 };
 //把/auth jason,/dm tom hello,/list,/gjoin room,/gleave ,/gmembers,/gls,/gsay 转为payload字符串，返回nullopt表示解析失败
 std::optional<std::string> tryParseCommandLine(const std::string line,ClientState& state){
@@ -505,6 +517,13 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         std::string friendAccountId=line.substr(14);  
         return builder.buildRemoveFriendReq(state,friendAccountId);
     }
+    if(line.rfind("/dmhistory ",0)==0){
+        size_t firstSpace=line.find(' ',11);
+        if(firstSpace==std::string::npos) return std::nullopt;
+        std::string peerAccountId=line.substr(11,firstSpace-11);
+        uint64_t beforeMsgId=std::stoull(line.substr(firstSpace+1));
+        return builder.buildDmHistoryReq(state,peerAccountId,beforeMsgId);
+    }
     return std::nullopt;
 }
 //尝试parse JSON,按type分类打印摘要，失败则原样输出
@@ -611,6 +630,17 @@ void printPretty(const std::string& payload,ClientState& state){
                 std::cout<<"Group history messages: "<<std::endl;
                 for(const auto& msg:json["data"]["messages"]){
                         std::cout<<"[Group: "<<msg["groupId"].get<std::string>()<<"] "<<msg["senderUsername"].get<std::string>()<<": "<<msg["content"].get<std::string>()<<" (msgId: "<<msg["msgId"].get<uint64_t>()<<")"<<std::endl;
+                }
+                break;
+            }
+            case im::MsgType::OFFLINE_LIST_RESP:{
+                for(const auto& msg:json["data"]["messages"]){
+                    if(msg["type"].get<std::string>()=="DM"){
+                         std::cout<<"[Offline DM] peerAccountId: "<<msg["peerAccountId"].get<std::string>()<<" (msgId: "<<msg["msgId"].get<uint64_t>()<<")"<<std::endl;
+                    }
+                    else if(msg["type"].get<std::string>()=="GROUP"){
+                         std::cout<<"[Offline Group] "<<msg["groupId"].get<std::string>()<<" (msgId: "<<msg["msgId"].get<uint64_t>()<<")"<<std::endl;
+                    }
                 }
                 break;
             }

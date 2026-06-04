@@ -218,7 +218,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
             return makeErr(req,im::ErrorCode::DELIVERY_OVERLOADED,"Message delivery overloaded, please try again later");
         }
     }
-    return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
+    return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"queuedOffline",false},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
 
 }
 
@@ -843,7 +843,75 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"messages",messagesJson}});
 
 }
-
+im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err.has_value()){
+        return err.value();
+    }
+    //读取目标
+    std::string peerAccountId;
+    auto getPeerAccountId=getStringField(req,"peerAccountId",peerAccountId);
+    if(getPeerAccountId){
+        return getPeerAccountId.value();
+    }
+    //查找账号
+    if(!friendService_){
+        return makeErr(req,im::ErrorCode::INTERNAL,"Friend service is not available");
+    }
+    auto userProfile=friendService_->findUser(req.to);
+    if(!userProfile){
+        return makeErr(req,ErrorCode::NO_SUCH_USER,"no such user");
+    }
+    //确认是否好友关系
+    if(!friendService_->areFriends(session.accountId_,req.to)){
+        return makeErr(req,ErrorCode::NOT_FRIENDS,"not your friends");
+    }
+    //解析beforeMsgId,limit
+    uint64_t beforeMsgId=0;
+    if(req.body.contains("beforeMsgId")){
+        if(req.body["beforeMsgId"].is_number_unsigned()){
+            beforeMsgId=req.body["beforeMsgId"].get<uint64_t>();
+        }
+        else if(req.body["beforeMsgId"].is_number_integer()&&req.body["beforeMsgId"].get<int64_t>()>=0){
+            beforeMsgId=static_cast<uint64_t>(req.body["beforeMsgId"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid beforeMsgId");
+        }
+    }
+    size_t limit=20;
+    if(req.body.contains("limit")){
+        
+        if(req.body["limit"].is_number_unsigned()){
+            limit=req.body["limit"].get<size_t>();
+        }
+        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
+            limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid limit");
+        }
+    }
+    if(limit>100){//limit最大值限制
+        limit=100;
+    }
+    //生成会话key
+    auto conversationKey=buildDirectConversationKey(session.accountId_,peerAccountId);
+    //获取历史私聊消息
+    if(!repos_.messageRepo){
+        return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not avaiable");
+    }
+    auto result=repos_.messageRepo->listDirectMessages(conversationKey,beforeMsgId,limit);
+    if(!result.empty()){
+        return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"messages",""}});
+    }
+    nlohmann::json messagesJson=nlohmann::json::array();
+    for(const auto&message:result){
+        messagesJson.push_back(nlohmann::json{{"msgId",message.messageId},{"fromAccountId",message.senderAccountId},{"toAccountId",message.receiverAccountId},{"fromUsername",message.senderUsername},{"content",message.content},{{"serverTsMs",message.serverTsMs}}});
+    }
+    return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"messages",messagesJson}});
+    
+}
 void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromAccountId,uint64_t msgId){
     if(groupId.empty()||fromAccountId.empty()){
         return;
@@ -886,7 +954,7 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]
             limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
         }
         else{
-            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid limit");
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid limit");
         }
     }
     if(limit>200){
@@ -895,7 +963,12 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]
     auto indexes=repos_.offlineMessageRepo->listOfflineMessage(session.accountId_,limit);
     nlohmann::json indexJson=nlohmann::json::array();
     for(const auto& index:indexes){
-        indexJson.emplace_back(nlohmann::json{{"msg_id",index.msgId},{"group_id",index.groupId}});
+        if(index.type==storage::OfflineMessageType::Group){
+             indexJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type",index.type},{"groupId",index.groupId}});
+        }
+        else if(index.type==storage::OfflineMessageType::Direct){
+             indexJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type",index.type},{"peerAccountId",index.peerAccountId}});
+        }
     }
     return makeOk(req,MsgType::OFFLINE_LIST_RESP,nlohmann::json{{"messages",indexJson},{"count",indexJson.size()}});
 }
