@@ -128,3 +128,48 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     }
     return messages;
 }
+
+std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::listDirectMessagesAfter(const std::string& conversationKey,uint64_t lastMsgId,size_t limit){
+    if(conversationKey.empty()){
+        return {};
+    }
+    if(limit==0){
+        limit=20;
+    }
+    if(limit>200){//限制limit
+        limit=200;
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {};
+    }
+    SqlResult result;
+    result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation_key=? AND msg_id>? ORDER BY msg_id DESC LIMIT ?",{conversationKey,lastMsgId,limit});
+    if(!result.ok()){
+        return {};
+    }
+    if(result.rows.empty()){
+        return {};
+    }
+    std::vector<MessageRepo::DirectMessageRecord> messages;
+    for(auto& row:result.rows){
+        DirectMessageRecord message;
+        auto conversationPair=row.find("conversation_key");
+        message.conversationKey=conversationPair!=row.end()?conversationPair->second:"";
+        auto msgIdPair=row.find("msg_id");
+        message.messageId=msgIdPair!=row.end()?std::stoull(msgIdPair->second):0;//数据库结果从string转为uint64_t
+        auto senderAccountIdPair=row.find("sender_account_id");
+        message.senderAccountId=senderAccountIdPair!=row.end()?senderAccountIdPair->second:"";
+        auto receiverAccountIdPair=row.find("receiver_account_id");
+        message.receiverAccountId=receiverAccountIdPair!=row.end()?receiverAccountIdPair->second:"";
+        
+        auto senderUsernamePair=row.find("sender_username");
+        message.senderUsername=senderUsernamePair!=row.end()?senderUsernamePair->second:"";
+        auto contentPair=row.find("content");
+        message.content=contentPair!=row.end()?contentPair->second:"";
+        auto serverTsMsPair=row.find("server_ts_ms");
+        message.serverTsMs=serverTsMsPair!=row.end()?std::stoull(serverTsMsPair->second):0;
+        messages.emplace_back(std::move(message));
+    }
+    return messages;
+}

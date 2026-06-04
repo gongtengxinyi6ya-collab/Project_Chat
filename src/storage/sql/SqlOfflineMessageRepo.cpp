@@ -36,7 +36,7 @@ std::vector<storage::OfflineMessageIndex> storage::SqlOfflineMessageRepo::listOf
         return {};
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT msg_id,group_id,msg_type,peer_accountId FROM offline_messages WHERE account_id=? ORDER BY id ASC LIMIT ?",{accountId,limit});
+        auto result=conn->queryPrepared("SELECT msg_id,group_id,msg_type,peer_account_id FROM offline_messages WHERE account_id=? ORDER BY id ASC LIMIT ?",{accountId,limit});
         if(result.ok()){
             std::vector<OfflineMessageIndex> offlineMessages;
             for(auto& row:result.rows){

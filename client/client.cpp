@@ -328,7 +328,7 @@ public:
         body["targetAccountId"]=friendAccountId;
         return body.dump();
     }
-    std::string buildDmHistoryReq(ClientState& state,std::string peerAccountId,uint64_t beforeMsgId){
+    std::string buildDmHistoryReq(ClientState& state,std::string peerAccountId,uint64_t beforeMsgId,uint64_t lastMsgId,size_t limit=20){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::DM_HISTORY_REQ);
@@ -338,6 +338,8 @@ public:
         body["seq"]=state.allocSeq();  
         body["peerAccountId"]=peerAccountId;
         body["beforeMsgId"]=beforeMsgId;
+        body["lastMsgId"]=lastMsgId;
+        body["limit"]=limit;
         return body.dump();
     }
 };
@@ -522,8 +524,24 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
         if(firstSpace==std::string::npos) return std::nullopt;
         std::string peerAccountId=line.substr(11,firstSpace-11);
         uint64_t beforeMsgId=std::stoull(line.substr(firstSpace+1));
-        return builder.buildDmHistoryReq(state,peerAccountId,beforeMsgId);
+        return builder.buildDmHistoryReq(state,peerAccountId,beforeMsgId,0);
     }
+    if (line.rfind("/dmsync ", 0) == 0) {
+    size_t firstSpace = line.find(' ', 8);
+    if (firstSpace == std::string::npos) {
+        return std::nullopt;
+    }
+
+    std::string peerAccountId = line.substr(8, firstSpace - 8);
+    uint64_t lastMsgId = std::stoull(line.substr(firstSpace + 1));
+
+    return builder.buildDmHistoryReq(
+        state,
+        peerAccountId,
+        0,
+        lastMsgId
+    );
+}
     return std::nullopt;
 }
 //尝试parse JSON,按type分类打印摘要，失败则原样输出
@@ -546,7 +564,7 @@ void printPretty(const std::string& payload,ClientState& state){
                 std::cout<<"AUTH_RESP: "<<(json["ok"].get<bool>()?"success":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
                 break;
             case im::MsgType::DM_PUSH:
-                std::cout<<"[DM] "<<json["data"]["fromAAccountId"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
+                std::cout<<"[DM] "<<json["data"]["fromAccountId"].get<std::string>()<<": "<<json["data"]["content"].get<std::string>()<<std::endl;
                 break;
             case im::MsgType::DM_RESP:
                 std::cout<<"DM_RESP: "<<(json["ok"].get<bool>()?"delivered":"failed")<<" msg: "<<json["msg"].get<std::string>()<<std::endl;
@@ -837,6 +855,22 @@ void printPretty(const std::string& payload,ClientState& state){
                 }
                 break;
             }
+            case im::MsgType::DM_HISTORY_RESP: {
+                std::string mode = json["data"].value("mode", "latest");
+                std::cout << "DM history (" << mode << "):" << std::endl;
+                for (const auto& msg : json["data"]["messages"]) {
+                    std::cout << "[DM] "
+                  << msg["fromUsername"].get<std::string>()
+                  << " (" << msg["fromAccountId"].get<std::string>() << "): "
+                  << msg["content"].get<std::string>()
+                  << " (msgId: "
+                  << msg["msgId"].get<uint64_t>()
+                  << ")"
+                  << std::endl;
+    }
+
+    break;
+}
             default:
                 std::cout<<payload<<std::endl;
                 break;

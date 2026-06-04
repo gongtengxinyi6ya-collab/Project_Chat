@@ -207,7 +207,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"msgId",msgId},{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
     auto pushResult=pushToAccount(req.to,pushMsg);
     if(pushResult.sent==0){//目标账号没有任何设备收到
-        if(!repos_.messageRepo){
+        if(!repos_.offlineMessageRepo){
             return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not available");
     }
         auto resultOffline=repos_.offlineMessageRepo->saveOfflineDirectMessage(req.to,msgId,session.accountId_);
@@ -879,6 +879,22 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
             return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid beforeMsgId");
         }
     }
+    uint64_t lastMsgId = 0;
+    if(req.body.contains("lastMsgId")){
+        if(req.body["lastMsgId"].is_number_unsigned()){
+            beforeMsgId=req.body["beforeMsgId"].get<uint64_t>();
+        }
+        else if(req.body["lastMsgId"].is_number_integer()&&req.body["lastMsgId"].get<int64_t>()>=0){
+            beforeMsgId=static_cast<uint64_t>(req.body["lastMsgId"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid lastMsgId");
+        }
+    }
+    //处理冲突
+    if (beforeMsgId > 0 && lastMsgId > 0) {
+    return makeErr(req, ErrorCode::BAD_REQUEST, "beforeMsgId and lastMsgId cannot both be set");
+}
     size_t limit=20;
     if(req.body.contains("limit")){
         
@@ -901,15 +917,26 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
     if(!repos_.messageRepo){
         return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not avaiable");
     }
-    auto result=repos_.messageRepo->listDirectMessages(conversationKey,beforeMsgId,limit);
-    if(result.empty()){
-        return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"messages",""}});
+    //分支查询
+    std::vector<storage::MessageRepo::DirectMessageRecord> result;
+    if(lastMsgId>0){
+        result=repos_.messageRepo->listDirectMessagesAfter(conversationKey,lastMsgId,limit);
+    }
+    else{
+        result=repos_.messageRepo->listDirectMessages(conversationKey,beforeMsgId,limit);
+    }
+    std::string mode="lastest";
+    if(beforeMsgId>0){
+        mode="older";
+    }
+    else if(lastMsgId>0){
+        mode="newer";
     }
     nlohmann::json messagesJson=nlohmann::json::array();
     for(const auto&message:result){
-        messagesJson.push_back(nlohmann::json{{"msgId",message.messageId},{"fromAccountId",message.senderAccountId},{"toAccountId",message.receiverAccountId},{"fromUsername",message.senderUsername},{"content",message.content},{{"serverTsMs",message.serverTsMs}}});
+        messagesJson.push_back(nlohmann::json{{"msgId",message.messageId},{"fromAccountId",message.senderAccountId},{"toAccountId",message.receiverAccountId},{"fromUsername",message.senderUsername},{"content",message.content},{"serverTsMs",message.serverTsMs}});
     }
-    return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"messages",messagesJson}});
+    return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"mode",mode},{"beforeMsgId",beforeMsgId},{"lastMsgId",lastMsgId},{"messages",messagesJson}});
     
 }
 void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromAccountId,uint64_t msgId){
@@ -967,7 +994,7 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]
              indexJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type",storage::offlineMessageTypeToString(index.type)},{"groupId",index.groupId}});
         }
         else if(index.type==storage::OfflineMessageType::Direct){
-             indexJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type",index.type},{"peerAccountId",index.peerAccountId}});
+             indexJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type",storage::offlineMessageTypeToString(index.type)},{"peerAccountId",index.peerAccountId}});
         }
     }
     return makeOk(req,MsgType::OFFLINE_LIST_RESP,nlohmann::json{{"messages",indexJson},{"count",indexJson.size()}});
