@@ -1539,6 +1539,9 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
     }
     std::string conversationTypeString;
     auto getconversation=getStringField(req,"conversationType",conversationTypeString);
+    if(getconversation){
+        return getconversation.value();
+    }
     auto conversationType=static_cast<storage::ConversationType>(std::stoi(conversationTypeString));
     uint64_t readMsgId=0;
     if(req.body.contains("readMsgId")){
@@ -1597,7 +1600,7 @@ im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_un
         conversationViewJson.emplace_back(nlohmann::json{
         {"type",storage::conversationTypeToString(view.summary.type)},
         {"targetId",view.summary.targetId},{"targetUsername",view.targetUsername},
-        {"targerNickname",view.targetNickname},{"targetAvatarUrl",view.targetAvatarUrl},
+        {"targetNickname",view.targetNickname},{"targetAvatarUrl",view.targetAvatarUrl},
         {"lastMsgId",view.summary.lastMsgId},{"lastPreview",view.summary.lastPreview},
         {"lastSenderAccountId",view.summary.lastSenderAccountId},{"lastSenderUsername",view.summary.lastSenderUsername},
         {"lastTsMs",view.summary.lastTsMs},{"unreadCount",view.summary.unreadCount},

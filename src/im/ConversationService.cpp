@@ -17,7 +17,7 @@ storage::RepoResult im::ConversationService::recordDirectMessage(const std::stri
     if(!conversationRepo_){
         return {.status=storage::RepoStatus::Internal,.message="conversationRepo is not avaiable"};
     }
-    return conversationRepo_->upserDirectOnMessage(senderAccountId,receiverAccountId,senderUsername,msgId,preview,serverTsMs);
+    return conversationRepo_->upsertDirectOnMessage(senderAccountId,receiverAccountId,senderUsername,msgId,preview,serverTsMs);
 }
 
 
@@ -39,6 +39,7 @@ std::vector<im::ConversationService::ConversationView> im::ConversationService::
         if(summary.type==storage::ConversationType::Direct){
             targetIds.emplace_back(summary.targetId);//加入targetId
             ConversationView view;
+            view.summary=summary;
             //初步初始化会话列表
             views.emplace_back(std::move(view));
         }

@@ -8,7 +8,7 @@ storage::SqlConversationRepo::SqlConversationRepo(std::shared_ptr<SqlConnectionP
 :pool_(std::move(pool)){
 
 }
-storage::RepoResult storage::SqlConversationRepo::upserDirectOnMessage(const std::string&senderAccountId,const std::string&receiverAccountId,const std::string&senderUsername,uint64_t msgId,const std::string& preview,uint64_t serverTsMs){
+storage::RepoResult storage::SqlConversationRepo::upsertDirectOnMessage(const std::string&senderAccountId,const std::string&receiverAccountId,const std::string&senderUsername,uint64_t msgId,const std::string& preview,uint64_t serverTsMs){
     if(senderAccountId.empty()||receiverAccountId.empty()||msgId==0||serverTsMs==0){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -45,7 +45,7 @@ storage::RepoResult storage::SqlConversationRepo::upserDirectOnMessage(const std
             last_ts_ms = VALUES(last_ts_ms),
             unread_count = 0,
             last_read_msg_id = VALUES(last_read_msg_id),
-            last_read_at_ms = VALUES(last_read_at_ms)";
+            last_read_at_ms = VALUES(last_read_at_ms))";
         auto result1=conn->executePrepared(sql1,{senderAccountId,receiverAccountId,msgId,finalPreview,senderAccountId,senderUsername,serverTsMs,msgId,serverTsMs});
         if(!result1.ok()){
             return {.status=RepoStatus::SqlError,.message=result1.error};
@@ -56,7 +56,7 @@ storage::RepoResult storage::SqlConversationRepo::upserDirectOnMessage(const std
             conversation_type,
             target_id,
             last_msg_id,
-            ast_preview,
+            last_preview,
             last_sender_account_id,
             last_sender_username,
             last_ts_ms,
@@ -129,10 +129,11 @@ std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConv
         summary.lastMsgId=getUInt64(row,"last_msg_id");
         summary.lastPreview=getString(row,"last_preview");
         summary.lastSenderAccountId=getString(row,"last_sender_account_id");
-        summary.lastSenderUsername=getString(row,"last_sender_name");
+        summary.lastSenderUsername=getString(row,"last_sender_username");
         summary.lastTsMs=getUInt64(row,"last_ts_ms");
         summary.lastReadMsgId=getUInt64(row,"last_read_msg_id");
         summary.lastReadAtMs=getUInt64(row,"last_read_at_ms");
+        summary.unreadCount=getUInt64(row,"unread_count");
         summarys.emplace_back(std::move(summary));
     }
     return summarys;
