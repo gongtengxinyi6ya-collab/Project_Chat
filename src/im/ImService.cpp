@@ -882,10 +882,10 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
     uint64_t lastMsgId = 0;
     if(req.body.contains("lastMsgId")){
         if(req.body["lastMsgId"].is_number_unsigned()){
-            beforeMsgId=req.body["beforeMsgId"].get<uint64_t>();
+            lastMsgId=req.body["lastMsgId"].get<uint64_t>();
         }
         else if(req.body["lastMsgId"].is_number_integer()&&req.body["lastMsgId"].get<int64_t>()>=0){
-            beforeMsgId=static_cast<uint64_t>(req.body["lastMsgId"].get<int64_t>());
+            lastMsgId=static_cast<uint64_t>(req.body["lastMsgId"].get<int64_t>());
         }
         else{
             return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid lastMsgId");

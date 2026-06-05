@@ -177,3 +177,39 @@ CREATE TABLE IF NOT EXISTS direct_messages (
         msg_id
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    owner_account_id VARCHAR(32) NOT NULL,
+    conversation_type TINYINT UNSIGNED NOT NULL COMMENT '1=direct,2=group',
+    target_id VARCHAR(64) NOT NULL,
+
+    last_msg_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_preview VARCHAR(256) NOT NULL DEFAULT '',
+    last_sender_account_id VARCHAR(32) NOT NULL DEFAULT '',
+    last_sender_username VARCHAR(64) NOT NULL DEFAULT '',
+    last_ts_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+
+    unread_count INT UNSIGNED NOT NULL DEFAULT 0,
+    last_read_msg_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_read_at_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_conversation_owner_target (
+        owner_account_id,
+        conversation_type,
+        target_id
+    ),
+    KEY idx_conversations_owner_time (
+        owner_account_id,
+        last_ts_ms
+    ),
+    KEY idx_conversations_owner_unread (
+        owner_account_id,
+        unread_count
+    )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

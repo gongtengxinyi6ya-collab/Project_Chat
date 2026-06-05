@@ -653,10 +653,10 @@ void printPretty(const std::string& payload,ClientState& state){
             }
             case im::MsgType::OFFLINE_LIST_RESP:{
                 for(const auto& msg:json["data"]["messages"]){
-                    if(msg["type"].get<std::string>()=="DM"){
+                    if(msg["type"].get<std::string>()=="Direct"){
                          std::cout<<"[Offline DM] peerAccountId: "<<msg["peerAccountId"].get<std::string>()<<" (msgId: "<<msg["msgId"].get<uint64_t>()<<")"<<std::endl;
                     }
-                    else if(msg["type"].get<std::string>()=="GROUP"){
+                    else if(msg["type"].get<std::string>()=="Group"){
                          std::cout<<"[Offline Group] "<<msg["groupId"].get<std::string>()<<" (msgId: "<<msg["msgId"].get<uint64_t>()<<")"<<std::endl;
                     }
                 }
@@ -859,7 +859,7 @@ void printPretty(const std::string& payload,ClientState& state){
                 std::string mode = json["data"].value("mode", "latest");
                 std::cout << "DM history (" << mode << "):" << std::endl;
                 for (const auto& msg : json["data"]["messages"]) {
-                    std::cout << "[DM] "
+                    std::cout << "[] DM"
                   << msg["fromUsername"].get<std::string>()
                   << " (" << msg["fromAccountId"].get<std::string>() << "): "
                   << msg["content"].get<std::string>()

@@ -112,3 +112,6 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::MemoryMessageRep
     }
     return res;
 }
+std::vector<storage::MessageRepo::DirectMessageRecord> storage::MemoryMessageRepo::listDirectMessagesAfter(const std::string& conversationKey,uint64_t lastMsgId,size_t limit){
+    return {};
+}

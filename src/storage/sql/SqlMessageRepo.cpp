@@ -144,7 +144,7 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
         return {};
     }
     SqlResult result;
-    result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation_key=? AND msg_id>? ORDER BY msg_id DESC LIMIT ?",{conversationKey,lastMsgId,limit});
+    result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation_key=? AND msg_id>? ORDER BY msg_id ASC LIMIT ?",{conversationKey,lastMsgId,limit});
     if(!result.ok()){
         return {};
     }
