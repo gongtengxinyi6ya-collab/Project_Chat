@@ -31,6 +31,7 @@ namespace auth{
 }
 namespace im{
     class FriendService;//好友关系类向前声明
+    class ConversationService;//会话管理
 class Imservice{
 public:
     class BroadcastResult{
@@ -159,5 +160,8 @@ private:
     Response handleListFriendRequests(const Request& req,ConnKey key,Session& session);//请求当前账号收到的待处理申请
     Response handleAcceptFriendRequest(const Request& req,ConnKey key,Session& session);//同意申请并创建双向关系
     Response handleRejectFriendRequest(const Request& req,ConnKey key,Session& session);//拒绝好友申请
+
+    //会话列表展示
+    std::unique_ptr<ConversationService> conversationService_;
 };
 }

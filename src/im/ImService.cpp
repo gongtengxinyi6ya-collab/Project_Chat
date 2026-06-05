@@ -9,6 +9,8 @@
 #include "auth/AuthResult.h"
 #include "security/PasswordHasher.h"
 #include "im/FriendService.h"
+#include "im/ConversationService.h"
+
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
@@ -140,6 +142,9 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
     if(repos_.friendRepo&&repos_.userProfileRepo&&repos_.friendRequestRepo){
         friendService_=std::make_unique<im::FriendService>(repos_.friendRepo,repos_.userProfileRepo,repos_.friendRequestRepo);
     }
+    if(repos_.conversationRepo&&repos_.userProfileRepo){
+        conversationService_=std::make_unique<ConversationService>(repos_.conversationRepo,repos_.userProfileRepo);
+    }
 }
 bool im::Imservice::hasRepositories()const{
     return repos_.valid();
@@ -199,10 +204,17 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     if(!repos_.messageRepo){
        return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not available");
     }
-     auto result=repos_.messageRepo->saveDirectMessage(msgId,conversationKey,session.accountId_,req.to,session.username_,content,serverTsMs);
-        if(!result.ok()){
-            return makeErr(req,ErrorCode::INTERNAL,result.message);
+    auto result=repos_.messageRepo->saveDirectMessage(msgId,conversationKey,session.accountId_,req.to,session.username_,content,serverTsMs);
+    if(!result.ok()){
+        return makeErr(req,ErrorCode::INTERNAL,result.message);
+    }
+    //更新会话表
+    if(conversationService_){
+        auto resultConversation=conversationService_->recordDirectMessage(session.accountId_,req.to,session.username_,msgId,content,serverTsMs);
+        if(!resultConversation.ok()){
+            LOG_WARN("Failed to updated conversation for direct message");
         }
+    }
     //构造推送消息
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"msgId",msgId},{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
     auto pushResult=pushToAccount(req.to,pushMsg);

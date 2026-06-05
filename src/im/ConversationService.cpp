@@ -60,5 +60,11 @@ std::vector<im::ConversationService::ConversationView> im::ConversationService::
     return views;
 }
 storage::RepoResult im::ConversationService::markRead(const std::string& ownerAccountId,storage::ConversationType type,const std::string& targetId,uint64_t readMsgId,uint64_t readAtMs){
-
+    if(ownerAccountId.empty()||targetId.empty()||readMsgId==0){
+        return {.status=storage::RepoStatus::InvalidArgument};
+    }
+    if(!conversationRepo_){
+        return {.status=storage::RepoStatus::Internal};
+    }
+    return conversationRepo_->markConversationRead(ownerAccountId,type,targetId,readMsgId,readAtMs);
 }
