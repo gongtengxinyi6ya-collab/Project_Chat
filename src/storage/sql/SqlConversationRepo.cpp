@@ -22,8 +22,19 @@ storage::RepoResult storage::SqlConversationRepo::upserDirectOnMessage(const std
     try{
         //开启事务
         SqlTransaction transation(*conn);
-        const std::string sql1=R"(INSERT INTO conversations 
-        (owner_account_id,conversation_type,target_id,last_msg_id,last_preview,last_sender_account_id,last_sender_username,last_ts_ms,unread_count,last_read_msg_id,last_read_at_ms)
+        const std::string sql1=R"(
+        INSERT INTO conversations 
+        (owner_account_id,
+        conversation_type,
+        target_id,
+        last_msg_id,
+        last_preview,
+        last_sender_account_id,
+        last_sender_username,
+        last_ts_ms,
+        unread_count,
+        last_read_msg_id,
+        last_read_at_ms)
         VALUES (?, 1, ?, ?, ?, ?, ?, ?, 0, ?, ?)
         ON DUPLICATE KEY UPDATE
             last_msg_id = VALUES(last_msg_id),
@@ -67,5 +78,54 @@ storage::RepoResult storage::SqlConversationRepo::upserDirectOnMessage(const std
         return {.status=RepoStatus::Ok};
     }catch(const std::exception&e){
         return {.status=RepoStatus::Internal,.message=e.what()};
+    }
+}
+
+std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConversations(const std::string& ownerAccountId,size_t limit){
+    if(ownerAccountId.empty()){
+        return {};
+    }
+    if(limit==0){
+        limit=20;
+    }
+    if(limit>100){
+        limit=100;
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {};
+    }
+    std::string sql=R"(
+    SELECT 
+        owner_account_id,
+        conversation_type,
+       target_id,
+       last_msg_id,
+       last_preview,
+       last_sender_account_id,
+       last_sender_username,
+       last_ts_ms,
+       unread_count,
+       last_read_msg_id,
+       last_read_at_ms
+    FROM conversations
+    WHERE owner_account_id = ?
+    ORDER BY last_ts_ms DESC
+    LIMIT ?)";
+    auto result=conn->executePrepared(sql,{ownerAccountId,limit});
+    if(!result.ok()){
+        return {};
+    }
+    if(result.rows.empty()){
+        return {};
+    }
+    std::vector<ConversationSummary> summarys;
+    for(const auto& row:result.rows){
+        ConversationSummary summary;
+        auto accountIdPair=row.find("owner_account_id");
+        if(accountIdPair!=row.end()){
+            summary.ownerAccountId=accountIdPair->second;
+        }
+        
     }
 }
