@@ -164,7 +164,6 @@ private:
     //会话列表展示
     std::unique_ptr<ConversationService> conversationService_;
     Response handleConversationList(const Request& req,ConnKey key,Session& session);
-    Response handleConversationList(const Request& req,ConnKey key,Session& session);
     Response handleConversationRead(const Request& req,ConnKey key,Session& session);
 };
 }

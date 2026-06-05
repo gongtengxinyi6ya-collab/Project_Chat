@@ -756,6 +756,10 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleRemoveFriend(req,key,session);
         case im::MsgType::DM_HISTORY_REQ:
             return handleDmHistory(req,key,session);
+        case im::MsgType::CONVERSATION_LIST_REQ:
+            return handleConversationList(req,key,session);
+        case im::MsgType::CONVERSATION_READ_REQ:
+            return handleConversationRead(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -1523,13 +1527,19 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
     return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
 }
 
-im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
     }
     std::string targetId;
-    auto getTargetId
+    auto getTargetId=getStringField(req,"targetId",targetId);
+    if(getTargetId){
+        return getTargetId.value();
+    }
+    std::string conversationTypeString;
+    auto getconversation=getStringField(req,"conversationType",conversationTypeString);
+    auto conversationType=static_cast<storage::ConversationType>(std::stoi(conversationTypeString));
     uint64_t readMsgId=0;
     if(req.body.contains("readMsgId")){
         if(req.body["readMsgId"].is_number_unsigned()){
@@ -1545,18 +1555,54 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
     else{
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing readMsgId");
     }
-    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    auto result=friendService_->rejectRequest(session.accountId_,requestId,nowMs);
+    if(!conversationService_){
+        return makeErr(req,ErrorCode::INTERNAL,"conversationService is not avaiable");
+    }
+    auto result=conversationService_->markRead(session.accountId_,conversationType,targetId,readMsgId,nowMs());
     if(!result.ok()){
-        if(result.status==storage::RepoStatus::NotFound){
-            return makeErr(req,ErrorCode::FRIEND_REQUEST_NOT_FOUND,"The request was not found");
-        }
         return makeRepoError(req,result.status,result.message);
     }
-    auto pushResult=notifyFriendEvent(result.value.value().requestAccountId,"friendRequestRejected",nlohmann::json{{"accountId",session.accountId_},{"username",session.username_}});
-    if(!pushResult.delivered()){//推送失败只记录日志，不回滚
-        LOG_WARN("Failed to push friend request rejected event to"+result.value.value().requestAccountId);
-    }
-    return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
+    return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"targetId",targetId},{"readMsgId",readMsgId},{"unreadCount",0}});
 }
 
+im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);//校验已登录
+    if(err){
+        return err.value();
+    }
+    if(!conversationService_){
+        //检查repos_离线存储是否存在
+        return makeErr(req,ErrorCode::INTERNAL,"conversationService is not exist");
+    }
+    //解析limit
+    size_t limit=20;
+    if(req.body.contains("limit")){
+        
+        if(req.body["limit"].is_number_unsigned()){
+            limit=req.body["limit"].get<size_t>();
+        }
+        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
+            limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid limit");
+        }
+    }
+    if(limit>200){
+        limit=200;//限制limit最大值
+    }
+    auto result=conversationService_->listConversations(session.accountId_,limit);
+    nlohmann::json conversationViewJson=nlohmann::json::array();
+    for(const auto& view:result){
+        conversationViewJson.emplace_back(nlohmann::json{
+        {"type",storage::conversationTypeToString(view.summary.type)},
+        {"targetId",view.summary.targetId},{"targetUsername",view.targetUsername},
+        {"targerNickname",view.targetNickname},{"targetAvatarUrl",view.targetAvatarUrl},
+        {"lastMsgId",view.summary.lastMsgId},{"lastPreview",view.summary.lastPreview},
+        {"lastSenderAccountId",view.summary.lastSenderAccountId},{"lastSenderUsername",view.summary.lastSenderUsername},
+        {"lastTsMs",view.summary.lastTsMs},{"unreadCount",view.summary.unreadCount},
+        {"lastReadMsgId",view.summary.lastReadMsgId}
+    });
+    }
+    return makeOk(req,MsgType::CONVERSATION_LIST_RESP,nlohmann::json{{"conversations",conversationViewJson},{"count",conversationViewJson.size()}});
+}

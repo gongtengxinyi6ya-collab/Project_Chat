@@ -12,8 +12,9 @@ storage::RepoResult storage::SqlConversationRepo::upserDirectOnMessage(const std
     if(senderAccountId.empty()||receiverAccountId.empty()||msgId==0||serverTsMs==0){
         return {.status=RepoStatus::InvalidArgument};
     }
-    if(preview.size()>200){
-        preview.substr(0,200);
+    std::string finalPreview=preview;
+    if(finalPreview.size()>200){
+        finalPreview=finalPreview.substr(0,200);
     }
     auto conn=pool_->acquire();
     if(!conn||!conn->connected()){
@@ -45,7 +46,7 @@ storage::RepoResult storage::SqlConversationRepo::upserDirectOnMessage(const std
             unread_count = 0,
             last_read_msg_id = VALUES(last_read_msg_id),
             last_read_at_ms = VALUES(last_read_at_ms)";
-        auto result1=conn->executePrepared(sql1,{senderAccountId,receiverAccountId,msgId,preview,senderAccountId,senderUsername,serverTsMs,msgId,serverTsMs});
+        auto result1=conn->executePrepared(sql1,{senderAccountId,receiverAccountId,msgId,finalPreview,senderAccountId,senderUsername,serverTsMs,msgId,serverTsMs});
         if(!result1.ok()){
             return {.status=RepoStatus::SqlError,.message=result1.error};
         }
@@ -70,7 +71,7 @@ storage::RepoResult storage::SqlConversationRepo::upserDirectOnMessage(const std
             last_ts_ms = VALUES(last_ts_ms),
             unread_count = unread_count + 1
         )";
-        auto result2=conn->executePrepared(sql2,{receiverAccountId,senderAccountId,msgId,preview,senderAccountId,senderUsername,serverTsMs});
+        auto result2=conn->executePrepared(sql2,{receiverAccountId,senderAccountId,msgId,finalPreview,senderAccountId,senderUsername,serverTsMs});
         if(!result2.ok()){
             return {.status=RepoStatus::SqlError,.message=result2.error};
         }
@@ -151,4 +152,5 @@ storage::RepoResult storage::SqlConversationRepo::markConversationRead(const std
     if(result.affectedRows==0){//幂ok
         return {.status=RepoStatus::Ok};
     }
+    return {.status=RepoStatus::Ok};
 }
