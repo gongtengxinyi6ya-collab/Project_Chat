@@ -1493,9 +1493,6 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
         return err.value();
     }
     
-    if(!friendService_){
-        return makeErr(req,ErrorCode::INTERNAL,"FriendService is empty");
-    }
     uint64_t requestId=0;
     if(req.body.contains("requestId")){
         if(req.body["requestId"].is_number_unsigned()){
@@ -1525,3 +1522,41 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
     }
     return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
 }
+
+im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    std::string targetId;
+    auto getTargetId
+    uint64_t readMsgId=0;
+    if(req.body.contains("readMsgId")){
+        if(req.body["readMsgId"].is_number_unsigned()){
+            readMsgId=req.body["readMsgId"].get<uint64_t>();
+        }
+        else if(req.body["readMsgId"].is_number_integer()&&req.body["readMsgId"].get<int64_t>()>=0){
+            readMsgId=static_cast<uint64_t>(req.body["readMsgId"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid readMsgId");
+        }
+    }
+    else{
+        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing readMsgId");
+    }
+    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto result=friendService_->rejectRequest(session.accountId_,requestId,nowMs);
+    if(!result.ok()){
+        if(result.status==storage::RepoStatus::NotFound){
+            return makeErr(req,ErrorCode::FRIEND_REQUEST_NOT_FOUND,"The request was not found");
+        }
+        return makeRepoError(req,result.status,result.message);
+    }
+    auto pushResult=notifyFriendEvent(result.value.value().requestAccountId,"friendRequestRejected",nlohmann::json{{"accountId",session.accountId_},{"username",session.username_}});
+    if(!pushResult.delivered()){//推送失败只记录日志，不回滚
+        LOG_WARN("Failed to push friend request rejected event to"+result.value.value().requestAccountId);
+    }
+    return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
+}
+
