@@ -68,7 +68,7 @@ storage::RepoResult storage::SqlConversationRepo::upserDirectOnMessage(const std
             last_sender_account_id = VALUES(last_sender_account_id),
             last_sender_username = VALUES(last_sender_username),
             last_ts_ms = VALUES(last_ts_ms),
-            unread_count = unread_count + 1;
+            unread_count = unread_count + 1
         )";
         auto result2=conn->executePrepared(sql2,{receiverAccountId,senderAccountId,msgId,preview,senderAccountId,senderUsername,serverTsMs});
         if(!result2.ok()){
@@ -112,7 +112,7 @@ std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConv
     WHERE owner_account_id = ?
     ORDER BY last_ts_ms DESC
     LIMIT ?)";
-    auto result=conn->executePrepared(sql,{ownerAccountId,limit});
+    auto result=conn->queryPrepared(sql,{ownerAccountId,limit});
     if(!result.ok()){
         return {};
     }
@@ -122,10 +122,33 @@ std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConv
     std::vector<ConversationSummary> summarys;
     for(const auto& row:result.rows){
         ConversationSummary summary;
-        auto accountIdPair=row.find("owner_account_id");
-        if(accountIdPair!=row.end()){
-            summary.ownerAccountId=accountIdPair->second;
-        }
-        
+        summary.ownerAccountId=getString(row,"owner_account_id");
+        summary.type=static_cast<ConversationType>(getInt(row,"conversation_type"));
+        summary.targetId=getString(row,"target_id");
+        summary.lastMsgId=getUInt64(row,"last_msg_id");
+        summary.lastPreview=getString(row,"last_preview");
+        summary.lastSenderAccountId=getString(row,"last_sender_account_id");
+        summary.lastSenderUsername=getString(row,"last_sender_name");
+        summary.lastTsMs=getUInt64(row,"last_ts_ms");
+        summary.lastReadMsgId=getUInt64(row,"last_read_msg_id");
+        summary.lastReadAtMs=getUInt64(row,"last_read_at_ms");
+        summarys.emplace_back(std::move(summary));
+    }
+    return summarys;
+}
+storage::RepoResult storage::SqlConversationRepo::markConversationRead(const std::string& ownerAccountId,ConversationType type,const std::string& targetId,uint64_t readMsgId,uint64_t readAtMs){
+    if(ownerAccountId.empty()||targetId.empty()||readMsgId==0){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+    auto result=conn->executePrepared("UPDATE conversations SET unread_count=0,last_read_msg_id=GREATEST(last_read_msg_id,?),last_read_at_ms=? WHERE owner_account_id=? AND conversation_type=? AND target_id=?",{readMsgId,readAtMs,ownerAccountId,static_cast<uint64_t>(type),targetId});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    if(result.affectedRows==0){//幂ok
+        return {.status=RepoStatus::Ok};
     }
 }

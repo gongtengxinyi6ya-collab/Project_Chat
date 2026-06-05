@@ -3,7 +3,9 @@
 #include <unordered_map>
 #include <vector>
 #include <cstdint>
-
+#include <optional>
+#include <cstdint>
+#include <cstdlib>
 /*
 统一SQL执行结果
 屏蔽MySQL Connector/C++的原生类型
@@ -20,4 +22,67 @@ public:
     uint64_t lastInsertId{0};//插入后ID
     bool ok()const{return success;}
 };
+
+inline std::string getString(
+    const SqlRow& row,
+    const std::string& key,
+    const std::string& defaultValue = ""
+) {
+    auto it = row.find(key);
+    if (it == row.end() || it->second.empty() || it->second == "NULL") {
+        return defaultValue;
+    }
+    return it->second;
+}
+
+inline uint64_t getUInt64(
+    const SqlRow& row,
+    const std::string& key,
+    uint64_t defaultValue = 0
+) {
+    auto it = row.find(key);
+    if (it == row.end() || it->second.empty() || it->second == "NULL") {
+        return defaultValue;
+    }
+
+    try {
+        return std::stoull(it->second);
+    } catch (...) {
+        return defaultValue;
+    }
+}
+
+inline int64_t getInt64(
+    const SqlRow& row,
+    const std::string& key,
+    int64_t defaultValue = 0
+) {
+    auto it = row.find(key);
+    if (it == row.end() || it->second.empty() || it->second == "NULL") {
+        return defaultValue;
+    }
+
+    try {
+        return std::stoll(it->second);
+    } catch (...) {
+        return defaultValue;
+    }
+}
+
+inline int getInt(
+    const SqlRow& row,
+    const std::string& key,
+    int defaultValue = 0
+) {
+    auto it = row.find(key);
+    if (it == row.end() || it->second.empty() || it->second == "NULL") {
+        return defaultValue;
+    }
+
+    try {
+        return std::stoi(it->second);
+    } catch (...) {
+        return defaultValue;
+    }
+}
 }

@@ -31,4 +31,15 @@ public:
     virtual RepoResult markConversationRead(const std::string&ownerAccountId,ConversationType type,const std::string& targetId,uint64_t readMsgId,uint64_t readAtMs)=0;//清空某个会话未读数，并记录读到哪个消息
     
 };
+
+inline std::string conversationTypeToString(ConversationType type){
+    switch(type){
+        case ConversationType::Group:
+            return "Group";
+        case ConversationType::Direct:
+            return "Direct";
+        default:
+            return "Group";
+    }
+}
 }
