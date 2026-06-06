@@ -1542,7 +1542,16 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
     if(getconversation){
         return getconversation.value();
     }
-    auto conversationType=static_cast<storage::ConversationType>(std::stoi(conversationTypeString));
+    storage::ConversationType conversationType;
+    if(conversationTypeString=="direct"){
+        conversationType=storage::ConversationType::Direct;
+    }
+    else if(conversationTypeString=="group"){
+        conversationType=storage::ConversationType::Group;
+    }
+    else{
+        return makeErr(req,ErrorCode::BAD_REQUEST,"conversationType is invalid");
+    }
     uint64_t readMsgId=0;
     if(req.body.contains("readMsgId")){
         if(req.body["readMsgId"].is_number_unsigned()){

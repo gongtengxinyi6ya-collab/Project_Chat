@@ -133,7 +133,7 @@ std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConv
         summary.lastTsMs=getUInt64(row,"last_ts_ms");
         summary.lastReadMsgId=getUInt64(row,"last_read_msg_id");
         summary.lastReadAtMs=getUInt64(row,"last_read_at_ms");
-        summary.unreadCount=getUInt64(row,"unread_count");
+        summary.unreadCount=static_cast<uint32_t>(getUInt64(row,"unread_count"));
         summarys.emplace_back(std::move(summary));
     }
     return summarys;
