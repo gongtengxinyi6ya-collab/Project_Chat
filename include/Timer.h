@@ -11,7 +11,7 @@ using Duration=std::chrono::milliseconds;
 class Timer{
     using TimerCallback=std::function<void()>;
 public:
-    Timer(TimerCallback cb,TimePoint when,Duration interval);//构造函数，传入回调函数，到期时间点，重复间隔
+    Timer(TimerCallback cb,TimePoint when,Duration interval);//传入回调函数，到期时间点，重复间隔
     void run() const;//执行回调函数
     TimePoint expiration() const { return expiration_; }//获取到期时间点
     bool repeat() const { return repeat_; }//是否重复
