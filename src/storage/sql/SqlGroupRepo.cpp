@@ -3,6 +3,7 @@
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlTransaction.h"
+#include <unordered_set>
 storage::SqlGroupRepo::SqlGroupRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
@@ -145,7 +146,53 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups
     }
     return {};
 }
-
+std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::findGroupsByIds(const std::vector<std::string>& groupIds){
+    if(groupIds.empty()){
+        return {};
+    }
+    //去重
+    std::unordered_set<std::string> groupIdsSet;
+    std::vector<SqlParam> params;
+    for(const auto& groupId:groupIds){
+        if(groupIdsSet.insert(groupId).second){
+            params.emplace_back(groupId);
+        }
+    }
+    if(params.empty()){
+        return {};
+    }
+    //统计占位符数量
+    std::string placeholders;
+    placeholders.reserve(params.size()*2);
+    for(size_t i=0;i<params.size();i++){
+        if(i==0){
+            placeholders+="?";
+        }
+        else{
+            placeholders+=",?";
+        }
+    }
+    auto conn=pool_->acquire();
+    if(!conn||conn->connected()){
+        return {};
+    }
+    auto result=conn->queryPrepared("SELECT group_id,group_name,owner_account_id FROM chat_groups WHERE group_id IN ("+placeholders+")",params);
+    if(!result.ok()){
+        return {};
+    }
+    if(result.rows.empty()){
+        return {};
+    }
+    std::vector<GroupSnapshot> groupSnapshots;
+    for(const auto& row:result.rows){
+        GroupSnapshot groupSnapshot;
+        groupSnapshot.groupId=getString(row,"group_id");
+        groupSnapshot.groupName=getString(row,"group_name");
+        groupSnapshot.ownerAccountId=getString(row,"owner_account_id");
+        groupSnapshots.emplace_back(std::move(groupSnapshot));
+    }
+    return groupSnapshots;
+}
 storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId){
     if(groupId.empty()||groupName.empty()||ownerAccountId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument};

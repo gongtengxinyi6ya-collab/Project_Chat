@@ -22,6 +22,6 @@ public:
     virtual std::vector<std::string> listMembers(const std::string& groupId)=0;//服务重建时恢复时可重建GroupManager
     virtual std::vector<GroupSnapshot> listGroups()=0;//启动时读取所有群基础信息
     virtual RepoResult createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& accountId);//创建群基础信息，同时把owner加入群列表
-
+    virtual std::vector<GroupSnapshot> findGroupsByIds(const std::vector<std::string>& groupIds)=0;//根据多个groupId查询群基础信息，用于会话列表展示
 };
 }

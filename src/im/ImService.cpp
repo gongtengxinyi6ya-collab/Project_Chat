@@ -142,8 +142,8 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
     if(repos_.friendRepo&&repos_.userProfileRepo&&repos_.friendRequestRepo){
         friendService_=std::make_unique<im::FriendService>(repos_.friendRepo,repos_.userProfileRepo,repos_.friendRequestRepo);
     }
-    if(repos_.conversationRepo&&repos_.userProfileRepo){
-        conversationService_=std::make_unique<ConversationService>(repos_.conversationRepo,repos_.userProfileRepo);
+    if(repos_.conversationRepo&&repos_.userProfileRepo&&repos_.groupRepo){
+        conversationService_=std::make_unique<ConversationService>(repos_.conversationRepo,repos_.userProfileRepo,repos_.groupRepo);
     }
 }
 bool im::Imservice::hasRepositories()const{

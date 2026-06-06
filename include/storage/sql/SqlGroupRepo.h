@@ -19,6 +19,7 @@ public:
     std::vector<std::string> listMembers(const std::string& groupId) override;
     std::vector<GroupSnapshot> listGroups()override;
     RepoResult createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId);//
+    std::vector<GroupSnapshot> findGroupsByIds(const std::vector<std::string>& groupIds)override;//根据多个groupId查询群基础信息，用于会话列表展示
 private:
     std::shared_ptr<SqlConnectionPool> pool_;
 };
