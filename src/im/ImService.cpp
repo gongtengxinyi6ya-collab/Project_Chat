@@ -457,6 +457,14 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
             return makeRepoError(req,result.status,"failed to save group message");
         }
     }
+    //更新群聊会话列表
+    if(conversationService_){
+        auto members=groupManager_.members(groupId.value());
+        auto conversationResult=conversationService_->recordGroupMessage(groupId.value(),members,session.accountId_,session.username_,msgId,content,serverTsMs);
+        if(!conversationResult.ok()){
+            LOG_WARN("Failed to update group conversation");
+        }
+    }
     //广播在线成员
     im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId.value()},{"content",content},{"msgId",msgId}}};
     BroadcastResult result=broadcastToGroup(groupId.value(),key,pushMsg);
@@ -1548,6 +1556,9 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
     }
     else if(conversationTypeString=="group"){
         conversationType=storage::ConversationType::Group;
+        if(!groupManager_.isMember(targetId,session.accountId_)){
+            return makeErr(req,ErrorCode::NOT_IN_GROUP,"the user is not in the group"+targetId);
+        }
     }
     else{
         return makeErr(req,ErrorCode::BAD_REQUEST,"conversationType is invalid");
@@ -1606,15 +1617,23 @@ im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_un
     auto result=conversationService_->listConversations(session.accountId_,limit);
     nlohmann::json conversationViewJson=nlohmann::json::array();
     for(const auto& view:result){
-        conversationViewJson.emplace_back(nlohmann::json{
+        nlohmann::json item{
         {"type",storage::conversationTypeToString(view.summary.type)},
-        {"targetId",view.summary.targetId},{"targetUsername",view.targetUsername},
-        {"targetNickname",view.targetNickname},{"targetAvatarUrl",view.targetAvatarUrl},
+        {"targetId",view.summary.targetId},
         {"lastMsgId",view.summary.lastMsgId},{"lastPreview",view.summary.lastPreview},
         {"lastSenderAccountId",view.summary.lastSenderAccountId},{"lastSenderUsername",view.summary.lastSenderUsername},
         {"lastTsMs",view.summary.lastTsMs},{"unreadCount",view.summary.unreadCount},
-        {"lastReadMsgId",view.summary.lastReadMsgId}
-    });
+        {"lastReadMsgId",view.summary.lastReadMsgId}};
+        if(view.summary.type==storage::ConversationType::Direct){
+            item["targetUsername"] = view.targetUsername;
+            item["targetNickname"] = view.targetNickname;
+            item["targetAvatarUrl"] = view.targetAvatarUrl;
+        }
+        else if(view.summary.type == storage::ConversationType::Group){
+            item["groupName"] = view.groupName;
+            item["groupOwnerAccountId"] = view.groupOwnerAccountId;
+        }
+        conversationViewJson.emplace_back(std::move(item));
     }
     return makeOk(req,MsgType::CONVERSATION_LIST_RESP,nlohmann::json{{"conversations",conversationViewJson},{"count",conversationViewJson.size()}});
 }
