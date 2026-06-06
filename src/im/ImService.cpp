@@ -1585,7 +1585,7 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
     if(!result.ok()){
         return makeRepoError(req,result.status,result.message);
     }
-    return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"targetId",targetId},{"readMsgId",readMsgId},{"unreadCount",0}});
+    return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"targetId",targetId},{"conversationType",conversationType},{"readMsgId",readMsgId},{"unreadCount",0}});
 }
 
 im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_unused]]ConnKey key,Session& session){

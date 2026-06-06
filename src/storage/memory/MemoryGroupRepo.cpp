@@ -82,3 +82,6 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::MemoryGroupRepo::listGro
     }
     return {};
 }
+std::vector<storage::GroupRepo::GroupSnapshot> storage::MemoryGroupRepo::findGroupsByIds([[maybe_unused]]const std::vector<std::string>& groupIds){
+    return {GroupSnapshot{}};
+}

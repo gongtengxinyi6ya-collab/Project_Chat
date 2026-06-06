@@ -140,19 +140,16 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
                 last_sender_username,
                 last_ts_ms,
                 unread_count,
-                last_read_msg_id,
-                last_read_at_ms)
-                VALUES (?, 2, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                VALUES (?, 2, ?, ?, ?, ?, ?, ?, 1)
                 ON DUPLICATE KEY UPDATE
                     last_msg_id = VALUES(last_msg_id),
                     last_preview = VALUES(last_preview),
                     last_sender_account_id = VALUES(last_sender_account_id),
                     last_sender_username = VALUES(last_sender_username),
                     last_ts_ms = VALUES(last_ts_ms),
-                    unread_count = conversations.unread_count+VALUES(unread_count),
-                    last_read_msg_id = GREATEST(conversations.last_read_msg_id,VALUES(last_read_msg_id)),
-                    last_read_at_ms = GREATEST(conversations.last_read_at_ms,VALUES(last_read_at_ms)))";
-                    auto result=conn->executePrepared(sql,{memberAccountId,groupId,msgId,finalPreview,senderAccountId,senderUsername,serverTsMs,msgId,serverTsMs});
+                    unread_count = conversations.unread_count+VALUES(unread_count)
+                    ))";
+                    auto result=conn->executePrepared(sql,{memberAccountId,groupId,msgId,finalPreview,senderAccountId,senderUsername,serverTsMs});
                 if(!result.ok()){
                     return {.status=RepoStatus::SqlError,.message=result.error};
                 }

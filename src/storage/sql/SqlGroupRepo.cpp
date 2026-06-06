@@ -173,10 +173,10 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::findGroups
         }
     }
     auto conn=pool_->acquire();
-    if(!conn||conn->connected()){
+    if(!conn||!conn->connected()){
         return {};
     }
-    auto result=conn->queryPrepared("SELECT group_id,group_name,owner_account_id FROM chat_groups WHERE group_id IN ("+placeholders+")",params);
+    auto result=conn->queryPrepared("SELECT group_id,group_name,owner FROM chat_groups WHERE group_id IN ("+placeholders+")",params);
     if(!result.ok()){
         return {};
     }
@@ -188,7 +188,7 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::findGroups
         GroupSnapshot groupSnapshot;
         groupSnapshot.groupId=getString(row,"group_id");
         groupSnapshot.groupName=getString(row,"group_name");
-        groupSnapshot.ownerAccountId=getString(row,"owner_account_id");
+        groupSnapshot.ownerAccountId=getString(row,"owner");
         groupSnapshots.emplace_back(std::move(groupSnapshot));
     }
     return groupSnapshots;
