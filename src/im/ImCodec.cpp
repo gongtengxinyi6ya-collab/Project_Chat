@@ -49,8 +49,8 @@ std::string im::encodeResponse(const im::Response& resp){
     return j.dump();
 }
 
-im::SynaParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit){
-    im::SynaParseResult result{.ok=false};
+im::SyncParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit){
+    im::SyncParseResult result{.ok=false};
     if(!req.body.contains("cursors")){
         return {.ok=true};
     }
@@ -59,7 +59,7 @@ im::SynaParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit)
     }
     for(const auto& item:req.body["cursors"]){
         if(!item.is_object()){
-            return {.code=ErrorCode::BAD_REQUEST,.message="cursor[0] must be object"};
+            return {.code=ErrorCode::BAD_REQUEST,.message="cursor must be object"};
         }
         SyncCursor cursor;
         if(!item.contains("conversationType")){
@@ -115,6 +115,9 @@ im::SynaParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit)
             {
                 cursor.limit =static_cast<size_t>(item["limit"].get<int64_t>());
             } 
+            else{
+                return {.code=ErrorCode::BAD_REQUEST};
+            }
         }
         else{
             cursor.limit=defaultLimit;
@@ -141,11 +144,11 @@ im::Response im::makeOk(const im::Request& req,im::MsgType type,nlohmann::json d
 size_t im::parseLimit(const Request& req,const std::string& key,size_t defaultValue,size_t limitValue){
     if(req.body.contains(key)){
         size_t result=defaultValue;
-        if(req.body["limit"].is_number_unsigned()){
-            result=req.body["limit"].get<size_t>();
+        if(req.body[key].is_number_unsigned()){
+            result=req.body[key].get<size_t>();
         }
-        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
-            result=static_cast<size_t>(req.body["limit"].get<int64_t>());
+        else if(req.body[key].is_number_integer()&&req.body[key].get<int64_t>()>0){
+            result=static_cast<size_t>(req.body[key].get<int64_t>());
         }
         if(result>limitValue){
             result=limitValue;
