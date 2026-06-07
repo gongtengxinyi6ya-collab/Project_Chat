@@ -17,7 +17,7 @@ public:
     SaveMessageResult saveDirectMessage(uint64_t msgId,const std::string&conversationKey,const std::string&senderAccountId,const std::string& receiverAccountId,const std::string& senderUsername,const std::string&content,uint64_t serverTsMs) override;//保存私聊消息
     std::vector<DirectMessageRecord> listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit) override;//查询某个私聊会话的历史消息
     std::vector<DirectMessageRecord> listDirectMessagesAfter(const std::string& conversationKey,uint64_t lastMsgId,size_t limit)override;//查询某个私聊会话客户端本地最后一条消息之后的消息
-    std::vector<MessageRecord> listGroupMessageAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit)override;//查询某个群聊中msg_id>lastMsgId的新消息
+    std::vector<MessageRecord> listGroupMessagesAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit)override;//查询某个群聊中msg_id>lastMsgId的新消息
     
 
 private:

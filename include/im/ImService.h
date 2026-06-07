@@ -153,7 +153,6 @@ private:
     Response handleRemoveFriend(const Request& req,ConnKey key,Session& session);//删除好友
     AccountPushResult pushToAccount(const std::string&targetAccount,im::Response&push);//将一条消息推送给目标账号当前在线的全部设备
     AccountPushResult notifyFriendEvent(const std::string&targetAccountId,const std::string&event,nlohmann::json data);//统一发送好友模块事件，避免在多个handler中重复拼装推送消息
-    std::string buildDirectConversationKey(const std::string& accountA,const std::string& accountB)const;//生成AB两人私聊会话key
 
     //好友请求接口
     Response handleSendFriendRequest(const Request& req,ConnKey key,Session& session);//提交好友申请

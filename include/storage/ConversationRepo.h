@@ -6,12 +6,13 @@
 /*会话列表，作为最近聊天入口，显示最后一条消息+未读数+更新时间*/
 namespace storage{
 enum class ConversationType:uint8_t{//区分会话类型
+    Unknown=0,
     Direct=1,
     Group=2
 };
 struct ConversationSummary{
     std::string ownerAccountId{};//会话属于哪个账号
-    ConversationType type{ConversationType::Direct};//会话类型
+    ConversationType type{ConversationType::Unknown};//会话类型
     std::string targetId{};//对方id，accountId/groupId
     uint64_t lastMsgId{0};//会话最后一条消息ID
     std::string lastPreview{};//最后一条消息预览
@@ -39,7 +40,7 @@ inline std::string conversationTypeToString(ConversationType type){
         case ConversationType::Direct:
             return "direct";
         default:
-            return "group";
+            return "Unknown";
     }
 }
 }

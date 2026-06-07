@@ -10,7 +10,7 @@
 #include "security/PasswordHasher.h"
 #include "im/FriendService.h"
 #include "im/ConversationService.h"
-
+#include "im/ConversationKey.h"
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
@@ -1404,14 +1404,6 @@ im::Imservice::AccountPushResult im::Imservice::notifyFriendEvent(const std::str
     Response push{.ver=1,.req_id=0,.type=MsgType::FRIEND_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.data=std::move(data)};
     auto pushResult=pushToAccount(targetAccountId,push);
     return pushResult;
-}
-std::string im::Imservice::buildDirectConversationKey(const std::string& accountA,const std::string& accountB)const{
-    if(accountA<accountB){
-        return accountA+"#"+accountB;
-    }
-    else{
-        return accountB+"#"+accountA;
-    }
 }
 //好友请求接口
 im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){

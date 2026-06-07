@@ -157,7 +157,7 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     }
     return messages;
 }
-std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGroupMessageAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit){
+std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGroupMessagesAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit){
     if(groupId.empty()){
         return {};
     }
