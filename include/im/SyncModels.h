@@ -13,13 +13,13 @@ struct SyncCursor{//客户端某个会话的本地同步游标
     size_t limit{50};//限制增量
 };
 
-struct ConversationDelta{//表示会话从
+struct ConversationDelta{//表示会话增量消息
     storage::ConversationType type;
     std::string targetId;//会话目标
     nlohmann::json messages;//新消息数组
 };
 struct SyncResult{//表示一次同步请求的聚合结果
-    std::vector<ConversationDelta> deltas;
-    std::vector<storage::OfflineMessageIndex> offlineIndexes;
+    std::vector<ConversationDelta> deltas;//新增消息
+    std::vector<storage::OfflineMessageIndex> offlineIndexes;//离线消息索引
 };
 }

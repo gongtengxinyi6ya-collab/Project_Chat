@@ -32,6 +32,12 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
     if(groupId.empty()){
         return {};
     }
+    if(limit==0){
+        limit=20;
+    }
+    if(limit>100){
+        limit=100;
+    }
     auto conn=pool_->acquire();
     if(!conn){
         return {};
@@ -46,18 +52,12 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
                 std::vector<MessageRecord> messages;
                 for(auto& row:result.rows){
                     MessageRecord message;
-                    auto groupIdPair=row.find("group_id");
-                    message.groupId=groupIdPair!=row.end()?groupIdPair->second:"";
-                    auto msgIdPair=row.find("msg_id");
-                    message.messageId=msgIdPair!=row.end()?std::stoull(msgIdPair->second):0;//数据库结果从string转为uint64_t
-                    auto senderAccountIdPair=row.find("sender_account_id");
-                    message.senderAccountId=senderAccountIdPair!=row.end()?senderAccountIdPair->second:"";
-                    auto senderUsernamePair=row.find("sender_username");
-                    message.senderUsername=senderUsernamePair!=row.end()?senderUsernamePair->second:"";
-                    auto contentPair=row.find("content");
-                    message.content=contentPair!=row.end()?contentPair->second:"";
-                    auto serverTsMsPair=row.find("server_ts_ms");
-                    message.serverTsMs=serverTsMsPair!=row.end()?std::stoull(serverTsMsPair->second):0;
+                    message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
+                    message.groupId=getString(row,"group_id");
+                    message.senderAccountId=getString(row,"sender_account_id");
+                    message.senderUsername=getString(row,"sedner_username");
+                    message.content=getString(row,"content");
+                    message.serverTsMs=getUInt64(row,"server_ts_ms");
                     messages.emplace_back(std::move(message));
                 }
                 return messages;
@@ -109,21 +109,13 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     std::vector<MessageRepo::DirectMessageRecord> messages;
     for(auto& row:result.rows){
         DirectMessageRecord message;
-        auto conversationPair=row.find("conversation_key");
-        message.conversationKey=conversationPair!=row.end()?conversationPair->second:"";
-        auto msgIdPair=row.find("msg_id");
-        message.messageId=msgIdPair!=row.end()?std::stoull(msgIdPair->second):0;//数据库结果从string转为uint64_t
-        auto senderAccountIdPair=row.find("sender_account_id");
-        message.senderAccountId=senderAccountIdPair!=row.end()?senderAccountIdPair->second:"";
-        auto receiverAccountIdPair=row.find("receiver_account_id");
-        message.receiverAccountId=receiverAccountIdPair!=row.end()?receiverAccountIdPair->second:"";
-        
-        auto senderUsernamePair=row.find("sender_username");
-        message.senderUsername=senderUsernamePair!=row.end()?senderUsernamePair->second:"";
-        auto contentPair=row.find("content");
-        message.content=contentPair!=row.end()?contentPair->second:"";
-        auto serverTsMsPair=row.find("server_ts_ms");
-        message.serverTsMs=serverTsMsPair!=row.end()?std::stoull(serverTsMsPair->second):0;
+        message.conversationKey=getString(row,"conversation_key");
+        message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
+        message.senderAccountId=getString(row,"sender_account_id");
+        message.receiverAccountId=getString(row,"receiver_account_id");
+        message.senderUsername=getString(row,"sedner_username");
+        message.content=getString(row,"content");
+        message.serverTsMs=getUInt64(row,"server_ts_ms");
         messages.emplace_back(std::move(message));
     }
     return messages;
@@ -154,21 +146,44 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     std::vector<MessageRepo::DirectMessageRecord> messages;
     for(auto& row:result.rows){
         DirectMessageRecord message;
-        auto conversationPair=row.find("conversation_key");
-        message.conversationKey=conversationPair!=row.end()?conversationPair->second:"";
-        auto msgIdPair=row.find("msg_id");
-        message.messageId=msgIdPair!=row.end()?std::stoull(msgIdPair->second):0;//数据库结果从string转为uint64_t
-        auto senderAccountIdPair=row.find("sender_account_id");
-        message.senderAccountId=senderAccountIdPair!=row.end()?senderAccountIdPair->second:"";
-        auto receiverAccountIdPair=row.find("receiver_account_id");
-        message.receiverAccountId=receiverAccountIdPair!=row.end()?receiverAccountIdPair->second:"";
-        
-        auto senderUsernamePair=row.find("sender_username");
-        message.senderUsername=senderUsernamePair!=row.end()?senderUsernamePair->second:"";
-        auto contentPair=row.find("content");
-        message.content=contentPair!=row.end()?contentPair->second:"";
-        auto serverTsMsPair=row.find("server_ts_ms");
-        message.serverTsMs=serverTsMsPair!=row.end()?std::stoull(serverTsMsPair->second):0;
+        message.conversationKey=getString(row,"conversation_key");
+        message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
+        message.senderAccountId=getString(row,"sender_account_id");
+        message.receiverAccountId=getString(row,"receiver_account_id");
+        message.senderUsername=getString(row,"sedner_username");
+        message.content=getString(row,"content");
+        message.serverTsMs=getUInt64(row,"server_ts_ms");
+        messages.emplace_back(std::move(message));
+    }
+    return messages;
+}
+std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGroupMessageAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit){
+    if(groupId.empty()){
+        return {};
+    }
+    if(limit==0){
+        limit=20;
+    }
+    if(limit>100){
+        limit=100;
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {};
+    }
+    auto result=conn->executePrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id>? ORDER BY msg_id ASC LIMIT ?",{groupId,lastMsgId,limit});
+    if(!result.ok()){
+        return {};
+    }
+    std::vector<MessageRecord> messages;
+    for(auto& row:result.rows){
+        MessageRecord message;
+        message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
+        message.groupId=getString(row,"group_id");
+        message.senderAccountId=getString(row,"sender_account_id");
+        message.senderUsername=getString(row,"sedner_username");
+        message.content=getString(row,"content");
+        message.serverTsMs=getUInt64(row,"server_ts_ms");
         messages.emplace_back(std::move(message));
     }
     return messages;
