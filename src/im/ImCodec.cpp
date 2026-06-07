@@ -49,18 +49,24 @@ std::string im::encodeResponse(const im::Response& resp){
     return j.dump();
 }
 
-std::vector<im::SyncCursor> im::parseSyncCursors(const Request& req){
-    std::vector<SyncCursor> cursors;
-    if(!req.body.contains("cursors")||!req.body["cursors"].is_array()){
-        return cursors;
+im::SynaParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit){
+    im::SynaParseResult result{.ok=false};
+    if(!req.body.contains("cursors")){
+        return {.ok=true};
+    }
+    if(!req.body["cursors"].is_array()){
+        return {.ok=false,.code=ErrorCode::BAD_REQUEST,.message="cursors must be array"};
     }
     for(const auto& item:req.body["cursors"]){
         if(!item.is_object()){
-            continue;
+            return {.code=ErrorCode::BAD_REQUEST,.message="cursor[0] must be object"};
         }
         SyncCursor cursor;
-        if(!item.contains("conversationType")||!item["conversationType"].is_string()){
-            continue;
+        if(!item.contains("conversationType")){
+            return {.code=ErrorCode::MISSING_FIELD,.message="missing conversationType"};
+        }
+        if(!item["conversationType"].is_string()){
+            return {.code=ErrorCode::BAD_REQUEST,.message="conversation is not string"};
         }
         auto typeStr=item["conversationType"].get<std::string>();
         if(typeStr=="direct"){
@@ -70,15 +76,18 @@ std::vector<im::SyncCursor> im::parseSyncCursors(const Request& req){
             cursor.type=storage::ConversationType::Group;
         }
         else{
-            continue;
+            return {.code=ErrorCode::BAD_REQUEST,.message="conversation must be direct or group"};
         }
 
-        if (!item.contains("targetId") || !item["targetId"].is_string()) {
-            continue;
+        if (!item.contains("targetId")) {
+            return {.code=ErrorCode::MISSING_FIELD,.message="missing targetId"};
+        }
+        if(!item["targetId"].is_string()){
+            return {.code=ErrorCode::BAD_REQUEST,.message="targetId is not string"};
         }
         cursor.targetId = item["targetId"].get<std::string>();
         if (cursor.targetId.empty()) {
-            continue;
+            return {.code=ErrorCode::BAD_REQUEST,.message="targetId is empty"};
         }
 
         // lastMsgId
@@ -90,25 +99,36 @@ std::vector<im::SyncCursor> im::parseSyncCursors(const Request& req){
                 cursor.lastMsgId =
                     static_cast<uint64_t>(item["lastMsgId"].get<int64_t>());
             } else {
-                continue;
+                return {.code=ErrorCode::BAD_REQUEST,.message="lastMsgId is invalid"};
             }
+        }
+        else{
+            cursor.lastMsgId=0;
         }
 
         // limit
         if (item.contains("limit")) {
             if (item["limit"].is_number_unsigned()) {
                 cursor.limit = item["limit"].get<size_t>();
-            } else if (item["limit"].is_number_integer() &&
-                       item["limit"].get<int64_t>() > 0) {
-                cursor.limit =
-                    static_cast<size_t>(item["limit"].get<int64_t>());
-            } else {
-                continue;
-            }
+            } 
+            else if (item["limit"].is_number_integer() &&item["limit"].get<int64_t>() > 0)
+            {
+                cursor.limit =static_cast<size_t>(item["limit"].get<int64_t>());
+            } 
         }
-        cursors.emplace_back(std::move(cursor));
+        else{
+            cursor.limit=defaultLimit;
+        }
+        if(cursor.limit==0){
+            cursor.limit=defaultLimit;
+        }
+        if(cursor.limit>100){
+            cursor.limit=100;
+        }
+        result.cursors.emplace_back(std::move(cursor));
     }
-    return cursors;
+    result.ok=true;
+    return result;
 }
 //Response辅助函数
 im::Response im::makeErr(const im::Request& req,im::ErrorCode code,const std::string& msg,nlohmann::json data){
@@ -116,4 +136,21 @@ im::Response im::makeErr(const im::Request& req,im::ErrorCode code,const std::st
 }
 im::Response im::makeOk(const im::Request& req,im::MsgType type,nlohmann::json data,std::string mag){
     return im::Response{.ver=req.ver,.req_id=req.req_id,.type=type,.ok=true,.code=im::ErrorCode::OK,.msg=mag,.data=data};
+}
+
+size_t im::parseLimit(const Request& req,const std::string& key,size_t defaultValue,size_t limitValue){
+    if(req.body.contains(key)){
+        size_t result=defaultValue;
+        if(req.body["limit"].is_number_unsigned()){
+            result=req.body["limit"].get<size_t>();
+        }
+        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
+            result=static_cast<size_t>(req.body["limit"].get<int64_t>());
+        }
+        if(result>limitValue){
+            result=limitValue;
+        }
+        return result;
+    }
+    return defaultValue;
 }

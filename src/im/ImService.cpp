@@ -773,8 +773,10 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleConversationList(req,key,session);
         case im::MsgType::CONVERSATION_READ_REQ:
             return handleConversationRead(req,key,session);
-        case im::MsgType::SYNC_REQ:
+        case im::MsgType::SYNC_REQ:{
+            LOG_INFO_CTX("sync request in",makeReqCtx(key,req,session,"SYNC_IN"));
             return handleSync(req,key,session);
+        }
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -1597,22 +1599,7 @@ im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_un
         return makeErr(req,ErrorCode::INTERNAL,"conversationService is not exist");
     }
     //解析limit
-    size_t limit=20;
-    if(req.body.contains("limit")){
-        
-        if(req.body["limit"].is_number_unsigned()){
-            limit=req.body["limit"].get<size_t>();
-        }
-        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
-            limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
-        }
-        else{
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid limit");
-        }
-    }
-    if(limit>200){
-        limit=200;//限制limit最大值
-    }
+    size_t limit=parseLimit(req,"limit",20,200);
     auto result=conversationService_->listConversations(session.accountId_,limit);
     nlohmann::json conversationViewJson=nlohmann::json::array();
     for(const auto& view:result){
@@ -1644,27 +1631,16 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
     if(!messageSyncService_||!repos_.userRepo||!repos_.friendRepo){
         return makeErr(req,ErrorCode::INTERNAL,"messageSyncService");
     }
-    size_t limit=20;
-    if(req.body.contains("limit")){
-        
-        if(req.body["limit"].is_number_unsigned()){
-            limit=req.body["limit"].get<size_t>();
-        }
-        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
-            limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
-        }
-        else{
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid limit");
-        }
+    size_t limit=parseLimit(req,"limit",50,200);
+    size_t offlineLimit=parseLimit(req,"offlineLimit",100,500);
+    auto cursorsResult=parseSyncCursors(req,limit);
+    if(!cursorsResult.ok){
+        return makeErr(req,cursorsResult.code,cursorsResult.message);
     }
-    if(limit>100){
-        limit=100;//限制limit最大值
-    }
-    auto cursors=parseSyncCursors(req);
-    for(const auto& cursor:cursors){
+    for(const auto& cursor:cursorsResult.cursors){
         if(cursor.type==storage::ConversationType::Direct){
             if(!repos_.userRepo->userExists(cursor.targetId)){
-                return makeErr(req,ErrorCode::USER_NOT_FOUND,"the user is not exist");
+                return makeErr(req,ErrorCode::USER_NOT_FOUND,"the user is not found");
             }
             if(!repos_.friendRepo->areFriends(session.accountId_,cursor.targetId)){
                 return makeErr(req,ErrorCode::NOT_FRIENDS,"the user is not your friend");
@@ -1676,7 +1652,7 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
             }
         }
     }
-    auto result=messageSyncService_->sync(session.accountId_,cursors,limit);
+    auto result=messageSyncService_->sync(session.accountId_,cursorsResult.cursors,offlineLimit);
     nlohmann::json deltasJson=nlohmann::json::array();
     for(const auto& delta:result.deltas){
         deltasJson.emplace_back(nlohmann::json{{"conversationType",storage::conversationTypeToString(delta.type)},{"targetId",delta.targetId},{"messages",delta.messages}});
@@ -1690,5 +1666,5 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
             offlineIndexesJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type","group"},{"groupId",index.groupId}});
         }
     }
-    return makeOk(req,MsgType::SYNC_RESP,nlohmann::json{{"deltas",deltasJson},{"offlineIndexes",offlineIndexesJson}});
+    return makeOk(req,MsgType::SYNC_RESP,nlohmann::json{{"deltas",deltasJson},{"offlineIndexes",offlineIndexesJson},{"cursorCount",cursorsResult.cursors.size()},{"deltaCount",deltasJson.size()},{"offlineCount",offlineIndexesJson.size()}});
 }
