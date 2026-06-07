@@ -773,6 +773,8 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleConversationList(req,key,session);
         case im::MsgType::CONVERSATION_READ_REQ:
             return handleConversationRead(req,key,session);
+        case im::MsgType::SYNC_REQ:
+            return handleSync(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
