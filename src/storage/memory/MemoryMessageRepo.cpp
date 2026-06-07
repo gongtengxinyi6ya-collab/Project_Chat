@@ -115,3 +115,6 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::MemoryMessageRep
 std::vector<storage::MessageRepo::DirectMessageRecord> storage::MemoryMessageRepo::listDirectMessagesAfter([[maybe_unused]]const std::string& conversationKey,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
     return {};
 }
+std::vector<storage::MessageRepo::MessageRecord> storage::MemoryMessageRepo::listGroupMessagesAfter([[maybe_unused]]const std::string& groupId,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
+    return {};
+}
