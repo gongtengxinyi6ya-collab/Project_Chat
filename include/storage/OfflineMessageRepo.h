@@ -30,11 +30,11 @@ public:
 inline std::string offlineMessageTypeToString(OfflineMessageType type){
     switch(type){
         case OfflineMessageType::Group:
-            return "Group";
+            return "group";
         case OfflineMessageType::Direct:
-            return "Direct";
+            return "direct";
         default:
-            return "Unknown";
+            return "unknown";
     }
 }
 }
