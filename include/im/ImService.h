@@ -32,6 +32,7 @@ namespace auth{
 namespace im{
     class FriendService;//好友关系类向前声明
     class ConversationService;//会话管理
+    class MessageSyncService;//消息同步服务
 class Imservice{
 public:
     class BroadcastResult{
@@ -164,5 +165,10 @@ private:
     std::unique_ptr<ConversationService> conversationService_;
     Response handleConversationList(const Request& req,ConnKey key,Session& session);
     Response handleConversationRead(const Request& req,ConnKey key,Session& session);
+
+    //消息同步服务
+    std::unique_ptr<MessageSyncService> messageSyncService_;
+    Response handleSync(const Request& req,ConnKey key,Session& session);//处理客户端同步请求
+
 };
 }

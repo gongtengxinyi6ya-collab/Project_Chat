@@ -11,6 +11,8 @@
 #include "im/FriendService.h"
 #include "im/ConversationService.h"
 #include "im/ConversationKey.h"
+#include "im/MessageSyncService.h"
+#include "storage/FriendRepo.h"
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
@@ -144,6 +146,9 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
     }
     if(repos_.conversationRepo&&repos_.userProfileRepo&&repos_.groupRepo){
         conversationService_=std::make_unique<ConversationService>(repos_.conversationRepo,repos_.userProfileRepo,repos_.groupRepo);
+    }
+    if(repos_.messageRepo&&repos_.offlineMessageRepo){
+        messageSyncService_=std::make_unique<MessageSyncService>(repos_.messageRepo,repos_.offlineMessageRepo);
     }
 }
 bool im::Imservice::hasRepositories()const{
@@ -1628,4 +1633,60 @@ im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_un
         conversationViewJson.emplace_back(std::move(item));
     }
     return makeOk(req,MsgType::CONVERSATION_LIST_RESP,nlohmann::json{{"conversations",conversationViewJson},{"count",conversationViewJson.size()}});
+}
+im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    if(!messageSyncService_||repos_.userRepo||repos_.friendRepo){
+        return makeErr(req,ErrorCode::INTERNAL,"messageSyncService");
+    }
+    size_t limit=20;
+    if(req.body.contains("limit")){
+        
+        if(req.body["limit"].is_number_unsigned()){
+            limit=req.body["limit"].get<size_t>();
+        }
+        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
+            limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
+        }
+        else{
+            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid limit");
+        }
+    }
+    if(limit>100){
+        limit=100;//限制limit最大值
+    }
+    auto cursors=parseSyncCursors(req);
+    for(const auto& cursor:cursors){
+        if(cursor.type==storage::ConversationType::Direct){
+            if(!repos_.userRepo->userExists(cursor.targetId)){
+                return makeErr(req,ErrorCode::USER_NOT_FOUND,"the user is not exist");
+            }
+            if(!repos_.friendRepo->areFriends(session.accountId_,cursor.targetId)){
+                return makeErr(req,ErrorCode::NOT_FRIENDS,"the user is not your friend");
+            }
+        }
+        else if(cursor.type==storage::ConversationType::Group){
+            if(!groupManager_.isMember(cursor.targetId,session.accountId_)){
+                return makeErr(req,ErrorCode::NOT_IN_GROUP,"the user is not in the group");
+            }
+        }
+    }
+    auto result=messageSyncService_->sync(session.accountId_,cursors,limit);
+    nlohmann::json deltasJson=nlohmann::json::array();
+    for(const auto& delta:result.deltas){
+        deltasJson.emplace_back(nlohmann::json{{"conversationType",storage::conversationTypeToString(delta.type)},{"targetAccountId",delta.targetId},{"messages",delta.messages}});
+    }
+    nlohmann::json offlineIndexesJson=nlohmann::json::array();
+    for(const auto&index:result.offlineIndexes){
+        if(index.type==storage::OfflineMessageType::Direct){
+            offlineIndexesJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type","direct"},{"peerAccountId",index.peerAccountId}});
+        }
+        else if(index.type==storage::OfflineMessageType::Group){
+            offlineIndexesJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type","group"},{"groupId",index.groupId}});
+        }
+    }
+    return makeOk(req,MsgType::SYNC_RESP,nlohmann::json{{"deltas",deltasJson},{"offlineIndexes",offlineIndexesJson}});
 }

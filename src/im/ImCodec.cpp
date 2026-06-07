@@ -49,6 +49,67 @@ std::string im::encodeResponse(const im::Response& resp){
     return j.dump();
 }
 
+std::vector<im::SyncCursor> im::parseSyncCursors(const Request& req){
+    std::vector<SyncCursor> cursors;
+    if(!req.body.contains("cursors")||!req.body["cursors"].is_array()){
+        return cursors;
+    }
+    for(const auto& item:req.body["cursors"]){
+        if(!item.is_object()){
+            continue;
+        }
+        SyncCursor cursor;
+        if(!item.contains("conversationType")||!item["conversationType"].is_string()){
+            continue;
+        }
+        auto typeStr=item["conversationType"].get<std::string>();
+        if(typeStr=="direct"){
+            cursor.type=storage::ConversationType::Direct;
+        }
+        else if(typeStr=="group"){
+            cursor.type=storage::ConversationType::Group;
+        }
+        else{
+            continue;
+        }
+
+        if (!item.contains("targetId") || !item["targetId"].is_string()) {
+            continue;
+        }
+        cursor.targetId = item["targetId"].get<std::string>();
+        if (cursor.targetId.empty()) {
+            continue;
+        }
+
+        // lastMsgId
+        if (item.contains("lastMsgId")) {
+            if (item["lastMsgId"].is_number_unsigned()) {
+                cursor.lastMsgId = item["lastMsgId"].get<uint64_t>();
+            } else if (item["lastMsgId"].is_number_integer() &&
+                       item["lastMsgId"].get<int64_t>() >= 0) {
+                cursor.lastMsgId =
+                    static_cast<uint64_t>(item["lastMsgId"].get<int64_t>());
+            } else {
+                continue;
+            }
+        }
+
+        // limit
+        if (item.contains("limit")) {
+            if (item["limit"].is_number_unsigned()) {
+                cursor.limit = item["limit"].get<size_t>();
+            } else if (item["limit"].is_number_integer() &&
+                       item["limit"].get<int64_t>() > 0) {
+                cursor.limit =
+                    static_cast<size_t>(item["limit"].get<int64_t>());
+            } else {
+                continue;
+            }
+        }
+        cursors.emplace_back(std::move(cursor));
+    }
+    return cursors;
+}
 //Response辅助函数
 im::Response im::makeErr(const im::Request& req,im::ErrorCode code,const std::string& msg,nlohmann::json data){
     return im::Response{.ver=req.ver,.req_id=req.req_id,.type=im::MsgType::ERR,.ok=false,.code=code,.msg=msg,.data=data};

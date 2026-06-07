@@ -9,12 +9,13 @@
 namespace storage{
 //枚举区分离线索引指向群消息还是私聊消息
 enum class OfflineMessageType:uint8_t{
+    Unknown=0,
     Group=1,
     Direct=2
 };
 struct OfflineMessageIndex{
     uint64_t msgId{0};//离线的消息ID
-    OfflineMessageType type{OfflineMessageType::Group};
+    OfflineMessageType type{OfflineMessageType::Unknown};
     std::string groupId{};//群消息所属群，私聊时为空
     std::string peerAccountId{};//私聊对端账号
 };
@@ -33,7 +34,7 @@ inline std::string offlineMessageTypeToString(OfflineMessageType type){
         case OfflineMessageType::Direct:
             return "Direct";
         default:
-            return "Group";
+            return "Unknown";
     }
 }
 }
