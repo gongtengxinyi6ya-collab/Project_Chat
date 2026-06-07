@@ -40,7 +40,7 @@ inline std::string conversationTypeToString(ConversationType type){
         case ConversationType::Direct:
             return "direct";
         default:
-            return "Unknown";
+            return "unknown";
     }
 }
 }

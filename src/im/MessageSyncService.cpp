@@ -8,7 +8,7 @@ im::MessageSyncService::MessageSyncService(std::shared_ptr<storage::MessageRepo>
 }
 
 im::SyncResult im::MessageSyncService::sync(const std::string& accountId,const std::vector<SyncCursor>& cursors,size_t offlineLimit){
-    if(accountId.empty()||cursors.empty()){
+    if(accountId.empty()){
         return {};
     }
     SyncResult syncResult;

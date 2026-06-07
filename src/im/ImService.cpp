@@ -1641,7 +1641,7 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
     if(err){
         return err.value();
     }
-    if(!messageSyncService_||repos_.userRepo||repos_.friendRepo){
+    if(!messageSyncService_||!repos_.userRepo||!repos_.friendRepo){
         return makeErr(req,ErrorCode::INTERNAL,"messageSyncService");
     }
     size_t limit=20;
@@ -1679,7 +1679,7 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
     auto result=messageSyncService_->sync(session.accountId_,cursors,limit);
     nlohmann::json deltasJson=nlohmann::json::array();
     for(const auto& delta:result.deltas){
-        deltasJson.emplace_back(nlohmann::json{{"conversationType",storage::conversationTypeToString(delta.type)},{"targetAccountId",delta.targetId},{"messages",delta.messages}});
+        deltasJson.emplace_back(nlohmann::json{{"conversationType",storage::conversationTypeToString(delta.type)},{"targetId",delta.targetId},{"messages",delta.messages}});
     }
     nlohmann::json offlineIndexesJson=nlohmann::json::array();
     for(const auto&index:result.offlineIndexes){

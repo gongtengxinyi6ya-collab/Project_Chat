@@ -55,7 +55,7 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
                     message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
                     message.groupId=getString(row,"group_id");
                     message.senderAccountId=getString(row,"sender_account_id");
-                    message.senderUsername=getString(row,"sedner_username");
+                    message.senderUsername=getString(row,"sender_username");
                     message.content=getString(row,"content");
                     message.serverTsMs=getUInt64(row,"server_ts_ms");
                     messages.emplace_back(std::move(message));
@@ -113,7 +113,7 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
         message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
         message.senderAccountId=getString(row,"sender_account_id");
         message.receiverAccountId=getString(row,"receiver_account_id");
-        message.senderUsername=getString(row,"sedner_username");
+        message.senderUsername=getString(row,"sender_username");
         message.content=getString(row,"content");
         message.serverTsMs=getUInt64(row,"server_ts_ms");
         messages.emplace_back(std::move(message));
@@ -150,7 +150,7 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
         message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
         message.senderAccountId=getString(row,"sender_account_id");
         message.receiverAccountId=getString(row,"receiver_account_id");
-        message.senderUsername=getString(row,"sedner_username");
+        message.senderUsername=getString(row,"sender_username");
         message.content=getString(row,"content");
         message.serverTsMs=getUInt64(row,"server_ts_ms");
         messages.emplace_back(std::move(message));
@@ -171,7 +171,7 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
     if(!conn||!conn->connected()){
         return {};
     }
-    auto result=conn->executePrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id>? ORDER BY msg_id ASC LIMIT ?",{groupId,lastMsgId,limit});
+    auto result=conn->queryPrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id>? ORDER BY msg_id ASC LIMIT ?",{groupId,lastMsgId,limit});
     if(!result.ok()){
         return {};
     }
@@ -181,7 +181,7 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
         message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
         message.groupId=getString(row,"group_id");
         message.senderAccountId=getString(row,"sender_account_id");
-        message.senderUsername=getString(row,"sedner_username");
+        message.senderUsername=getString(row,"sender_username");
         message.content=getString(row,"content");
         message.serverTsMs=getUInt64(row,"server_ts_ms");
         messages.emplace_back(std::move(message));
