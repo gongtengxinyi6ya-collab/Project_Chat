@@ -15,4 +15,5 @@ public:
     size_t maxGroupNameLen{64};//群名称长度
     size_t maxMessageLen{4096};//消息最长长度
     bool allowDebugAuth{false};
+    size_t maxAckBatchSize{200};//限制单次ack的最大消息数量
 };

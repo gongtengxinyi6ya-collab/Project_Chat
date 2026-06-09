@@ -68,6 +68,8 @@ enum class MsgType:uint16_t{
     CONVERSATION_READ_RESP,
     SYNC_REQ,//
     SYNC_RESP,
+    MESSAGE_ACK_REQ,
+    MESSAGE_ACK_RESP,
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -201,6 +203,10 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::SYNC_REQ;
         case 64:
             return MsgType::SYNC_RESP;
+        case 65:
+            return MsgType::MESSAGE_ACK_REQ;
+        case 66:
+            return MsgType::MESSAGE_ACK_RESP;
         case 255:
             return MsgType::ERR;
         

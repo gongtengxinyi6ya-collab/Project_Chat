@@ -13,6 +13,7 @@
 #include "im/ConversationKey.h"
 #include "im/MessageSyncService.h"
 #include "storage/FriendRepo.h"
+#include "im/MessageAckService.h"
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
@@ -149,6 +150,9 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
     }
     if(repos_.messageRepo&&repos_.offlineMessageRepo){
         messageSyncService_=std::make_unique<MessageSyncService>(repos_.messageRepo,repos_.offlineMessageRepo);
+    }
+    if(repos_.conversationRepo&&repos_.messageRepo&&repos_.offlineMessageRepo){
+        messageAckService_=std::make_unique<MessageAckService>(repos_.messageRepo,repos_.offlineMessageRepo,repos_.conversationRepo);
     }
 }
 bool im::Imservice::hasRepositories()const{
@@ -777,6 +781,8 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             LOG_INFO_CTX("sync request in",makeReqCtx(key,req,session,"SYNC_IN"));
             return handleSync(req,key,session);
         }
+        case im::MsgType::MESSAGE_ACK_REQ:
+            return handleMessageAck(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -1059,7 +1065,7 @@ im::Response im::Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]
             return makeErr(req,ErrorCode::BAD_JSON,"Invalid msg_id in msg_ids");
         }
     }
-    auto result=repos_.offlineMessageRepo->ackOfflineMessage(session.accountId_,msgIds);
+    auto result=repos_.offlineMessageRepo->ackOfflineMessages(session.accountId_,msgIds);
     if(result.ok()){
         return makeOk(req,MsgType::OFFLINE_ACK_RESP,nlohmann::json{{"acked",msgIds.size()}});
     }
@@ -1553,6 +1559,12 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
     }
     storage::ConversationType conversationType;
     if(conversationTypeString=="direct"){
+        if(!repos_.userRepo){
+            return makeErr(req,ErrorCode::INTERNAL,"userRepo is not avaiable");
+        }
+        if(!repos_.userRepo->userExists(targetId)){
+            return makeErr(req,ErrorCode::NO_SUCH_USER,"no such user");
+        }
         conversationType=storage::ConversationType::Direct;
     }
     else if(conversationTypeString=="group"){
@@ -1667,4 +1679,30 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
         }
     }
     return makeOk(req,MsgType::SYNC_RESP,nlohmann::json{{"deltas",deltasJson},{"offlineIndexes",offlineIndexesJson},{"cursorCount",cursorsResult.cursors.size()},{"deltaCount",deltasJson.size()},{"offlineCount",offlineIndexesJson.size()}});
+}
+im::Response im::Imservice::handleMessageAck(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    auto messageAck=parseMessageAck(req,imConfig_.maxAckBatchSize);
+    if(!messageAck.ok){
+        return makeErr(req,messageAck.code,messageAck.message);
+    }
+    if(!messageAckService_){
+        return makeErr(req,ErrorCode::INTERNAL,"messageAckService is not avaiable");
+    }
+    if(!messageAck.payload.msgIds.empty()){
+        auto resultAckMessage=messageAckService_->ackMessages(session.accountId_,messageAck.payload.msgIds,nowMs());
+        if(!resultAckMessage.ok()){
+            return makeRepoError(req,resultAckMessage.status,resultAckMessage.message);
+        }
+    }
+    if(!messageAck.payload.offlineIds.empty()){
+        auto resultAckOfflineMessage=messageAckService_->ackOfflineMessages(session.accountId_,messageAck.payload.offlineIds);
+        if(!resultAckOfflineMessage.ok()){
+            return makeRepoError(req,resultAckOfflineMessage.status,resultAckOfflineMessage.message);
+        }
+    }
+    return makeOk(req,MsgType::MESSAGE_ACK_RESP,nlohmann::json{{"ackedMsgCount",messageAck.payload.msgIds.size()},{"ackOfflineCount",messageAck.payload.offlineIds.size()}});
 }
