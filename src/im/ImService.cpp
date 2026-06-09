@@ -1702,11 +1702,11 @@ im::Response im::Imservice::handleMessageAck(const Request& req,[[maybe_unused]]
             return makeRepoError(req,resultAckMessage.status,resultAckMessage.message);
         }
     }
-    if(!messageAck.payload.offlineIds.empty()){
-        auto resultAckOfflineMessage=messageAckService_->ackOfflineMessages(session.accountId_,messageAck.payload.offlineIds);
+    if(!messageAck.payload.offlineMsgIds.empty()){
+        auto resultAckOfflineMessage=messageAckService_->ackOfflineMessages(session.accountId_,messageAck.payload.offlineMsgIds);
         if(!resultAckOfflineMessage.ok()){
             return makeRepoError(req,resultAckOfflineMessage.status,resultAckOfflineMessage.message);
         }
     }
-    return makeOk(req,MsgType::MESSAGE_ACK_RESP,nlohmann::json{{"ackedMsgCount",messageAck.payload.msgIds.size()},{"ackOfflineCount",messageAck.payload.offlineIds.size()}});
+    return makeOk(req,MsgType::MESSAGE_ACK_RESP,nlohmann::json{{"ackedMsgCount",messageAck.payload.msgIds.size()},{"ackOfflineMsgCount",messageAck.payload.offlineMsgIds.size()}});
 }

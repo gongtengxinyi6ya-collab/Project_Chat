@@ -20,7 +20,7 @@ namespace im{
 
     struct MessageAckPayload {//客户端ACK请求中解析出来的数据
     std::vector<uint64_t> msgIds;
-    std::vector<uint64_t> offlineIds;
+    std::vector<uint64_t> offlineMsgIds;
 };
     struct MessageAckParseResult {//解析结果
     bool ok{false};

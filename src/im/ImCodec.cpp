@@ -196,12 +196,13 @@ im::MessageAckParseResult im::parseMessageAck(const Request& req,size_t maxBatch
     if(msgIdsResult){
         return {.ok=false,.code=msgIdsResult->code,.message=msgIdsResult->msg};
     }
-    auto offlineIdsResult = parseUint64ArrayField(req,"offlineMsgIds",result.payload.offlineIds,maxBatchSize);
+    auto offlineIdsResult = parseUint64ArrayField(req,"offlineMsgIds",result.payload.offlineMsgIds,maxBatchSize);
     if(offlineIdsResult){
         return {.ok=false,.code=offlineIdsResult->code,.message=offlineIdsResult->msg};
     }
-    if(result.payload.msgIds.empty()&&result.payload.offlineIds.empty()){
+    if(result.payload.msgIds.empty()&&result.payload.offlineMsgIds.empty()){
         return {.ok=false,.code=ErrorCode::INVALID_ACK_PAYLOAD,.message="msgIds and offlineMsgIds cannot both be empty"};
+    }
     result.ok=true;
     return result;
 }
