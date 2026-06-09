@@ -1,6 +1,8 @@
 #include "storage/sql/SqlMessageRepo.h"
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnection.h"
+#include "storage/sql/SqlTransaction.h"
+#include <stdexcept>
 storage::SqlMessageRepo::SqlMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
@@ -188,3 +190,103 @@ std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGr
     }
     return messages;
 }
+
+storage::RepoResult storage::SqlMessageRepo::markDelivered(const std::string&accountId,const std::vector<uint64_t>& msgIds,int64_t deliveredAtMs){
+    if(accountId.empty()){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+    try{
+        SqlTransaction transation(*conn);
+        std::string sql=R"(
+        INSERT INTO message_receipts (
+            msg_id,
+            account_id,
+            delivered_at_ms,
+            read_at_ms
+        )
+        VALUES (?, ?, ?, 0)
+        ON DUPLICATE KEY UPDATE
+            delivered_at_ms = GREATEST(delivered_at_ms, VALUES(delivered_at_ms))
+        )";
+        for(const auto& msgId:msgIds){
+            auto result=conn->executePrepared(sql,{msgId,accountId,deliveredAtMs});
+            if(!result.ok()){
+                return {.status=RepoStatus::SqlError,.message=result.error};
+            }
+        }
+        //提交事务
+        transation.commit();
+        return {.status=RepoStatus::Ok};
+    }catch(const std::exception&e){
+        return {.status=RepoStatus::Internal,.message=e.what()};
+    }
+
+}
+storage::RepoResult storage::SqlMessageRepo::markReadBefore(const std::string&accountId,ConversationType type,const std::string& targetId,uint64_t readMsgId,int64_t readAtMs){
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+    std::string sql;
+    SqlResult result;
+    if(type==ConversationType::Direct){
+        sql=R"(
+        INSERT INTO message_receipts (
+            msg_id,
+            account_id,
+            delivered_at_ms,
+            read_at_ms
+        )
+        SELECT
+            id,
+            ?,
+            ?,
+            ?
+        FROM messages
+        WHERE type = 'direct'
+        AND id <= ?
+        AND (
+            (sender_account_id = ? AND receiver_account_id = ?)
+            OR
+            (sender_account_id = ? AND receiver_account_id = ?)
+        )
+        ON DUPLICATE KEY UPDATE
+            delivered_at_ms = GREATEST(delivered_at_ms, VALUES(delivered_at_ms)),
+            read_at_ms = GREATEST(read_at_ms, VALUES(read_at_ms))
+        )";
+        result=conn->executePrepared(sql,{accountId,readAtMs,readAtMs,readMsgId,accountId,targetId,targetId,accountId});
+        
+    }
+    else if(type==ConversationType::Group){
+        sql=R"(
+        INSERT INTO message_receipts (
+            msg_id,
+            account_id,
+            delivered_at_ms,
+            read_at_ms
+        )
+        SELECT
+            id,
+            ?,
+            ?,
+            ?
+        FROM messages
+        WHERE type = 'group'
+        AND group_id = ?
+        AND id <= ?
+        ON DUPLICATE KEY UPDATE
+            delivered_at_ms = GREATEST(delivered_at_ms, VALUES(delivered_at_ms)),
+            read_at_ms = GREATEST(read_at_ms, VALUES(read_at_ms))
+        )";
+        result=conn->executePrepared(sql,{accountId,readAtMs,readAtMs,targetId,readMsgId});
+    }
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    return {.status=RepoStatus::Ok};
+}
+    

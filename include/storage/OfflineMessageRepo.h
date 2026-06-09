@@ -25,7 +25,8 @@ public:
     virtual RepoResult saveOfflineMessage(const std::string& accountId,uint64_t msgId,const std::string& groupId)=0;//保存一条群离线消息索引
     virtual RepoResult saveOfflineDirectMessage(const std::string& accountId,uint64_t msgId,const std::string& peerAccountId)=0;//保存一条私聊离线消息索引
     virtual std::vector<OfflineMessageIndex> listOfflineMessage(const std::string& accountId,size_t limit)=0;//查询用户的离线消息索引
-    virtual RepoResult ackOfflineMessage(const std::string& accountId,const std::vector<uint64_t>& msgId)=0;//客户端确认后删除离线消息索引
+    virtual RepoResult ackOfflineMessages(const std::string& accountId,const std::vector<uint64_t>& msgId)=0;//客户端确认后删除离线消息索引
+    
 };
 inline std::string offlineMessageTypeToString(OfflineMessageType type){
     switch(type){

@@ -3,13 +3,12 @@
 #include <stdexcept>
 #include <unordered_map>
 #include "storage/FriendRequestRepo.h"
-im::FriendService::FriendService(std::shared_ptr<storage::FriendRepo> friendRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo,std::shared_ptr<storage::FriendRequestRepo> friendRequestRepo){
-    if(!friendRepo||!userProfileRepo||!friendRequestRepo){
-        throw std::invalid_argument("Repo is empty");
+im::FriendService::FriendService(std::shared_ptr<storage::FriendRepo> friendRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo,std::shared_ptr<storage::FriendRequestRepo> friendRequestRepo)
+:friendRepo_(std::move(friendRepo)),userProfileRepo_(std::move(userProfileRepo)),friendRequestRepo_(std::move(friendRequestRepo)){
+    if(!friendRepo_||!userProfileRepo_||!friendRequestRepo_){
+        throw std::invalid_argument("FriendService: null dependency");
     }
-    friendRepo_=std::move(friendRepo);
-    userProfileRepo_=std::move(userProfileRepo);
-    friendRequestRepo_=std::move(friendRequestRepo);
+   
 }
 std::optional<storage::UserProfile> im::FriendService::findUser(const std::string& accountId)const{
     if(accountId.empty()){

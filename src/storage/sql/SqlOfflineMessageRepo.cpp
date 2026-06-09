@@ -68,7 +68,7 @@ std::vector<storage::OfflineMessageIndex> storage::SqlOfflineMessageRepo::listOf
     return {};
 }
 
-storage::RepoResult storage::SqlOfflineMessageRepo::ackOfflineMessage(const std::string& accountId,const std::vector<uint64_t>& msgIds){
+storage::RepoResult storage::SqlOfflineMessageRepo::ackOfflineMessages(const std::string& accountId,const std::vector<uint64_t>& msgIds){
     if(accountId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
     }
