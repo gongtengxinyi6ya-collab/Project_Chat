@@ -37,6 +37,10 @@ enum class ErrorCode: uint16_t{
     NOT_FRIENDS,//不存在有效好友关系
     RECIPIENT_OFFLINE,//接收方不在线
     DELIVERY_OVERLOADED,//消息发送过快导致服务器发送队列积压
+    INVALID_ACK_PAYLOAD,//msgIds/offlineMsgIds格式错误
+    ACK_BATCH_TOO_LARGE,//ACK数组超过限制
+    MESSAGE_NOT_FOUND,//消息不存在
+    MESSAGE_ACK_FORBIDDEN,//ACK消息无权确认
     INTERNAL//服务器内部错误
 
 };
@@ -109,6 +113,14 @@ inline const char* errCodeToString(ErrorCode code){
             return "Recipient is offline";
         case ErrorCode::DELIVERY_OVERLOADED:
             return "Server is overloaded, try again later";
+        case ErrorCode::INVALID_ACK_PAYLOAD:
+            return "Invalid ACK payload";
+        case ErrorCode::ACK_BATCH_TOO_LARGE:
+            return "ACK batch size is too large";   
+        case ErrorCode::MESSAGE_NOT_FOUND:
+            return "Message not found";
+        case ErrorCode::MESSAGE_ACK_FORBIDDEN:
+            return "You are not allowed to ACK this message";
         default:
             return "Unknown Error Code";
     }

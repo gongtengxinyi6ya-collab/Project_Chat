@@ -246,9 +246,8 @@ storage::RepoResult storage::SqlMessageRepo::markReadBefore(const std::string&ac
             ?,
             ?,
             ?
-        FROM messages
-        WHERE type = 'direct'
-        AND id <= ?
+        FROM direct_messages
+        WHERE msg_id <= ?
         AND (
             (sender_account_id = ? AND receiver_account_id = ?)
             OR
@@ -275,9 +274,8 @@ storage::RepoResult storage::SqlMessageRepo::markReadBefore(const std::string&ac
             ?,
             ?
         FROM messages
-        WHERE type = 'group'
-        AND group_id = ?
-        AND id <= ?
+        WHERE  group_id = ?
+        AND msg_id <= ?
         ON DUPLICATE KEY UPDATE
             delivered_at_ms = GREATEST(delivered_at_ms, VALUES(delivered_at_ms)),
             read_at_ms = GREATEST(read_at_ms, VALUES(read_at_ms))

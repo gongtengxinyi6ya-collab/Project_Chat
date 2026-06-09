@@ -629,6 +629,10 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
         case im::ErrorCode::FRIEND_REQUEST_NOT_FOUND:
         case im::ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED:
         case im::ErrorCode::FRIEND_REQUEST_FORBIDDEN:
+        case im::ErrorCode::INVALID_ACK_PAYLOAD:
+        case im::ErrorCode::ACK_BATCH_TOO_LARGE:
+        case im::ErrorCode::MESSAGE_NOT_FOUND:
+        case im::ErrorCode::MESSAGE_ACK_FORBIDDEN:
             return LogLevel::WARN;
         case im::ErrorCode::INTERNAL:
             return LogLevel::ERROR;

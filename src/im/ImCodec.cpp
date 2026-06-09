@@ -140,36 +140,36 @@ im::Response im::makeErr(const im::Request& req,im::ErrorCode code,const std::st
 im::Response im::makeOk(const im::Request& req,im::MsgType type,nlohmann::json data,std::string mag){
     return im::Response{.ver=req.ver,.req_id=req.req_id,.type=type,.ok=true,.code=im::ErrorCode::OK,.msg=mag,.data=data};
 }
-std::vector<uint64_t> im::parseUint64ArrayField(const im::Request&req,const std::string&field,size_t maxBatchSize){
+std::optional<im::Response> im::parseUint64ArrayField(const im::Request&req,const std::string&field,std::vector<uint64_t>& out,size_t maxBatchSize){
     if (!req.body.contains(field)) {
-        return {};
+        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing field: "+field);
     }
     const auto& arr = req.body[field];
     if (!arr.is_array()) {
-        return {};
+        return makeErr(req,ErrorCode::BAD_REQUEST,"Field is not an array: "+field);
     }
     if (arr.empty()) {
-        return {};
+        return makeErr(req,ErrorCode::BAD_REQUEST,"Array is empty: "+field);
     }
     if (arr.size() > maxBatchSize) {
-        return {};
+        return makeErr(req,ErrorCode::ACK_BATCH_TOO_LARGE,"Batch size is too large: "+field);
     }
-    std::vector<uint64_t> out;
+    out.clear();
     out.reserve(arr.size());
     for (const auto& item : arr) {
         uint64_t value = 0;
-        if (item.is_number_unsigned()) {
+        if (item.is_number_unsigned()&&item.get<uint64_t>()>0) {
             value = item.get<uint64_t>();
         }
         else if (item.is_number_integer() && item.get<int64_t>() > 0) {
             value = static_cast<uint64_t>(item.get<int64_t>());
         }
         else {
-            return {};
+            return makeErr(req,ErrorCode::BAD_REQUEST,"Invalid value for field: "+field);
         }
         out.push_back(value);
     }
-    return out;
+    return std::nullopt;
 }
 size_t im::parseLimit(const Request& req,const std::string& key,size_t defaultValue,size_t limitValue){
     if(req.body.contains(key)){
@@ -190,10 +190,17 @@ size_t im::parseLimit(const Request& req,const std::string& key,size_t defaultVa
 
 im::MessageAckParseResult im::parseMessageAck(const Request& req,size_t maxBatchSize){
     MessageAckParseResult result;
-    result.payload.msgIds=parseUint64ArrayField(req,"msgIds",maxBatchSize);
-    result.payload.offlineIds=parseUint64ArrayField(req,"offlineIds",maxBatchSize);
+
+    auto msgIdsResult = parseUint64ArrayField(req,"msgIds",result.payload.msgIds,maxBatchSize);
+    if (msgIdsResult) {
+        return {.ok=false,.code=msgIdsResult->code,.message=msgIdsResult->msg};
+    }
+    auto offlineIdsResult = parseUint64ArrayField(req,"offlineMsgIds",result.payload.offlineIds,maxBatchSize);
+    if (offlineIdsResult) {
+        return {.ok=false,.code=offlineIdsResult->code,.message=offlineIdsResult->msg};
+    }
     if(result.payload.msgIds.empty()&&result.payload.offlineIds.empty()){
-        return {.ok=false,.code=ErrorCode::BAD_REQUEST};
+        return {.ok=false,.code=ErrorCode::INVALID_ACK_PAYLOAD,.message="msgIds and offlineMsgIds cannot both be empty"};
     }
     result.ok=true;
     return result;

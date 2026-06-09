@@ -42,9 +42,16 @@ storage::RepoResult im::MessageAckService::markConversationRead(const std::strin
     if(type==storage::ConversationType::Unknown||readMsgId==0){
         return {.status=storage::RepoStatus::InvalidArgument};
     }
-    if(!conversationRepo_){
-        return {.status=storage::RepoStatus::Internal,.message="conversationRepo is not avaiable"};
+    if(!conversationRepo_||!messageRepo_){
+        return {.status=storage::RepoStatus::Internal,.message="conversationRepo or messageRepo is not avaiable"};
     }
-    return conversationRepo_->markConversationRead(accountId,type,targetId,readMsgId,readAtMs);
-
+    auto resultConversation=conversationRepo_->markConversationRead(accountId,type,targetId,readMsgId,readAtMs);
+    if(!resultConversation.ok()){
+        return resultConversation;
+    }
+    auto resultMessage=messageRepo_->markReadBefore(accountId,type,targetId,readMsgId,readAtMs);
+    if(!resultMessage.ok()){
+        return resultMessage;
+    }
+    return {.status=storage::RepoStatus::Ok};
 }

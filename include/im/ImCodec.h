@@ -4,6 +4,7 @@
 #include <string_view>
 #include <cstdint>
 #include <vector>
+#include <optional>
 #include "ImMessage.h"
 #include "SyncParseResult.h"
 /*
@@ -28,5 +29,5 @@ namespace im{
     MessageAckPayload payload;
 };
     MessageAckParseResult parseMessageAck(const Request& req,size_t maxBatchSize);//从JSON请求中解析msgIds和offlineIds
-    std::vector<uint64_t> parseUint64ArrayField(const Request&req,const std::string&field,size_t maxBatchSize);
+    std::optional<im::Response> parseUint64ArrayField(const Request&req,const std::string&field,std::vector<uint64_t>& out,size_t maxBatchSize);
 }
