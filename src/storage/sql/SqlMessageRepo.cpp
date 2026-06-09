@@ -242,7 +242,7 @@ storage::RepoResult storage::SqlMessageRepo::markReadBefore(const std::string&ac
             read_at_ms
         )
         SELECT
-            id,
+            msg_id,
             ?,
             ?,
             ?
@@ -269,7 +269,7 @@ storage::RepoResult storage::SqlMessageRepo::markReadBefore(const std::string&ac
             read_at_ms
         )
         SELECT
-            id,
+            msg_id,
             ?,
             ?,
             ?

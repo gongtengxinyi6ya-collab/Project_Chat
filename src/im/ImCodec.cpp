@@ -140,9 +140,25 @@ im::Response im::makeErr(const im::Request& req,im::ErrorCode code,const std::st
 im::Response im::makeOk(const im::Request& req,im::MsgType type,nlohmann::json data,std::string mag){
     return im::Response{.ver=req.ver,.req_id=req.req_id,.type=type,.ok=true,.code=im::ErrorCode::OK,.msg=mag,.data=data};
 }
+size_t im::parseLimit(const Request& req,const std::string& key,size_t defaultValue,size_t limitValue){
+    if(req.body.contains(key)){
+        size_t result=defaultValue;
+        if(req.body[key].is_number_unsigned()){
+            result=req.body[key].get<size_t>();
+        }
+        else if(req.body[key].is_number_integer()&&req.body[key].get<int64_t>()>0){
+            result=static_cast<size_t>(req.body[key].get<int64_t>());
+        }
+        if(result>limitValue){
+            result=limitValue;
+        }
+        return result;
+    }
+    return defaultValue;
+}
 std::optional<im::Response> im::parseUint64ArrayField(const im::Request&req,const std::string&field,std::vector<uint64_t>& out,size_t maxBatchSize){
     if (!req.body.contains(field)) {
-        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing field: "+field);
+        return std::nullopt;
     }
     const auto& arr = req.body[field];
     if (!arr.is_array()) {
@@ -171,37 +187,21 @@ std::optional<im::Response> im::parseUint64ArrayField(const im::Request&req,cons
     }
     return std::nullopt;
 }
-size_t im::parseLimit(const Request& req,const std::string& key,size_t defaultValue,size_t limitValue){
-    if(req.body.contains(key)){
-        size_t result=defaultValue;
-        if(req.body[key].is_number_unsigned()){
-            result=req.body[key].get<size_t>();
-        }
-        else if(req.body[key].is_number_integer()&&req.body[key].get<int64_t>()>0){
-            result=static_cast<size_t>(req.body[key].get<int64_t>());
-        }
-        if(result>limitValue){
-            result=limitValue;
-        }
-        return result;
-    }
-    return defaultValue;
-}
+
 
 im::MessageAckParseResult im::parseMessageAck(const Request& req,size_t maxBatchSize){
     MessageAckParseResult result;
 
     auto msgIdsResult = parseUint64ArrayField(req,"msgIds",result.payload.msgIds,maxBatchSize);
-    if (msgIdsResult) {
+    if(msgIdsResult){
         return {.ok=false,.code=msgIdsResult->code,.message=msgIdsResult->msg};
     }
     auto offlineIdsResult = parseUint64ArrayField(req,"offlineMsgIds",result.payload.offlineIds,maxBatchSize);
-    if (offlineIdsResult) {
+    if(offlineIdsResult){
         return {.ok=false,.code=offlineIdsResult->code,.message=offlineIdsResult->msg};
     }
     if(result.payload.msgIds.empty()&&result.payload.offlineIds.empty()){
         return {.ok=false,.code=ErrorCode::INVALID_ACK_PAYLOAD,.message="msgIds and offlineMsgIds cannot both be empty"};
-    }
     result.ok=true;
     return result;
 }

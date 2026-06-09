@@ -1595,10 +1595,10 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
     else{
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing readMsgId");
     }
-    if(!conversationService_){
-        return makeErr(req,ErrorCode::INTERNAL,"conversationService is not avaiable");
+    if(!messageAckService_){
+        return makeErr(req,ErrorCode::INTERNAL,"messageAckService is not avaiable");
     }
-    auto result=conversationService_->markRead(session.accountId_,conversationType,targetId,readMsgId,nowMs());
+    auto result=messageAckService_->markConversationRead(session.accountId_,conversationType,targetId,readMsgId,nowMs());
     if(!result.ok()){
         return makeRepoError(req,result.status,result.message);
     }
