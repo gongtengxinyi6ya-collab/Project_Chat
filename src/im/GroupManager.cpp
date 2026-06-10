@@ -113,3 +113,66 @@ bool im::GroupManager::restoreGroup(const std::string& groupId,const std::string
     }
     return true;
 }
+
+std::optional<im::GroupRole> im::GroupManager::roleOf(const std::string& groupId,const std::string&accountId)const{
+    auto it=groupsById_.find(groupId);
+    if(it!=groupsById_.end()){
+        return it->second.roleOf(accountId);
+    }
+    return std::nullopt;
+}
+bool im::GroupManager::isOwner(const std::string&groupId,const std::string& accountId)const{
+    auto role=roleOf(groupId,accountId);
+    if(role){
+        if(role.value()==GroupRole::Owner){
+            return true;
+        }
+    }
+    return false;
+}
+bool im::GroupManager::canManageMember(const std::string& groupId, const std::string& operatorAccountId, const std::string& targetAccountId) const{
+     auto roleOfOperator=roleOf(groupId,operatorAccountId);//获取操作者角色
+     auto roleOfTarget=roleOf(groupId,targetAccountId);
+    if(roleOfOperator&&roleOfTarget){
+        if(roleOfOperator.value()==GroupRole::Owner){//群主可以管理其他成员
+            return true;
+        }
+        else if(roleOfOperator.value()==GroupRole::Admin&&roleOfTarget.value()==GroupRole::Member){
+            //管理员只能管理普通成员
+            return true;
+        }
+        return false;
+    }
+    return false;
+}
+bool im::GroupManager::setMemberRole(const std::string& groupId, const std::string& accountId, GroupRole role){
+    if(isMember(groupId,accountId)){
+        auto it=groupsById_.find(groupId);
+        if(it->second.setRole(accountId,role)){
+            return true;
+        }
+    }
+    return false;
+
+}
+std::vector<im::GroupMemberInfo> im::GroupManager::memberInfos(const std::string& groupId) const{
+    auto it=groupsById_.find(groupId);
+    if(it!=groupsById_.end()){
+        std::vector<GroupMemberInfo> info;
+        auto members=it->second.members();
+        for(const auto& member:members){
+            info.emplace_back(GroupMemberInfo{.accountId=member.first,.role=member.second});
+        }
+        return info;
+    }
+    return {};
+}
+bool im::GroupManager::transferOwner(const std::string& groupId, const std::string& oldOwner, const std::string& newOwner){
+    auto it=groupsById_.find(groupId);
+    if(it!=groupsById_.end()){
+        if(it->second.isOwner(oldOwner)){
+            return it->second.transFerOwner(oldOwner,newOwner);
+        }
+    }
+    return false;
+}

@@ -53,13 +53,26 @@ bool im::Group::isAdminOrOwner(const std::string& accountId)const{
 }
 
 bool im::Group::setRole(const std::string&accountId,GroupRole role){
-    if(accountId==ownerAccountId_){
+    if(role==GroupRole::Owner){//群主转让另外设置
         return false;
     }
     auto it=members_.find(accountId);
     if(it!=members_.end()){
         it->second=role;
         return true;
+    }
+    return false;
+}
+bool im::Group::transFerOwner(const std::string&oldOwner,const std::string& newOwner){
+    auto itOld=members_.find(oldOwner);
+    if(itOld!=members_.end()){
+        auto itNew=members_.find(newOwner);
+        if(itNew!=members_.end()){
+            itOld->second=GroupRole::Member;
+            itNew->second=GroupRole::Owner;
+            ownerAccountId_=itOld->first;
+            return true;
+        }
     }
     return false;
 }

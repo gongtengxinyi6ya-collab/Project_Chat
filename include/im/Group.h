@@ -23,6 +23,7 @@ public:
     bool isOwner(const std::string&accountId)const;
     bool isAdminOrOwner(const std::string& accountId)const;
     bool setRole(const std::string&accountId,GroupRole role);
+    bool transFerOwner(const std::string& oldOwner,const std::string& newOwner);
 
 private:
     std::string groupId_;//群唯一标识
