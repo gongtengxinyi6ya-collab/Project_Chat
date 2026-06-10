@@ -46,7 +46,7 @@ bool storage::SqlGroupRepo::groupExists(const std::string& groupId){
     return false;
 }
 
-storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,const std::string& accountId){
+storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,const std::string& accountId,uint8_t role){
     if(groupId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="groupId is empty"};
     }
@@ -61,7 +61,7 @@ storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,c
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO group_members(group_id,account_id) VALUES(?,?)",{groupId,accountId});
+        auto result=conn->executePrepared("INSERT INTO group_members(group_id,account_id,role) VALUES(?,?,?)",{groupId,accountId,static_cast<uint64_t>(role)});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -99,7 +99,7 @@ storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& group
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
 }
-std::vector<std::string> storage::SqlGroupRepo::listMembers(const std::string& groupId){
+std::vector<storage::GroupRepo::GroupMemberRecord> storage::SqlGroupRepo::listMemberRecords(const std::string& groupId){
     if(groupId.empty()){
         return {};
     }
@@ -117,7 +117,7 @@ std::vector<std::string> storage::SqlGroupRepo::listMembers(const std::string& g
                     members.emplace_back(accountIdIt->second);
                 }
             }
-            return members;
+            return ;
         }
     }
     return {};

@@ -27,6 +27,9 @@ public:
     virtual RepoResult addMember(const std::string& groupId,const std::string& accountId,uint8_t role)=0;//用户入群时保存群成员关系
     virtual RepoResult removeMember(const std::string& groupId,const std::string& accountId)=0;//主动退群或群主踢人删除关系
     virtual RepoValueResult<uint8_t> getMemberRole(const std::string&groupId,const std::string& accountId)=0;//获取成员角色
+    virtual RepoResult updateMemberRole(const std::string& groupId,const std::string& accountId,uint8_t role)=0;//设置，取消管理员
+    virtual RepoResult transferOwner(const std::string& groupId,const std::string& oldOwner,const std::string& newOwner)=0;//转移群主身份
+    virtual std::vector<GroupMemberRecord> listMemberRecords(const std::string& groupId)=0;//获取成员列表
     virtual std::vector<std::string> listMembers(const std::string& groupId)=0;//服务重建时恢复时可重建GroupManager
     virtual std::vector<GroupSnapshot> listGroups()=0;//启动时读取所有群基础信息
     virtual RepoResult createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& accountId);//创建群基础信息，同时把owner加入群列表
