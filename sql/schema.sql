@@ -40,6 +40,10 @@ CREATE TABLE IF NOT EXISTS group_members (
     KEY idx_group_members_account_id (account_id),
     KEY idx_group_members_group_id (group_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+ALTER TABLE group_members
+MODIFY COLUMN role TINYINT NOT NULL DEFAULT 0 COMMENT '0=member,1=admin,2=owner';
+CREATE INDEX idx_group_members_group_role
+ON group_members(group_id, role);
 
 CREATE TABLE IF NOT EXISTS messages (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

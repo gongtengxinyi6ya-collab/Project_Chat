@@ -72,6 +72,54 @@ storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,c
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
 }
+
+storage::RepoValueResult<uint8_t> storage::SqlGroupRepo::getMemberRole(const std::string&groupId,const std::string& accountId){
+    if(groupId.empty()||accountId.empty()){
+        return {.status=RepoStatus::InvalidArgument,.message="invaild argument"};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+    auto result=conn->queryPrepared("SELECT role FROM group_members WHERE group_id=? AND account_id=? LIMIT 1",{groupId,accountId});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    if(result.rows.empty()){
+        return {.status=RepoStatus::NotFound,.message="member not found"};
+    }
+    auto role=getUInt64(result.rows.front(),"role");
+    return {.status=RepoStatus::Ok,.value=static_cast<uint8_t>(role)};
+}
+
+storage::RepoResult storage::SqlGroupRepo::updateMemberRole(const std::string& groupId,const std::string& accountId,uint8_t role){
+    if(groupId.empty()){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="groupId is empty"};
+    }
+    if(accountId.empty()){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
+    }
+    auto result=conn->executePrepared("UPDATE group_members SET role=? WHERE group_id=? AND account_id=?",{groupId,accountId});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    if(result.affectedRows==0){
+        return {.status=RepoStatus::NotFound,.message="not found"};
+    }
+    return {.status=RepoStatus::Ok};
+}
+storage::RepoResult storage::SqlGroupRepo::transferOwner(const std::string& groupId,const std::string& oldOwner,const std::string& newOwner){
+
+}
+std::vector<storage::GroupRepo::GroupMemberRecord> storage::SqlGroupRepo::listMemberRecords(const std::string& groupId){
+
+}
+    
+
 storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& groupId,const std::string& accountId){
     if(groupId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="groupId is empty"};
