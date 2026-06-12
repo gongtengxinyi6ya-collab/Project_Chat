@@ -58,13 +58,6 @@ bool im::GroupManager::removeGroup(const std::string& groupId){
     groupsById_.erase(it);
     return true;
 }
-std::vector<std::string> im::GroupManager::members(const std::string & groupId) const{
-    auto it=groupsById_.find(groupId);
-    if(it!=groupsById_.end()){
-        return it->second.members();
-    }
-    return {};
-}
 std::vector<std::string> im::GroupManager::groupsOfUser(const std::string& accountId) const{
     auto it=accountIdGroups_.find(accountId);
     if(it!=accountIdGroups_.end()){
