@@ -34,6 +34,7 @@ namespace im{
     class ConversationService;//会话管理
     class MessageSyncService;//消息同步服务
     class MessageAckService;//消息确认服务
+    class GroupService;//群管理服务
 class Imservice{
 public:
     class BroadcastResult{
@@ -103,6 +104,7 @@ private:
     SendResult sendPush(ConnKey,const std::string &);//统一对push做decorate,encode,sendToConnKey
     std::optional<std::string> resolveTargetGroupId(const Request&,const Session&);//群id获取辅助方法
     //群聊接口
+    std::unique_ptr<GroupService> groupService_;
     Response handleCreateGroup(const Request&,[[maybe_unused]]ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
     BroadcastResult broadcastToGroup(const std::string&,[[maybe_unused]]ConnKey,im::Response&push);//对房间内其他成员推送事件；
     im::Response handleJoin(const im::Request& req,ConnKey key,Session& session);//加入群
@@ -110,6 +112,9 @@ private:
     im::Response handleGroupMsg(const im::Request&,ConnKey,Session&);//提交房间消息
     im::Response handleGroupMembers(const im::Request&,[[maybe_unused]]ConnKey,Session&);//获取群聊成员列表
     Response handleListGroups(const Request&,[[maybe_unused]]ConnKey,Session&);//返回当前用户加入的群列表
+    Response handleKickGroupMember(const Request& req, ConnKey key, Session& session);//踢出群成员
+    Response handleSetGroupAdmin(const Request& req, ConnKey key, Session& session);//设置群管理员
+    Response handleTransferGroupOwner(const Request& req, ConnKey key, Session& session);//转让群主
 
     //日志上下文生成辅助方法
     LogContext makeReqCtx(ConnKey,const Request&,const Session&,const std::string& )const;//生成请求入口日志上下文
@@ -146,7 +151,7 @@ private:
     //用户资料接口
     Response handleGetProfile(const Request& req,ConnKey key,Session& session);//当前已登录用户查询自己的资料
     Response handleUpdateProfile(const Request& req,ConnKey key,Session& session);//当前登录用户修改自己的公开资料
-    nlohmann::json buildMemberProfileList(const std::vector<std::string>&accountIds);//把GroupManager返回的accountId列表转换为客户端可展示的成员资料
+    nlohmann::json buildMemberProfileList(const std::string& groupId);//把GroupManager返回的accountId列表转换为客户端可展示的成员资料
 
     //好友相关接口
     std::unique_ptr<FriendService> friendService_;

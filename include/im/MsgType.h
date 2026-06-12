@@ -70,6 +70,15 @@ enum class MsgType:uint16_t{
     SYNC_RESP,
     MESSAGE_ACK_REQ,
     MESSAGE_ACK_RESP,
+
+    KICK_GROUP_MEMBER_REQ,//踢出成员请求
+    KICK_GROUP_MEMBER_RESP,
+
+    SET_GROUP_ADMIN_REQ,//设置群管理员请求
+    SET_GROUP_ADMIN_RESP,
+
+    TRANSFER_GROUP_OWNER_REQ,//转让群主请求
+    TRANSFER_GROUP_OWNER_RESP,   
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -207,6 +216,18 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::MESSAGE_ACK_REQ;
         case 66:
             return MsgType::MESSAGE_ACK_RESP;
+        case 67:
+            return MsgType::KICK_GROUP_MEMBER_REQ;
+        case 68:
+            return MsgType::KICK_GROUP_MEMBER_RESP;
+        case 69:
+            return MsgType::SET_GROUP_ADMIN_REQ;
+        case 70:
+            return MsgType::SET_GROUP_ADMIN_RESP;
+        case 71:
+            return MsgType::TRANSFER_GROUP_OWNER_REQ;
+        case 72:
+            return MsgType::TRANSFER_GROUP_OWNER_RESP;
         case 255:
             return MsgType::ERR;
         

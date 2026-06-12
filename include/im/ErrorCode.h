@@ -41,6 +41,13 @@ enum class ErrorCode: uint16_t{
     ACK_BATCH_TOO_LARGE,//ACK数组超过限制
     MESSAGE_NOT_FOUND,//消息不存在
     MESSAGE_ACK_FORBIDDEN,//ACK消息无权确认
+
+    NO_PERMISSION,//操作者没有管理权限
+    TARGET_NOT_IN_GROUP,//目标用户不在群里
+    OWNER_CANNOT_LEAVE,//群主不能直接退群
+    OWNER_CANNOT_BE_KICKED,//无法踢出群主
+    INVALID_GROUP_ROLE,//设置角色非法
+    CANNOT_KICK_SELF,
     INTERNAL//服务器内部错误
 
 };
@@ -121,6 +128,18 @@ inline const char* errCodeToString(ErrorCode code){
             return "Message not found";
         case ErrorCode::MESSAGE_ACK_FORBIDDEN:
             return "You are not allowed to ACK this message";
+        case ErrorCode::NO_PERMISSION:
+            return "No permission";
+        case ErrorCode::TARGET_NOT_IN_GROUP:
+            return "Target user is not in the group";
+        case ErrorCode::OWNER_CANNOT_LEAVE:
+            return "Group owner cannot leave the group";
+        case ErrorCode::OWNER_CANNOT_BE_KICKED:
+            return "Group owner cannot be kicked";
+        case ErrorCode::INVALID_GROUP_ROLE:
+            return "Invalid group role";
+        case ErrorCode::CANNOT_KICK_SELF:
+            return "Cannot kick yourself";
         default:
             return "Unknown Error Code";
     }

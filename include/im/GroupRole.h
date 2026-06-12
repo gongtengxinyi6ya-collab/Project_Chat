@@ -8,4 +8,16 @@ namespace im{
         Admin=1,//管理员
         Owner=2//群主，最高权限
     };
+    inline std::string roleToString(GroupRole role){
+        switch(role){
+            case GroupRole::Member:
+                return "member";
+            case GroupRole::Admin:
+                return "admin";
+            case GroupRole::Owner:
+                return "owner";
+            default:
+            return "member";
+        }
+    }
 }

@@ -14,6 +14,7 @@
 #include "im/MessageSyncService.h"
 #include "storage/FriendRepo.h"
 #include "im/MessageAckService.h"
+#include "im/GroupService.h"
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
@@ -499,11 +500,56 @@ im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_un
     if(errInGroup.has_value()){
         return errInGroup.value();
     }
-    //获取群成员账号id
-    auto accountIds=groupManager_.members(groupId.value());
     //同步查成员账号资料
-    auto membersJson=buildMemberProfileList(accountIds);
+
+    auto membersJson=buildMemberProfileList(groupId.value());
     return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId.value()},{"count",accountIds.size()},{"members",membersJson}});
+
+}
+
+im::Response im::Imservice::handleKickGroupMember(const Request& req, ConnKey key, Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    //读取groupId
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return getGroupId.value();
+    }
+    //读取目标账号
+    std::string targetAccountId;
+    auto getAccountId=getStringField(req,"targetAccountId",targetAccountId);
+    if(getAccountId){
+        return getAccountId.value();
+    }
+    //禁止自己踢自己
+    if(targetAccountId==session.accountId_){
+        return makeErr(req,ErrorCode::CANNOT_KICK_SELF,"You cannot kick yourself");
+    }
+    if(!groupService_){
+        return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
+    }
+    auto result=groupService_->kickMember(groupId,session.accountId_,targetAccountId);
+    if(!result.ok()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    //给被踢用户推送被踢事件
+    im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="you have been kicked from the group",.data=nlohmann::json{{"evet","be kicked"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
+    auto result=pushToAccount(targetAccountId,pushEvent);
+    if(!result.ok()){
+        LOG_WARN("Failed to push the event to the accountId:"+targetAccountId);
+    }
+    //给群内其他成员广播成员被踢出事件
+    im::Response groupPushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg=targetAccountId+" have been kicked from the group",.data=nlohmann::json{{"evet","member_removed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
+    auto broastResult=broadcastToGroup(groupId,key,groupPushEvent);
+    return makeOk(req,MsgType::KICK_GROUP_MEMBER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"removed",true},{"sent",broastResult.sent},{"closed",broastResult.closed},{"noSuchCo",broastResult.noSuchConnection}});
+}
+im::Response im::Imservice::handleSetGroupAdmin(const Request& req, ConnKey key, Session& session){
+
+}
+im::Response im::Imservice::handleTransferGroupOwner(const Request& req, ConnKey key, Session& session){
 
 }
 
@@ -522,6 +568,7 @@ im::Response im::Imservice::handleListGroups(const Request& req,[[maybe_unused]]
     std::vector<std::string> groups=groupManager_.groupsOfUser(session.accountId_);
     return makeOk(req,MsgType::LIST_GROUPS_RESP,nlohmann::json{{"groupIds",groups},{"count",groups.size()}});
 }
+
 
 LogContext im::Imservice::makeReqCtx(ConnKey key,const Request& req,const Session& session,const std::string& event)const{
     LogContext ctx;
@@ -633,6 +680,12 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
         case im::ErrorCode::ACK_BATCH_TOO_LARGE:
         case im::ErrorCode::MESSAGE_NOT_FOUND:
         case im::ErrorCode::MESSAGE_ACK_FORBIDDEN:
+        case im::ErrorCode::NO_PERMISSION:
+        case im::ErrorCode::TARGET_NOT_IN_GROUP:
+        case im::ErrorCode::OWNER_CANNOT_LEAVE:
+        case im::ErrorCode::OWNER_CANNOT_BE_KICKED:
+        case im::ErrorCode::INVALID_GROUP_ROLE:
+        case im::ErrorCode::CANNOT_KICK_SELF:
             return LogLevel::WARN;
         case im::ErrorCode::INTERNAL:
             return LogLevel::ERROR;
@@ -816,6 +869,16 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
             return im::ErrorCode::FRIEND_REQUEST_FORBIDDEN;
         case storage::RepoStatus::NotFriends:
             return im::ErrorCode::NOT_FRIENDS;
+        case storage::RepoStatus::NoPermission:
+            return im::ErrorCode::NO_PERMISSION;
+        case storage::RepoStatus::TargetNotInGroup:
+            return im::ErrorCode::TARGET_NOT_IN_GROUP;
+        case storage::RepoStatus::OwnerCannotLeave:
+            return im::ErrorCode::OWNER_CANNOT_LEAVE;
+        case storage::RepoStatus::OwnerCannotBeKicked:
+            return im::ErrorCode::OWNER_CANNOT_BE_KICKED;
+        case storage::RepoStatus::InvalidGroupRole:
+            return im::ErrorCode::INVALID_GROUP_ROLE;
         case storage::RepoStatus::Internal:
             return im::ErrorCode::INTERNAL;
     }
@@ -1286,30 +1349,15 @@ im::Response im::Imservice::handleUpdateProfile(const Request& req,[[maybe_unuse
     return makeErr(req,ErrorCode::INTERNAL,"Failed to update profile");
 }
 
-nlohmann::json im::Imservice::buildMemberProfileList(const std::vector<std::string>& accountIds){
+nlohmann::json im::Imservice::buildMemberProfileList(const std::string&groupId){
     storage::UserProfile emptyUserProfile;
-    if(!repos_.userProfileRepo){
+    if(!groupService_){
         return nlohmann::json{{"accountId",emptyUserProfile.accountId},{"username",emptyUserProfile.username},{"nickname",emptyUserProfile.nickname},{"avatarUrl",emptyUserProfile.avatarUrl},{"signature",emptyUserProfile.signature}};
     }
-    auto result=repos_.userProfileRepo->findByAccountIds(accountIds);
-    if(result.empty()){
-        return nlohmann::json{{"accountId",emptyUserProfile.accountId},{"username",emptyUserProfile.username},{"nickname",emptyUserProfile.nickname},{"avatarUrl",emptyUserProfile.avatarUrl},{"signature",emptyUserProfile.signature}};
-    }
-    std::unordered_map<std::string,storage::UserProfile> userProfileMap;
-    
-    //
-    for(const auto& userProfile:result){
-        userProfileMap[userProfile.accountId]=userProfile;
-    }
+    auto views=groupService_->listMemberViews(groupId);
     nlohmann::json profileList=nlohmann::json::array();
-    for(const auto& accountId:accountIds){
-        if(userProfileMap.find(accountId)!=userProfileMap.end()){
-            const auto& profile=userProfileMap[accountId];
-            profileList.push_back(nlohmann::json{{"accountId",accountId},{"username",profile.username},{"nickname",profile.nickname},{"avatarUrl",profile.avatarUrl},{"signature",profile.signature}});
-        }
-        else{//如果没找到用户资料，返回accountId和username字段，其他字段为空
-            profileList.push_back(nlohmann::json{{"accountId",accountId},{"username",emptyUserProfile.username},{"nickname",emptyUserProfile.nickname},{"avatarUrl",emptyUserProfile.avatarUrl},{"signature",emptyUserProfile.signature}});
-        }
+    for(const auto& view:views){
+        profileList.push_back(nlohmann::json{{"accountId",view.accountId},{"username",view.username},{"nickname",view.nickname},{"avatarUrl",view.avatarUrl},{"role",roleToString(view.role)}});
     }
     return profileList;
 }
