@@ -34,7 +34,17 @@ storage::RepoResult im::GroupService::kickMember(const std::string& groupId,cons
     return {.status=storage::RepoStatus::Ok};
 }
 storage::RepoResult im::GroupService::setAdmin(const std::string& groupId,const std::string& operatorAccountId,const std::string&targetAccountId,bool enable){
-
+    if(groupId.empty()||operatorAccountId.empty()||targetAccountId.empty()){
+        return {.status=storage::RepoStatus::InvalidArgument};
+    }
+    if(!groupRepo_){
+        return {.status=storage::RepoStatus::Internal,.message="groupRepo is not avaiable"};
+    }
+    auto roleOfOperator=groupRepo_->getMemberRole(groupId,operatorAccountId);
+    if(!roleOfOperator.ok()||!roleOfOperator.value){
+        return {.status=roleOfOperator.status,.message=roleOfOperator.message};
+    }
+    if(roleOfOperator.value.value())
 }
 storage::RepoResult im::GroupService::transferOwner(const std::string& groupId,const std::string& oldOwner,const std::string&newOwner){
 
