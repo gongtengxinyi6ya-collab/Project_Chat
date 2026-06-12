@@ -24,6 +24,7 @@ public:
     virtual ~GroupRepo()=default;
     virtual RepoResult createGroup(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId)=0;//创建微信群聊
     virtual bool groupExists(const std::string& groupId)=0;//群聊是否存在
+    virtual bool isMember(const std::string& groupId,const std::string&accountId);//成员是否在群
     virtual RepoResult addMember(const std::string& groupId,const std::string& accountId,uint8_t role)=0;//用户入群时保存群成员关系
     virtual RepoResult removeMember(const std::string& groupId,const std::string& accountId)=0;//主动退群或群主踢人删除关系
     virtual RepoValueResult<uint8_t> getMemberRole(const std::string&groupId,const std::string& accountId)=0;//获取成员角色

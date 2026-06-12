@@ -46,6 +46,24 @@ bool storage::SqlGroupRepo::groupExists(const std::string& groupId){
     }
     return false;
 }
+bool storage::SqlGroupRepo::isMember(const std::string& groupId,const std::string& accountId){
+    if(groupId.empty()||accountId.empty()){
+        return false;
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return false;
+    }
+
+    auto result=conn->queryPrepared("SELECT id FROM group_members WHERE group_id=? AND account_id=? LIMIT 1",{groupId,accountId});
+    if(!result.ok()){
+        return false;
+    }
+    if(result.rows.empty()){
+        return false;
+    }
+    return true;
+}
 
 storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,const std::string& accountId,uint8_t role){
     if(groupId.empty()){

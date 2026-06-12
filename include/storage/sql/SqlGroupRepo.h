@@ -14,6 +14,7 @@ public:
     explicit SqlGroupRepo(std::shared_ptr<SqlConnectionPool> pool);
     RepoResult createGroup(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId) override;
     bool groupExists(const std::string& groupId) override;
+    bool isMember(const std::string& groupId,const std::string&accountId)override;
     RepoResult addMember(const std::string& groupId,const std::string& accountId,uint8_t role) override;
     RepoValueResult<uint8_t> getMemberRole(const std::string&groupId,const std::string& accountId)override;//获取成员角色
     RepoResult updateMemberRole(const std::string& groupId,const std::string& accountId,uint8_t role)override;//设置，取消管理员
