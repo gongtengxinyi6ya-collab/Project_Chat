@@ -4,6 +4,7 @@
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlTransaction.h"
 #include <unordered_set>
+#include <stdexcept>
 storage::SqlGroupRepo::SqlGroupRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
@@ -113,10 +114,46 @@ storage::RepoResult storage::SqlGroupRepo::updateMemberRole(const std::string& g
     return {.status=RepoStatus::Ok};
 }
 storage::RepoResult storage::SqlGroupRepo::transferOwner(const std::string& groupId,const std::string& oldOwner,const std::string& newOwner){
-
-}
-std::vector<storage::GroupRepo::GroupMemberRecord> storage::SqlGroupRepo::listMemberRecords(const std::string& groupId){
-
+    if(groupId.empty()||oldOwner.empty()||newOwner.empty()){
+        return {.status=RepoStatus::InvalidArgument,.message="invaild argument"};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+    //开启事务：更新群群主，还需要同步更新群成员表中角色
+    try{
+        SqlTransaction transation(*conn);
+        //更新chat_groups中群的群主
+        auto result1=conn->executePrepared("UPDATE chat_groups SET owner=? WHERE group_id=? AND owner=?",{newOwner,groupId,oldOwner});
+        if(!result1.ok()){
+            return {.status=RepoStatus::SqlError,.message=result1.error};
+        }
+        if(result1.affectedRows==0){
+            return {.status=RepoStatus::NotFound,.message="Not found"};
+        }
+        //更新group_members 新群主角色
+        auto result2=conn->executePrepared("UPDATE group_members SET role=2 WHERE group_id=? AND account_id=?",{groupId,newOwner});
+        if(!result2.ok()){
+            return {.status=RepoStatus::SqlError,.message=result2.error};
+        }
+        if(result2.affectedRows==0){
+            return {.status=RepoStatus::NotFound,.message="Not found"};
+        }
+        //更新旧群主角色
+        auto result3=conn->executePrepared("UPDATE group_members SET role=0 WHERE group_id=? AND account_id=?",{groupId,oldOwner});
+        if(!result3.ok()){
+            return {.status=RepoStatus::SqlError,.message=result3.error};
+        }
+        if(result3.affectedRows==0){
+            return {.status=RepoStatus::NotFound,.message="Not found"};
+        }
+        transation.commit();
+        return {.status=RepoStatus::Ok};
+    }catch(const std::exception& e){
+        return {.status=RepoStatus::Internal,.message=e.what()};
+    }
+    
 }
     
 
@@ -152,23 +189,30 @@ std::vector<storage::GroupRepo::GroupMemberRecord> storage::SqlGroupRepo::listMe
         return {};
     }
     auto conn=pool_->acquire();
-    if(!conn){
+    if(!conn||!conn->connected()){
         return {};
     }
-    if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT account_id FROM group_members WHERE group_id=?",{groupId});
-        if(result.ok()){
-            std::vector<std::string> members;
-            for(const auto& row:result.rows){
-                auto accountIdIt=row.find("account_id");
-                if(accountIdIt!=row.end()){
-                    members.emplace_back(accountIdIt->second);
-                }
-            }
-            return ;
-        }
+    const std::string sql=R"(
+    SELECT group_id, account_id, role, UNIX_TIMESTAMP(joined_at) * 1000 AS joined_at_ms
+    FROM group_members
+    WHERE group_id = ?
+    ORDER BY role DESC, joined_at ASC;
+    )";
+    auto result=conn->queryPrepared(sql,{groupId});
+    if(!result.ok()){
+        return {};
     }
-    return {};
+    
+    std::vector<GroupRepo::GroupMemberRecord> members;
+    for(const auto& row:result.rows){
+        GroupRepo::GroupMemberRecord member;
+        member.accountId=getString(row,"account_id");
+        member.groupId=getString(row,"group_id");
+        member.role=static_cast<uint8_t>(getUInt64(row,"role"));
+        member.joinedAtMs=getUInt64(row,"joined_at_ms");
+        members.emplace_back(std::move(member));
+    }
+    return members;
 }
 std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups(){
     auto conn=pool_->acquire();
