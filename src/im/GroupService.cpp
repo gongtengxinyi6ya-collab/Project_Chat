@@ -21,10 +21,10 @@ storage::RepoResult im::GroupService::kickMember(const std::string& groupId,cons
         return {.status=storage::RepoStatus::NotFound,.message="Group is not exist"};
     }
     if(!groupRepo_->isMember(groupId,targetAccountId)||!groupRepo_->isMember(groupId,operatorAccountId)){
-        return {.status=storage::RepoStatus::NotFound,.message="Member is not in the group"};
+        return {.status=storage::RepoStatus::TargetNotInGroup,.message="Member is not in the group"};
     }
     if(!groupManager_.canManageMember(groupId,operatorAccountId,targetAccountId)){
-        return {.status=storage::RepoStatus::Forbidden,.message="not authority to kick the member"};
+        return {.status=storage::RepoStatus::NoPermission,.message="not authority to kick the member"};
     }
     auto result=groupRepo_->removeMember(groupId,targetAccountId);
     if(!result.ok()){
@@ -44,7 +44,15 @@ storage::RepoResult im::GroupService::setAdmin(const std::string& groupId,const 
     if(!roleOfOperator.ok()||!roleOfOperator.value){
         return {.status=roleOfOperator.status,.message=roleOfOperator.message};
     }
-    if(roleOfOperator.value.value())
+    //确定群主在操作
+    if(static_cast<GroupRole>(roleOfOperator.value.value())!=GroupRole::Owner){
+        return {.status=storage::RepoStatus::NoPermission,.message="Only the owener can set admin"};
+    }
+    //群主不能设置自己为管理员
+    if(operatorAccountId==targetAccountId){
+        return {.status=storage::RepoStatus::InvalidGroupRole,.message="Can not set the owner to admin"}
+    }
+
 }
 storage::RepoResult im::GroupService::transferOwner(const std::string& groupId,const std::string& oldOwner,const std::string&newOwner){
 

@@ -15,6 +15,11 @@ enum class RepoStatus{
     AlreadyHandled,//申请已经处理
     Forbidden,//无权处理申请
     NotFriends,//不存在有效好友关系
+    NoPermission,//操作者没有管理权限
+    TargetNotInGroup,//目标用户不在群
+    OwnerCannotLeave,//群主无法直接退群
+    OwnerCannotBeKicked,//群主不能被踢
+    InvalidGroupRole,//设置角色非法
     Internal,//内部未知错误
 };
 
