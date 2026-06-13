@@ -22,7 +22,7 @@ storage::RepoResult storage::MemoryGroupRepo::createGroup(const std::string& gro
     }
     return result;
 }
-storage::RepoResult storage::MemoryGroupRepo::addMember(const std::string&groupId,const std::string& username){
+storage::RepoResult storage::MemoryGroupRepo::addMember(const std::string&groupId,const std::string& username,uint8_t role){
     RepoResult result;
     std::lock_guard lk(mutex_);
     auto it=groups_.find(groupId);
@@ -53,21 +53,19 @@ storage::RepoResult storage::MemoryGroupRepo::removeMember(const std::string& gr
     result.status=RepoStatus::NotFound;
     return result;
 }
-std::vector<std::string> storage::MemoryGroupRepo::listMembers(const std::string& groupId){
-    std::lock_guard lk(mutex_);
-    if(!groupExists(groupId)){
-        return {};
-    }
-    std::vector<std::string> members;
-    auto it=groups_.find(groupId);
-    members.insert(members.end(),it->second.members.begin(),it->second.members.end());
-    return members;
-}
+
 bool storage::MemoryGroupRepo::groupExists(const std::string&groupId){
     auto it=groups_.find(groupId);
     return it!=groups_.end();
 }
-std::vector<storage::GroupRepo::GroupSnapshot> storage::MemoryGroupRepo::listGroups(){
+bool storage::MemoryGroupRepo::isMember(const std::string& groupId,const std::string& accountId){
+    auto it=groups_.find(groupId);
+    if(it==groups_.end()){
+        return false;
+    }
+    return it->second.members.count(accountId);
+}
+std::vector<storage::GroupSnapshot> storage::MemoryGroupRepo::listGroups(){
     std::lock_guard lk(mutex_);
     if(!groups_.empty()){
         std::vector<GroupSnapshot> groupsBasicMess;
@@ -82,6 +80,23 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::MemoryGroupRepo::listGro
     }
     return {};
 }
-std::vector<storage::GroupRepo::GroupSnapshot> storage::MemoryGroupRepo::findGroupsByIds([[maybe_unused]]const std::vector<std::string>& groupIds){
+std::vector<storage::GroupSnapshot> storage::MemoryGroupRepo::findGroupsByIds([[maybe_unused]]const std::vector<std::string>& groupIds){
     return {GroupSnapshot{}};
+}
+
+//空实现其他方法
+storage::RepoValueResult<uint8_t> storage::MemoryGroupRepo::getMemberRole(const std::string&groupId,const std::string& accountId){
+    return RepoValueResult<uint8_t>{.status=RepoStatus::Ok,.value=0};
+}
+storage::RepoResult storage::MemoryGroupRepo::updateMemberRole(const std::string& groupId,const std::string& accountId,uint8_t role){
+    return RepoResult{.status=RepoStatus::Ok};
+}
+storage::RepoResult storage::MemoryGroupRepo::transferOwner(const std::string& groupId,const std::string& oldOwner,const std::string& newOwner){
+    return RepoResult{.status=RepoStatus::Ok};
+}
+std::vector<storage::GroupMemberRecord> storage::MemoryGroupRepo::listMemberRecords(const std::string& groupId){
+    return {};
+}
+storage::RepoResult storage::MemoryGroupRepo::createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId){
+    return createGroup(groupId,groupName,ownerAccountId);
 }

@@ -15,12 +15,19 @@ struct GroupRecord{
     std::string owner;
     std::unordered_set<std::string> members;
 };
-    storage::RepoResult createGroup(const std::string& groupId,const std::string& groupName,const std::string& owner)override;//创建微信群聊
-    bool groupExists(const std::string& groupId)override;//群聊是否存在
-    storage::RepoResult addMember(const std::string& groupId,const std::string& username)override;//用户入群时保存群成员关系
-    storage::RepoResult removeMember(const std::string& groupId,const std::string& username)override;//主动退群或群主踢人删除关系
-    std::vector<std::string> listMembers(const std::string& groupId)override;//服务重建时恢复时可重建GroupManager
-    std::vector<GroupSnapshot> listGroups()override;//读取所有群基础信息
+    RepoResult createGroup(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId) override;
+    bool groupExists(const std::string& groupId) override;
+    bool isMember(const std::string& groupId,const std::string&accountId)override;
+    RepoResult addMember(const std::string& groupId,const std::string& accountId,uint8_t role) override;
+    RepoValueResult<uint8_t> getMemberRole(const std::string&groupId,const std::string& accountId)override;//获取成员角色
+    RepoResult updateMemberRole(const std::string& groupId,const std::string& accountId,uint8_t role)override;//设置，取消管理员
+    RepoResult transferOwner(const std::string& groupId,const std::string& oldOwner,const std::string& newOwner)override;//转移群主身份
+    std::vector<GroupMemberRecord> listMemberRecords(const std::string& groupId)override;//获取成员列表
+    
+    RepoResult removeMember(const std::string& groupId,const std::string& accountId) override;
+    
+    std::vector<GroupSnapshot> listGroups()override;
+    RepoResult createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId);//
     std::vector<GroupSnapshot> findGroupsByIds(const std::vector<std::string>& groupIds)override;//根据多个groupId查询群基础信息，用于会话列表展示
 private:
     std::unordered_map<std::string,GroupRecord> groups_;//groupId映射GroupRecord
