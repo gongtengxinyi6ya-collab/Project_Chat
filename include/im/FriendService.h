@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <optional>
+#include <vector>
 #include "storage/RepoValueResult.h"
 #include "storage/types/UserTypes.h"
 #include "storage/types/FriendTypes.h"

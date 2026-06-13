@@ -2,8 +2,8 @@
 #include <string>
 #include <cstdint>
 #include <vector>
-#include "storage/ConversationRepo.h"
-#include "storage/OfflineMessageRepo.h"
+#include "storage/types/ConversationTypes.h"
+#include "storage/types/MessageTypes.h"
 #include "third_party/json.hpp"
 namespace im{
 struct SyncCursor{//客户端某个会话的本地同步游标
