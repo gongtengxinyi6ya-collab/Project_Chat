@@ -5,25 +5,11 @@
 #include <vector>
 #include "storage/RepoResult.h"
 #include "storage/RepoValueResult.h"
+#include "storage/types/FriendTypes.h"
 /*
 好友申请存储抽象：提供创建申请，同意，拒绝申请等接口*/
 namespace storage{
 class SqlConnection;
-enum class FriendRequestStatus{//好友申请状态枚举
-    Pending,//等待处理
-    Accepted,//已同意
-    Rejected,//已拒绝
-    Cancelled//取消申请
-};
-
-struct FriendRequest{
-    uint64_t requestId{0};//申请唯一编号
-    std::string requestAccountId{};//发起人账号
-    std::string receiveAccountId{};//接收人账号
-    FriendRequestStatus status{FriendRequestStatus::Pending};//当前状态
-    int64_t createdAtMs{};//创建时间
-    std::optional<int64_t> handledAtMs{};//处理时间
-};
 
 class FriendRequestRepo{
 public:
@@ -34,18 +20,4 @@ public:
     virtual RepoValueResult<FriendRequest> acceptPendingAndCreateFriendPair(uint64_t requestId,const std::string& receiver,int64_t nowMs)=0;//事务内同意申请并建立好友关系
 };
 
-inline FriendRequestStatus friendRequestStatusFromInt(int v){
-    switch(v){
-        case 0:
-            return FriendRequestStatus::Pending;
-        case 1:
-            return FriendRequestStatus::Accepted;
-        case 2:
-            return FriendRequestStatus::Rejected;
-        case 3:
-            return FriendRequestStatus::Cancelled;
-        default:
-            return FriendRequestStatus::Pending;//默认返回待处理
-    }
-}
 }

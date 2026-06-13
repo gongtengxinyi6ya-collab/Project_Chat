@@ -30,7 +30,7 @@ storage::SaveMessageResult storage::SqlMessageRepo::saveGroupMessage(uint64_t ms
     }
     return SaveMessageResult{.status=RepoStatus::SqlError,.message="Failed to connect to the database"};
 }
-std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
+std::vector<storage::MessageRecord> storage::SqlMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
     if(groupId.empty()){
         return {};
     }
@@ -84,7 +84,7 @@ storage::SaveMessageResult storage::SqlMessageRepo::saveDirectMessage(uint64_t m
     return {.status=RepoStatus::Ok,.messageId=msgId};
 
 }
-std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
+std::vector<storage::DirectMessageRecord> storage::SqlMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
     if(conversationKey.empty()){
         return {};
     }
@@ -108,7 +108,7 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     if(result.rows.empty()){
         return {};
     }
-    std::vector<MessageRepo::DirectMessageRecord> messages;
+    std::vector<DirectMessageRecord> messages;
     for(auto& row:result.rows){
         DirectMessageRecord message;
         message.conversationKey=getString(row,"conversation_key");
@@ -123,7 +123,7 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     return messages;
 }
 
-std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::listDirectMessagesAfter(const std::string& conversationKey,uint64_t lastMsgId,size_t limit){
+std::vector<storage::DirectMessageRecord> storage::SqlMessageRepo::listDirectMessagesAfter(const std::string& conversationKey,uint64_t lastMsgId,size_t limit){
     if(conversationKey.empty()){
         return {};
     }
@@ -145,7 +145,7 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     if(result.rows.empty()){
         return {};
     }
-    std::vector<MessageRepo::DirectMessageRecord> messages;
+    std::vector<DirectMessageRecord> messages;
     for(auto& row:result.rows){
         DirectMessageRecord message;
         message.conversationKey=getString(row,"conversation_key");
@@ -159,7 +159,7 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::SqlMessageRepo::
     }
     return messages;
 }
-std::vector<storage::MessageRepo::MessageRecord> storage::SqlMessageRepo::listGroupMessagesAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit){
+std::vector<storage::MessageRecord> storage::SqlMessageRepo::listGroupMessagesAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit){
     if(groupId.empty()){
         return {};
     }

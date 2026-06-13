@@ -166,7 +166,7 @@ void im::Imservice::loadFromRepositories(){
     size_t restoreGroups=0;//统计恢复群数量
     size_t restoreMembers=0;//统计恢复成员数量
     size_t failedGroups=0;//统计群成员恢复失败数量
-    std::vector<storage::GroupRepo::GroupSnapshot> groups=repos_.groupRepo->listGroups();
+    std::vector<storage::GroupSnapshot> groups=repos_.groupRepo->listGroups();
     for(const auto& group:groups){
         auto members=repos_.groupRepo->listMemberRecords(group.groupId);
         if(groupManager_.restoreGroup(group.groupId,group.groupName,group.ownerAccountId,members)){
@@ -387,7 +387,7 @@ im::Response im::Imservice::handleJoin(const im::Request & req,[[maybe_unused]]C
     }
     session.joinedGroupIds_.insert(groupId);
     if(hasRepositories()){
-        auto result=repos_.groupRepo->addMember(groupId,session.accountId_);
+        auto result=repos_.groupRepo->addMember(groupId,session.accountId_,0);
         if(result.status!=storage::RepoStatus::Ok&&result.status!=storage::RepoStatus::AlreadyExists){
 
             groupManager_.leaveGroup(groupId,session.accountId_);//回滚内存状态
@@ -503,8 +503,7 @@ im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_un
     //同步查成员账号资料
 
     auto membersJson=buildMemberProfileList(groupId.value());
-    return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId.value()},{"count",accountIds.size()},{"members",membersJson}});
-
+        return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId.value()},{"members",membersJson}});
 }
 
 im::Response im::Imservice::handleKickGroupMember(const Request& req, ConnKey key, Session& session){

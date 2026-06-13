@@ -3,24 +3,9 @@
 #include <cstdint>
 #include <vector>
 #include "storage/RepoResult.h"
-
+#include "storage/types/FriendTypes.h"
 /*抽象接口：负责持久化好友关系*/
 namespace storage{
-
-enum class FriendRelationStatus:uint8_t{//好友关系状态
-    Active=1,
-    Deleted=2
-
-};
-
-struct FriendRelation{
-    std::string accountId{};//关系所属账号
-    std::string friendAccountId{};//好友账号
-    int64_t createdAtMs{0};//添加好友时间
-    FriendRelationStatus status{FriendRelationStatus::Active};
-
-};
-
 class FriendRepo{
 public:
     virtual ~FriendRepo()=default;

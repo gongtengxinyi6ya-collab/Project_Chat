@@ -4,19 +4,9 @@
 #include <optional>
 #include "storage/RepoResult.h"
 #include <vector>
+#include "types/UserTypes.h"
 /*屏蔽资料数据具体存储实现*/
 namespace storage{
-/*数据库中用户的公开基础资料*/
-struct UserProfile{
-    uint64_t userId{0};//关联users.id的稳定主键
-    std::string accountId{};//对外唯一账号
-    std::string username{};//账号名称
-    std::string nickname{};//昵称
-    std::string avatarUrl{};//头像资源地址
-    std::string signature{};//个性签名
-    int64_t updateAtMs{0};//最近资料更新时间
-
-};
 
 class UserProfileRepo{
 public:
