@@ -4,7 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include "storage/RepoResult.h"
-#include "storage/ConversationRepo.h"
+#include "storage/types/ConversationTypes.h"
 
 /*消息确认服务：
 确认某些消息被客户端收到
@@ -12,8 +12,10 @@
 标记某个会话已读
 保证ACK，未读数，离线消息清理之间语义一致*/
 namespace storage{
+    //向前声明
     class MessageRepo;
     class OfflineMessageRepo;
+    class ConversationRepo;
 }
 namespace im{
 class MessageAckService{

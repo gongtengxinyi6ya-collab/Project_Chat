@@ -76,17 +76,17 @@ bool im::GroupManager::isMember(const std::string& groupId,const std::string& ac
 bool im::GroupManager::exists(const std::string& groupId)const{
     return groupsById_.count(groupId);
 }
-bool im::GroupManager::restoreGroup(const std::string& groupId,const std::string& groupName,const std::string&ownerAccountId,const std::vector<std::string>& members){
+bool im::GroupManager::restoreGroup(const std::string& groupId,const std::string& groupName,const std::string&ownerAccountId,const std::vector<storage::GroupMemberRecord>& members){
     if(groupId.empty()||groupName.empty()||ownerAccountId.empty()){
         return false;
     }
     if(!exists(groupId)){
         Group g(groupId,groupName,ownerAccountId);
         for(auto& member:members){
-            if(!g.addMember(member)){
+            if(!g.addMember(member.accountId,static_cast<GroupRole>(member.role))){
                 continue;
             }
-            accountIdGroups_[member].insert(groupId);//恢复成员成功时同步添加映射
+            accountIdGroups_[member.accountId].insert(groupId);//恢复成员成功时同步添加映射
         }
         groupsById_.emplace(groupId,std::move(g));//同步保存群
     }

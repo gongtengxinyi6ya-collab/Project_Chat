@@ -65,7 +65,7 @@ std::vector<im::ConversationService::ConversationView> im::ConversationService::
     }
     
     //批量查询群资料
-    std::unordered_map<std::string,storage::GroupRepo::GroupSnapshot> groupSnapshotByGroupId;
+    std::unordered_map<std::string,storage::GroupSnapshot> groupSnapshotByGroupId;
     auto groupSnapshots=groupRepo_->findGroupsByIds(groupIds);
     for(const auto& groupSnapshot:groupSnapshots){
         groupSnapshotByGroupId.emplace(groupSnapshot.groupId,groupSnapshot);

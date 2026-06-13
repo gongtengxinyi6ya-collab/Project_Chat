@@ -339,9 +339,9 @@ im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string
     }
     decorate(push,msgId);//群推送消息也需要decorate添加msg_id和server_ts_ms等字段
     auto payload=encodeResponse(push);
-    const auto& users=groupManager_.members(groupId);//根据群id取成员用户名列表
+    const auto& users=groupManager_.memberInfos(groupId);//根据群id取成员用户名列表
     for(const auto& user:users){
-        const auto& keys=sessionManager_.connKeysByAccountId(user);
+        const auto& keys=sessionManager_.connKeysByAccountId(user.accountId);
         for(const auto& key:keys){
             if(key!=senderkey){
                 SendResult res=sendPush(key,payload);
@@ -407,6 +407,9 @@ im::Response im::Imservice::handleLeave(const im::Request& req,[[maybe_unused]]C
     if(auto errField=getStringField(req,"groupId",groupId)){
         return errField.value();
     }
+    if(groupManager_.isOwner(groupId,session.accountId_)){
+        return makeErr(req,ErrorCode::OWNER_CANNOT_LEAVE,"owner can not leave the group");
+    }
     QuitResult quitResult=groupManager_.leaveGroup(groupId,session.accountId_);
     if(quitResult==QuitResult::ERR_NO_SUCH_GROUP){
         return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"No such group");
@@ -469,8 +472,13 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     }
     //更新群聊会话列表
     if(conversationService_){
-        auto members=groupManager_.members(groupId.value());
-        auto conversationResult=conversationService_->recordGroupMessage(groupId.value(),members,session.accountId_,session.username_,msgId,content,serverTsMs);
+        auto memberInfos=groupManager_.memberInfos(groupId.value());
+        std::vector<std::string> memberAccountIds;
+        memberAccountIds.reserve(memberInfos.size());
+        for(const auto& memberInfo:memberInfos){
+            memberAccountIds.push_back(memberInfo.accountId);
+        }
+        auto conversationResult=conversationService_->recordGroupMessage(groupId.value(),memberAccountIds,session.accountId_,session.username_,msgId,content,serverTsMs);
         if(!conversationResult.ok()){
             LOG_WARN("Failed to update group conversation");
         }
@@ -1023,7 +1031,7 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
         return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not avaiable");
     }
     //分支查询
-    std::vector<storage::MessageRepo::DirectMessageRecord> result;
+    std::vector<storage::DirectMessageRecord> result;
     if(lastMsgId>0){
         result=repos_.messageRepo->listDirectMessagesAfter(conversationKey,lastMsgId,limit);
     }
@@ -1051,15 +1059,15 @@ void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const 
     if(!repos_.offlineMessageRepo){
         return;
     }
-    auto members=groupManager_.members(groupId);//获取群成员
+    auto members=groupManager_.memberInfos(groupId);//获取群成员
     for(auto member:members){
-        if(member!=fromAccountId){//跳过发送者
-            auto keys=sessionManager_.connKeysByAccountId(member);
+        if(member.accountId!=fromAccountId){//跳过发送者
+            auto keys=sessionManager_.connKeysByAccountId(member.accountId);
             if(keys.empty()){
                 //用户各端都不在线
-                auto result=repos_.offlineMessageRepo->saveOfflineMessage(member,msgId,groupId);
+                auto result=repos_.offlineMessageRepo->saveOfflineMessage(member.accountId,msgId,groupId);
                 if(!result.ok()){
-                    LOG_WARN("Failed to save offlineMessage for"+member);
+                    LOG_WARN("Failed to save offlineMessage for"+member.accountId);
                 }
             }
         }

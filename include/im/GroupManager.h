@@ -6,7 +6,7 @@
 #include <optional>
 #include <atomic>
 #include "im/Group.h"
-
+#include "storage/types/GroupTypes.h"
 //群关系管理器
 namespace im{
 enum class JoinResult{
@@ -33,7 +33,7 @@ public:
     std::vector<std::string> groupsOfUser(const std::string& accountId)const;//取用户加入的所有群
     bool isMember(const std::string& groupId,const std::string& accountId) const;//群存在且成员包含user
     bool exists(const std::string& groupId)const;//group是否存在
-    bool restoreGroup(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId,const std::vector<std::string>& members);//启动时恢复群对象和成员集合
+    bool restoreGroup(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId,const std::vector<storage::GroupMemberRecord>& members);//启动时恢复群对象和成员集合
     std::optional<GroupRole> roleOf(const std::string& groupId,const std::string&accountId)const;//
     bool isOwner(const std::string&groupId,const std::string& accountId)const;//判断是否为群主
     bool canManageMember(const std::string& groupId, const std::string& operatorAccountId, const std::string& targetAccountId) const;//管理权限判断

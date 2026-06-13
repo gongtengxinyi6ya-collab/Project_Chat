@@ -1,6 +1,7 @@
 #include "im/MessageAckService.h"
 #include "storage/MessageRepo.h"
 #include "storage/OfflineMessageRepo.h"
+#include "storage/ConversationRepo.h"
 #include <stdexcept>
 im::MessageAckService::MessageAckService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo,std::shared_ptr<storage::ConversationRepo> conversationRepo)
 :messageRepo_(std::move(messageRepo)),offlineMessageRepo_(std::move(offlineMessageRepo)),conversationRepo_(std::move(conversationRepo)){

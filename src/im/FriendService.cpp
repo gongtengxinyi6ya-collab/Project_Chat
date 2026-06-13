@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <unordered_map>
 #include "storage/FriendRequestRepo.h"
+#include "storage/UserProfileRepo.h"
 im::FriendService::FriendService(std::shared_ptr<storage::FriendRepo> friendRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo,std::shared_ptr<storage::FriendRequestRepo> friendRequestRepo)
 :friendRepo_(std::move(friendRepo)),userProfileRepo_(std::move(userProfileRepo)),friendRequestRepo_(std::move(friendRequestRepo)){
     if(!friendRepo_||!userProfileRepo_||!friendRequestRepo_){

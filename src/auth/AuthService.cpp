@@ -1,5 +1,8 @@
 #include "auth/AuthService.h"
 #include "auth/AccountIdGenerator.h"
+#include "storage/UserRepo.h"
+#include "storage/UserProfileRepo.h"
+#include "storage/UserSessionRepo.h"
 #include <stdexcept>
 #include <chrono>
 #include <cctype>

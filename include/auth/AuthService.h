@@ -5,11 +5,14 @@
 #include <cstdint>
 #include "security/PasswordHasher.h"
 #include "storage/RepoResult.h"
-#include "storage/UserRepo.h"
 #include "auth/AuthResult.h"
-#include "storage/UserSessionRepo.h"
+
 #include "security/TokenManager.h"
-#include "storage/UserProfileRepo.h"
+namespace storage{
+    class UserProfileRepo;
+    class UserSessionRepo;
+    class UserRepo;
+}
 /*AuthService:
 负责账号注册和登录*/
 namespace auth{

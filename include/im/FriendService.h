@@ -2,9 +2,9 @@
 #include <memory>
 #include <string>
 #include <optional>
-#include "storage/UserProfileRepo.h"
 #include "storage/RepoValueResult.h"
-#include "storage/FriendRequestRepo.h"
+#include "storage/types/UserTypes.h"
+#include "storage/types/FriendTypes.h"
 /*FriendService:连接存储层与IM协议层
 查询好友列表
 判断两人是否为好友关系
@@ -13,6 +13,7 @@
 namespace storage{
     class FriendRepo;
     class FriendRequestRepo;
+    class UserProfileRepo;
     
 }
 namespace im
