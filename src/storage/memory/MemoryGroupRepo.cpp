@@ -22,7 +22,7 @@ storage::RepoResult storage::MemoryGroupRepo::createGroup(const std::string& gro
     }
     return result;
 }
-storage::RepoResult storage::MemoryGroupRepo::addMember(const std::string&groupId,const std::string& username,uint8_t role){
+storage::RepoResult storage::MemoryGroupRepo::addMember(const std::string&groupId,const std::string& username,[[maybe_unused]]uint8_t role){
     RepoResult result;
     std::lock_guard lk(mutex_);
     auto it=groups_.find(groupId);
@@ -85,18 +85,18 @@ std::vector<storage::GroupSnapshot> storage::MemoryGroupRepo::findGroupsByIds([[
 }
 
 //空实现其他方法
-storage::RepoValueResult<uint8_t> storage::MemoryGroupRepo::getMemberRole(const std::string&groupId,const std::string& accountId){
+storage::RepoValueResult<uint8_t> storage::MemoryGroupRepo::getMemberRole([[maybe_unused]]const std::string&groupId,[[maybe_unused]]const std::string& accountId){
     return RepoValueResult<uint8_t>{.status=RepoStatus::Ok,.value=0};
 }
-storage::RepoResult storage::MemoryGroupRepo::updateMemberRole(const std::string& groupId,const std::string& accountId,uint8_t role){
+storage::RepoResult storage::MemoryGroupRepo::updateMemberRole([[maybe_unused]]const std::string& groupId,[[maybe_unused]]const std::string& accountId,[[maybe_unused]]uint8_t role){
     return RepoResult{.status=RepoStatus::Ok};
 }
-storage::RepoResult storage::MemoryGroupRepo::transferOwner(const std::string& groupId,const std::string& oldOwner,const std::string& newOwner){
+storage::RepoResult storage::MemoryGroupRepo::transferOwner([[maybe_unused]]const std::string& groupId,[[maybe_unused]]const std::string& oldOwner,[[maybe_unused]]const std::string& newOwner){
     return RepoResult{.status=RepoStatus::Ok};
 }
-std::vector<storage::GroupMemberRecord> storage::MemoryGroupRepo::listMemberRecords(const std::string& groupId){
+std::vector<storage::GroupMemberRecord> storage::MemoryGroupRepo::listMemberRecords([[maybe_unused]]const std::string& groupId){
     return {};
 }
-storage::RepoResult storage::MemoryGroupRepo::createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId){
+storage::RepoResult storage::MemoryGroupRepo::createGroupWithOwner([[maybe_unused]]const std::string& groupId,[[maybe_unused]]const std::string& groupName,[[maybe_unused]]const std::string& ownerAccountId){
     return createGroup(groupId,groupName,ownerAccountId);
 }

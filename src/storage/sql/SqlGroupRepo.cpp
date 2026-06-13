@@ -122,7 +122,7 @@ storage::RepoResult storage::SqlGroupRepo::updateMemberRole(const std::string& g
     if(!conn||!conn->connected()){
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
-    auto result=conn->executePrepared("UPDATE group_members SET role=? WHERE group_id=? AND account_id=?",{groupId,accountId});
+    auto result=conn->executePrepared("UPDATE group_members SET role=? WHERE group_id=? AND account_id=?",{static_cast<uint64_t>(role),groupId,accountId});
     if(!result.ok()){
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
@@ -202,7 +202,7 @@ storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& group
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
 }
-std::vector<storage::GroupRepo::GroupMemberRecord> storage::SqlGroupRepo::listMemberRecords(const std::string& groupId){
+std::vector<storage::GroupMemberRecord> storage::SqlGroupRepo::listMemberRecords(const std::string& groupId){
     if(groupId.empty()){
         return {};
     }
@@ -221,9 +221,9 @@ std::vector<storage::GroupRepo::GroupMemberRecord> storage::SqlGroupRepo::listMe
         return {};
     }
     
-    std::vector<GroupRepo::GroupMemberRecord> members;
+    std::vector<GroupMemberRecord> members;
     for(const auto& row:result.rows){
-        GroupRepo::GroupMemberRecord member;
+       GroupMemberRecord member;
         member.accountId=getString(row,"account_id");
         member.groupId=getString(row,"group_id");
         member.role=static_cast<uint8_t>(getUInt64(row,"role"));
@@ -232,7 +232,7 @@ std::vector<storage::GroupRepo::GroupMemberRecord> storage::SqlGroupRepo::listMe
     }
     return members;
 }
-std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups(){
+std::vector<storage::GroupSnapshot> storage::SqlGroupRepo::listGroups(){
     auto conn=pool_->acquire();
     if(!conn){
         return {};
@@ -256,7 +256,7 @@ std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::listGroups
     }
     return {};
 }
-std::vector<storage::GroupRepo::GroupSnapshot> storage::SqlGroupRepo::findGroupsByIds(const std::vector<std::string>& groupIds){
+std::vector<storage::GroupSnapshot> storage::SqlGroupRepo::findGroupsByIds(const std::vector<std::string>& groupIds){
     if(groupIds.empty()){
         return {};
     }
@@ -323,7 +323,7 @@ storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::strin
 
         }
         //插入群主成员
-        auto result2=conn->executePrepared("INSERT INTO group_members(group_id,account_id) VALUES(?,?)",{groupId,ownerAccountId});
+        auto result2=conn->executePrepared("INSERT INTO group_members(group_id,account_id,role) VALUES(?,?,2)",{groupId,ownerAccountId});
         if(result1.ok()&&result2.ok()){
             tx.commit();
             return RepoResult{.status=RepoStatus::Ok};

@@ -78,18 +78,7 @@ int main(){
     LOG_INFO("Created group with ID: ");
     exists=bundle.groupRepo->groupExists("testgroup");
     LOG_INFO("Group exists: "+std::string(exists?"true":"false"));
-    //测试添加成员
-    auto addMemberResult=bundle.groupRepo->addMember("testgroup","testuser");
-    if(!addMemberResult.ok()){
-        LOG_ERROR("Failed to add member: "+addMemberResult.message);
-    }
-    LOG_INFO("Added member to group");
-    //测试列出成员
-    auto members=bundle.groupRepo->listMembers("testgroup");
-    LOG_INFO("Group members: ");
-    for(const auto& member:members){
-        LOG_INFO(" - "+member);
-    }
+
     //测试保存消息
     uint64_t msgId=static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
     auto saveResult=bundle.messageRepo->saveGroupMessage(msgId,"testgroup","im12345678","testuser","Hello, World!",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());

@@ -539,14 +539,14 @@ im::Response im::Imservice::handleKickGroupMember(const Request& req, [[maybe_un
     if(!groupService_){
         return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
     }
-    auto result=groupService_->kickMember(groupId,session.accountId_,targetAccountId);
-    if(!result.ok()){
-        return makeRepoError(req,result.status,result.message);
+    auto resultKick=groupService_->kickMember(groupId,session.accountId_,targetAccountId);
+    if(!resultKick.ok()){
+        return makeRepoError(req,resultKick.status,resultKick.message);
     }
     //给被踢用户推送被踢事件
     im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="you have been kicked from the group",.data=nlohmann::json{{"evet","be kicked"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
     auto result=pushToAccount(targetAccountId,pushEvent);
-    if(!result.ok()){
+    if(!result.sent==0){
         LOG_WARN("Failed to push the event to the accountId:"+targetAccountId);
     }
     //给群内其他成员广播成员被踢出事件
@@ -589,13 +589,13 @@ im::Response im::Imservice::handleSetGroupAdmin(const Request& req, [[maybe_unus
     }
     //给目标账号推送管理员变更
     im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="group admin changed",.data=nlohmann::json{{"evet","group admin changed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId},{"enable",enable}}};
-    auto result=pushToAccount(targetAccountId,pushEvent);
-    if(!result.ok()){
+    auto resultPush=pushToAccount(targetAccountId,pushEvent);
+    if(!resultPush.sent==0){
         LOG_WARN("Failed to push the event to the accountId:"+targetAccountId);
     }
-    //给群内其他成员广播成员被踢出事件
+    //给群内其他成员广播成员管理员变更
     auto broastResult=broadcastToGroup(groupId,key,pushEvent);
-    return makeOk(req,MsgType::SET_GROUP_ADMIN_RESP);
+    return makeOk(req,MsgType::SET_GROUP_ADMIN_RESP,nlohmann::json{{"groupId",groupId},{"opertorAccountId",session.accountId_},{"targetAccountId",targetAccountId},{"enable",enable},{"sent",broastResult.sent},{"closed",broastResult.closed},{"noSuchCo",broastResult.noSuchConnection}});
 }
 im::Response im::Imservice::handleTransferGroupOwner(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
@@ -623,15 +623,15 @@ im::Response im::Imservice::handleTransferGroupOwner(const Request& req,[[maybe_
     if(!result.ok()){
         return makeRepoError(req,result.status,result.message);
     }
-    //给目标账号推送管理员变更
+    //给目标账号推送群主转让
     im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="group owner changed",.data=nlohmann::json{{"evet","group owner changed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
-    auto result=pushToAccount(targetAccountId,pushEvent);
-    if(!result.ok()){
+    auto resultPush=pushToAccount(targetAccountId,pushEvent);
+    if(!resultPush.sent==0){
         LOG_WARN("Failed to push the event to the accountId:"+targetAccountId);
     }
-    //给群内其他成员广播成员被踢出事件
+    //给群内其他成员广播群主转让
     auto broastResult=broadcastToGroup(groupId,key,pushEvent);
-    return makeOk(req,MsgType::SET_GROUP_ADMIN_RESP);
+    return makeOk(req,MsgType::TRANSFER_GROUP_OWNER_RESP,nlohmann::json{{"groupId",groupId},{"oldOwner",session.accountId_},{"newOwner",targetAccountId},{"sent",broastResult.sent},{"closed",broastResult.closed},{"noSuchCo",broastResult.noSuchConnection}});
 }
 
 std::optional<std::string> im::Imservice::usernameByKey(ConnKey key)const{

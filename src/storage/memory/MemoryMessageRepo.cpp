@@ -17,7 +17,7 @@ storage::SaveMessageResult storage::MemoryMessageRepo::saveGroupMessage(uint64_t
     }
     return {RepoStatus::Ok,record.messageId,""};
 }
-std::vector<storage::MessageRepo::MessageRecord> storage::MemoryMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
+std::vector<storage::MessageRecord> storage::MemoryMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
     if(groupId.empty()){
         return {};
     }
@@ -68,7 +68,7 @@ storage::SaveMessageResult storage::MemoryMessageRepo::saveDirectMessage(uint64_
     }
     return {RepoStatus::Ok,record.messageId,""};
 }
-std::vector<storage::MessageRepo::DirectMessageRecord> storage::MemoryMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
+std::vector<storage::DirectMessageRecord> storage::MemoryMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
     if(conversationKey.empty()){
         return {};
     }
@@ -112,16 +112,16 @@ std::vector<storage::MessageRepo::DirectMessageRecord> storage::MemoryMessageRep
     }
     return res;
 }
-std::vector<storage::MessageRepo::DirectMessageRecord> storage::MemoryMessageRepo::listDirectMessagesAfter([[maybe_unused]]const std::string& conversationKey,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
+std::vector<storage::DirectMessageRecord> storage::MemoryMessageRepo::listDirectMessagesAfter([[maybe_unused]]const std::string& conversationKey,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
     return {};
 }
-std::vector<storage::MessageRepo::MessageRecord> storage::MemoryMessageRepo::listGroupMessagesAfter([[maybe_unused]]const std::string& groupId,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
+std::vector<storage::MessageRecord> storage::MemoryMessageRepo::listGroupMessagesAfter([[maybe_unused]]const std::string& groupId,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
     return {};
 }
-storage::RepoResult storage::MemoryMessageRepo::markDelivered(const std::string&accountId,const std::vector<uint64_t>& msgIds,int64_t deliveredAtMs){
+storage::RepoResult storage::MemoryMessageRepo::markDelivered([[maybe_unused]]const std::string&accountId,[[maybe_unused]]const std::vector<uint64_t>& msgIds,[[maybe_unused]]int64_t deliveredAtMs){
     return RepoResult{};
 }
-storage::RepoResult storage::MemoryMessageRepo::markReadBefore(const std::string&accountId,ConversationType type,const std::string& targetId,uint64_t readMsgId,int64_t readAtMs){
+storage::RepoResult storage::MemoryMessageRepo::markReadBefore([[maybe_unused]]const std::string&accountId,[[maybe_unused]]ConversationType type,[[maybe_unused]]const std::string& targetId,[[maybe_unused]]uint64_t readMsgId,[[maybe_unused]]int64_t readAtMs){
     return RepoResult{};
 }
     
