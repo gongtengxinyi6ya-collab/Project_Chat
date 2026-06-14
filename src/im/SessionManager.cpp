@@ -79,3 +79,15 @@ void im::SessionManager::erase(ConnKey key){
         sessions_.erase(key);
     }
 }
+
+void im::SessionManager::removeJoinedGroup(const std::string& accountId,const std::string& groupId){
+    //根据账号获取所有在线连接
+    auto keys=connKeysByAccountId(accountId);
+    for(const auto& key:keys){
+        //遍历所有key找到对应session
+        auto it=sessions_.find(key);
+        if(it!=sessions_.end()){
+            it->second.joinedGroupIds_.erase(groupId);
+        }
+    }
+}

@@ -19,20 +19,39 @@ storage::RepoResult im::GroupService::kickMember(const std::string& groupId,cons
     if(!groupRepo_){
         return {.status=storage::RepoStatus::Internal,.message="groupRepo is not avaiable"};
     }
+    //确认群存在
     if(!groupRepo_->groupExists(groupId)){
         return {.status=storage::RepoStatus::NotFound,.message="Group is not exist"};
     }
+    //确认群成员在群内
     if(!groupRepo_->isMember(groupId,targetAccountId)||!groupRepo_->isMember(groupId,operatorAccountId)){
         return {.status=storage::RepoStatus::TargetNotInGroup,.message="Member is not in the group"};
     }
-    if(!groupManager_.canManageMember(groupId,operatorAccountId,targetAccountId)){
+    //判断权限
+    auto roleOfoperator=groupRepo_->getMemberRole(groupId,operatorAccountId);
+    if(!roleOfoperator.ok()||!roleOfoperator.value.has_value()){
+        return {.status=roleOfoperator.status,.message=roleOfoperator.message};
+    }
+    auto roleOfTarget=groupRepo_->getMemberRole(groupId,targetAccountId);
+    if(!roleOfTarget.ok()||!roleOfTarget.value.has_value()){
+        return {.status=roleOfTarget.status,.message=roleOfTarget.message};
+    }
+    if(roleFromUint(roleOfoperator.value.value())!=GroupRole::Owner||!(roleFromUint(roleOfoperator.value.value())==GroupRole::Admin&&roleFromUint(roleOfTarget.value.value())==GroupRole::Member)){
         return {.status=storage::RepoStatus::NoPermission,.message="not authority to kick the member"};
     }
     auto result=groupRepo_->removeMember(groupId,targetAccountId);
     if(!result.ok()){
         return result;
     }
-    groupManager_.leaveGroup(groupId,targetAccountId);
+    //同步更新内存
+    if(!groupManager_.removeMember(groupId,targetAccountId)){//内存踢出成员失败
+        LOG_ERROR("GroupManager remove member failed, reload group: " + groupId);
+        //更新内存
+        auto reloadResult=reloadroup(groupId);
+        if(!reloadResult.ok()){
+            LOG_ERROR("reloadGroup failed: " + reloadResult.message);
+        }
+    }
     return {.status=storage::RepoStatus::Ok};
 }
 storage::RepoResult im::GroupService::setAdmin(const std::string& groupId,const std::string& operatorAccountId,const std::string&targetAccountId,bool enable){
@@ -65,7 +84,12 @@ storage::RepoResult im::GroupService::setAdmin(const std::string& groupId,const 
             return  {.status=result.status,.message=result.message};
         }
         if(!groupManager_.setMemberRole(groupId,targetAccountId,GroupRole::Admin)){
-             LOG_WARN("failed to sync group owner transfer");
+            LOG_ERROR("GroupManager ser member role failed, reload group: " + groupId);
+            //更新内存
+            auto reloadResult=reloadroup(groupId);
+            if(!reloadResult.ok()){
+                LOG_ERROR("reloadGroup failed: " + reloadResult.message);
+            }
         }
     }
     else{
@@ -74,7 +98,12 @@ storage::RepoResult im::GroupService::setAdmin(const std::string& groupId,const 
             return  result;
         }
         if(!groupManager_.setMemberRole(groupId,targetAccountId,GroupRole::Member)){
-            LOG_WARN("failed to sync group owner transfer");
+            LOG_ERROR("GroupManager ser member role failed, reload group: " + groupId);
+            //更新内存
+            auto reloadResult=reloadroup(groupId);
+            if(!reloadResult.ok()){
+                LOG_ERROR("reloadGroup failed: " + reloadResult.message);
+            }
     }
     }
    
@@ -109,7 +138,12 @@ storage::RepoResult im::GroupService::transferOwner(const std::string& groupId,c
         return result;
     }
     if(!groupManager_.transferOwner(groupId,oldOwner,newOwner)){
-        LOG_WARN("failed to sync group owner transfer");
+        LOG_ERROR("GroupManager transfer owner failed, reload group: " + groupId);
+        //更新内存
+        auto reloadResult=reloadroup(groupId);
+        if(!reloadResult.ok()){
+            LOG_ERROR("reloadGroup failed: " + reloadResult.message);
+        }
     }
     return {.status=storage::RepoStatus::Ok};
 }
@@ -144,5 +178,29 @@ std::vector<im::GroupMemberView> im::GroupService::listMemberViews(const std::st
         }
     }
     return views;
+
+}
+
+storage::RepoResult im::GroupService::reloadroup(const std::string& groupId){
+    if(groupId.empty()){
+        return {.status=storage::RepoStatus::InvalidArgument};
+    }
+    if(!groupRepo_){
+        return {.status=storage::RepoStatus::Internal,.message="groupRepo is not avaiable"};
+    }
+    std::vector<std::string> groupIds;
+    groupIds.push_back(groupId);
+    auto result=groupRepo_->findGroupsByIds(groupIds);
+    if(result.empty()){
+        //查询数据库发现为空，则同步删除内存
+        groupManager_.removeGroup(groupId);
+        return {.status=storage::RepoStatus::NotFound,.message="groupId not found"};
+    }
+    auto members=groupRepo_->listMemberRecords(groupId);
+    auto group=result.front();
+    if(!groupManager_.restoreGroup(group.groupId,group.groupName,group.ownerAccountId,members)){
+        return {.status = storage::RepoStatus::Internal,.message = "failed to restore group into memory"};
+    }
+    return {.status=storage::RepoStatus::Ok};
 
 }

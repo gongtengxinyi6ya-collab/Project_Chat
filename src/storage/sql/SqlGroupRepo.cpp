@@ -118,6 +118,9 @@ storage::RepoResult storage::SqlGroupRepo::updateMemberRole(const std::string& g
     if(accountId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
     }
+    if(role>2){
+        return RepoResult{.status=RepoStatus::InvalidArgument,.message="role is invaild"};
+    }
     auto conn=pool_->acquire();
     if(!conn||!conn->connected()){
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
@@ -127,6 +130,9 @@ storage::RepoResult storage::SqlGroupRepo::updateMemberRole(const std::string& g
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
     if(result.affectedRows==0){
+        if(isMember(groupId,accountId)){//重复设置幂等成功
+            return {.status=RepoStatus::Ok};
+        }
         return {.status=RepoStatus::NotFound,.message="not found"};
     }
     return {.status=RepoStatus::Ok};

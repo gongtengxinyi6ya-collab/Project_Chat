@@ -1,11 +1,12 @@
 #include "im/GroupManager.h"
+#include "logger/LogMacros.h"
 std::pair<bool,std::string> im::GroupManager::createGroup(const std::string& ownerAccountId,const std::string& name){
     if(ownerAccountId.empty()||name.empty()){
         return {false,""};
     }
     std::string groupId="Group"+std::to_string(nextGroupSeq_++);
     Group g(groupId,name,ownerAccountId);
-    if(!g.addMember(ownerAccountId)){
+    if(!g.addMember(ownerAccountId,GroupRole::Owner)){
         return {false,""};
     }
     auto [it, success] = groupsById_.emplace(groupId,std::move(g));
@@ -47,13 +48,41 @@ im::QuitResult im::GroupManager::leaveGroup(const std::string& groupId,const std
     
     return QuitResult::OK_LEFT;
 }
+
+bool im::GroupManager::removeMember(const std::string&groupId,const std::string& accountId){
+    if(groupId.empty()||accountId.empty()){
+        return false;
+    }
+    auto it=groupsById_.find(groupId);
+    if(it!=groupsById_.end()){
+        if(it->second.removeMember(accountId)){
+            auto userIt=accountIdGroups_.find(accountId);
+            if(userIt!=accountIdGroups_.end()){
+                accountIdGroups_[accountId].erase(groupId);
+                if(accountIdGroups_[accountId].empty()){
+                    accountIdGroups_.erase(accountId);
+                }
+            }
+            return true;
+        }
+    }
+    return false;
+}
 bool im::GroupManager::removeGroup(const std::string& groupId){
     auto it=groupsById_.find(groupId);
     if(it==groupsById_.end()){
         return false;
     }
-    if(it->second.memberCount()>0){
-        return false;
+    //删除账号到groupId的映射
+    auto memberInfos=it->second.members();
+    for(const auto& memberInfo:memberInfos){
+        auto accountIdIt=accountIdGroups_.find(memberInfo.first);
+        if(accountIdIt!=accountIdGroups_.end()){
+            accountIdIt->second.erase(groupId);
+        }
+        if(accountIdIt->second.empty()){
+            accountIdGroups_.erase(accountIdIt);
+        }
     }
     groupsById_.erase(it);
     return true;
@@ -80,16 +109,56 @@ bool im::GroupManager::restoreGroup(const std::string& groupId,const std::string
     if(groupId.empty()||groupName.empty()||ownerAccountId.empty()){
         return false;
     }
-    if(!exists(groupId)){
-        Group g(groupId,groupName,ownerAccountId);
-        for(auto& member:members){
-            if(!g.addMember(member.accountId,static_cast<GroupRole>(member.role))){
-                continue;
-            }
-            accountIdGroups_[member.accountId].insert(groupId);//恢复成员成功时同步添加映射
+    //重建群
+    Group g(groupId,groupName,ownerAccountId);
+    bool hasOwnerRecord=false;//保证恢复时有群主
+    for(const auto& member:members){
+        if(member.accountId.empty()){
+            continue;
         }
-        groupsById_.emplace(groupId,std::move(g));//同步保存群
+        //校验role
+        auto roleOpt=roleFromUint(member.role);
+        if(!roleOpt.has_value()){
+            LOG_ERROR("restoreGroup failed: invalid member role of"+member.accountId);
+            return false;
+        }
+        auto role=roleOpt.value();
+        if(member.accountId==ownerAccountId){
+            role=GroupRole::Owner;
+            hasOwnerRecord=true;
+        }
+        else if(role==GroupRole::Owner){
+            LOG_ERROR("restoreGroup failed: non-owner member has Owner role");
+            return false;
+        }
+        g.addMember(member.accountId,role);
     }
+    //成员表没有群主补入
+    if(!hasOwnerRecord){
+        g.addMember(ownerAccountId,GroupRole::Owner);
+    }
+
+    //清理旧的accountId到groupId映射
+    auto oldIt=groupsById_.find(groupId);
+    if(oldIt!=groupsById_.end()){
+        auto memberInfos=oldIt->second.members();//获取群内成员列表
+        for(const auto& memberInfo:memberInfos){
+            auto accountIdIt=accountIdGroups_.find(memberInfo.first);
+            if(accountIdIt!=accountIdGroups_.end()){
+                accountIdIt->second.erase(groupId);//删除成员所加的群
+                if(accountIdIt->second.empty()){
+                    //若成员所加的群列表为空
+                    accountIdGroups_.erase(accountIdIt);
+                }
+            }
+        }
+        groupsById_.erase(oldIt);
+    }
+    auto newMembeInfos=g.members();
+    for(auto& newMembeInfo:newMembeInfos){
+        accountIdGroups_[newMembeInfo.first].insert(groupId);//恢复成员成功时同步添加映射
+    }
+    groupsById_.emplace(groupId,std::move(g));//同步保存群
     //解析Group数字，更新nextGroupSeq_以避免groupId冲突，例如Group1,Group2等
     if(groupId.rfind("Group",0)==0){//如果groupId以"Group"开头
         try{

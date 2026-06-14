@@ -21,6 +21,7 @@ public:
     bool isOnLine(const std::string& username)const;//判断用户是否在线
     std::vector<std::string> onLineUsers()const;//返回成员列表
     void erase(ConnKey);//删除session
+    void removeJoinedGroup(const std::string& accountId,const std::string&groupId);//用户在群聊被踢后从对应session删除groupId
 private:
     std::unordered_map<ConnKey,Session> sessions_;//连接到Session的映射
     std::unordered_map<std::string,std::unordered_set<ConnKey>> accountConnMap_;//一个用户多连接，支持多端登录

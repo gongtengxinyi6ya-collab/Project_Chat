@@ -1,5 +1,7 @@
 #pragma once 
 #include <cstdint>
+#include <optional>
+#include <string>
 /*
 群成员角色*/
 namespace im{
@@ -20,4 +22,17 @@ namespace im{
             return "member";
         }
     }
+    inline std::optional<GroupRole> roleFromUint(uint8_t role){
+        switch(role){
+            case 0:
+                return GroupRole::Member;
+            case 1:
+                return GroupRole::Admin;
+            case 2:
+                return GroupRole::Owner;
+            default: 
+                return std::nullopt;
+        }
+    }
+    
 }

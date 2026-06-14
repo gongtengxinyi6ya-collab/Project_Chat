@@ -42,18 +42,20 @@ std::optional<im::GroupRole> im::Group::roleOf(const std::string&accountId)const
     return std::nullopt;
 }
 bool im::Group::isOwner(const std::string&accountId)const{
-    accountId==ownerAccountId_;
+    return accountId==ownerAccountId_;
 }
 bool im::Group::isAdminOrOwner(const std::string& accountId)const{
     auto it=members_.find(accountId);
     if(it!=members_.end()){
-        return it->second==GroupRole::Admin;
+        if(it->second==GroupRole::Admin||it->second==GroupRole::Owner){
+            return true;
+        }
     }
     return false;
 }
 
 bool im::Group::setRole(const std::string&accountId,GroupRole role){
-    if(role==GroupRole::Owner){//群主转让另外设置
+    if(accountId==ownerAccountId_||role==GroupRole::Owner){//群主转让另外设置
         return false;
     }
     auto it=members_.find(accountId);
@@ -64,13 +66,19 @@ bool im::Group::setRole(const std::string&accountId,GroupRole role){
     return false;
 }
 bool im::Group::transFerOwner(const std::string&oldOwner,const std::string& newOwner){
+    if(oldOwner==newOwner){
+        return false;
+    }
+    if(ownerAccountId_!=oldOwner){
+        return false;
+    }
     auto itOld=members_.find(oldOwner);
     if(itOld!=members_.end()){
         auto itNew=members_.find(newOwner);
         if(itNew!=members_.end()){
             itOld->second=GroupRole::Member;
             itNew->second=GroupRole::Owner;
-            ownerAccountId_=itOld->first;
+            ownerAccountId_=itNew->first;
             return true;
         }
     }
