@@ -36,7 +36,9 @@ storage::RepoResult im::GroupService::kickMember(const std::string& groupId,cons
     if(!roleOfTarget.ok()||!roleOfTarget.value.has_value()){
         return {.status=roleOfTarget.status,.message=roleOfTarget.message};
     }
-    if(roleFromUint(roleOfoperator.value.value())!=GroupRole::Owner||!(roleFromUint(roleOfoperator.value.value())==GroupRole::Admin&&roleFromUint(roleOfTarget.value.value())==GroupRole::Member)){
+    
+    bool allowed=roleFromUint(roleOfoperator.value.value())==GroupRole::Owner||(roleFromUint(roleOfoperator.value.value())==GroupRole::Admin&&roleFromUint(roleOfTarget.value.value())==GroupRole::Member);
+    if(!allowed){
         return {.status=storage::RepoStatus::NoPermission,.message="not authority to kick the member"};
     }
     auto result=groupRepo_->removeMember(groupId,targetAccountId);
@@ -47,9 +49,9 @@ storage::RepoResult im::GroupService::kickMember(const std::string& groupId,cons
     if(!groupManager_.removeMember(groupId,targetAccountId)){//内存踢出成员失败
         LOG_ERROR("GroupManager remove member failed, reload group: " + groupId);
         //更新内存
-        auto reloadResult=reloadroup(groupId);
+        auto reloadResult=reloadGroup(groupId);
         if(!reloadResult.ok()){
-            LOG_ERROR("reloadGroup failed: " + reloadResult.message);
+            return {.status=storage::RepoStatus::Internal,.message="database updated but memory reload failed"};
         }
     }
     return {.status=storage::RepoStatus::Ok};
@@ -70,7 +72,7 @@ storage::RepoResult im::GroupService::setAdmin(const std::string& groupId,const 
         return {.status=roleOfOperator.status,.message=roleOfOperator.message};
     }
     //确定群主在操作
-    if(static_cast<GroupRole>(roleOfOperator.value.value())!=GroupRole::Owner){
+    if(roleFromUint(roleOfOperator.value.value())!=GroupRole::Owner){
         return {.status=storage::RepoStatus::NoPermission,.message="Only the owener can set admin"};
     }
 
@@ -86,9 +88,9 @@ storage::RepoResult im::GroupService::setAdmin(const std::string& groupId,const 
         if(!groupManager_.setMemberRole(groupId,targetAccountId,GroupRole::Admin)){
             LOG_ERROR("GroupManager ser member role failed, reload group: " + groupId);
             //更新内存
-            auto reloadResult=reloadroup(groupId);
+            auto reloadResult=reloadGroup(groupId);
             if(!reloadResult.ok()){
-                LOG_ERROR("reloadGroup failed: " + reloadResult.message);
+                return {.status=storage::RepoStatus::Internal,.message="database updated but memory reload failed"};
             }
         }
     }
@@ -100,9 +102,9 @@ storage::RepoResult im::GroupService::setAdmin(const std::string& groupId,const 
         if(!groupManager_.setMemberRole(groupId,targetAccountId,GroupRole::Member)){
             LOG_ERROR("GroupManager ser member role failed, reload group: " + groupId);
             //更新内存
-            auto reloadResult=reloadroup(groupId);
+            auto reloadResult=reloadGroup(groupId);
             if(!reloadResult.ok()){
-                LOG_ERROR("reloadGroup failed: " + reloadResult.message);
+                return {.status=storage::RepoStatus::Internal,.message="database updated but memory reload failed"};
             }
     }
     }
@@ -140,9 +142,9 @@ storage::RepoResult im::GroupService::transferOwner(const std::string& groupId,c
     if(!groupManager_.transferOwner(groupId,oldOwner,newOwner)){
         LOG_ERROR("GroupManager transfer owner failed, reload group: " + groupId);
         //更新内存
-        auto reloadResult=reloadroup(groupId);
+        auto reloadResult=reloadGroup(groupId);
         if(!reloadResult.ok()){
-            LOG_ERROR("reloadGroup failed: " + reloadResult.message);
+            return {.status=storage::RepoStatus::Internal,.message="database updated but memory reload failed"};
         }
     }
     return {.status=storage::RepoStatus::Ok};
@@ -181,7 +183,7 @@ std::vector<im::GroupMemberView> im::GroupService::listMemberViews(const std::st
 
 }
 
-storage::RepoResult im::GroupService::reloadroup(const std::string& groupId){
+storage::RepoResult im::GroupService::reloadGroup(const std::string& groupId){
     if(groupId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument};
     }

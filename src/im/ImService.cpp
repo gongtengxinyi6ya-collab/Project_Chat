@@ -324,7 +324,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
     std::string groupId=groupIdOrErr;
     if(hasRepositories()){
         auto result=repos_.groupRepo->createGroupWithOwner(groupId,groupName,owner);
-        if(result.status!=storage::RepoStatus::Ok&&result.status!=storage::RepoStatus::AlreadyExists){
+        if(!result.ok()){
             LOG_ERROR_CTX("repo create group failed",makeReqCtx(key,req,session,"Repo failed"));
             groupManager_.removeGroup(groupId);
             return makeRepoError(req,result.status,"failed to persist group");
@@ -557,7 +557,7 @@ im::Response im::Imservice::handleKickGroupMember(const Request& req, [[maybe_un
     //给群内其他成员广播成员被踢出事件
     im::Response groupPushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg=targetAccountId+" have been kicked from the group",.data=nlohmann::json{{"event","member_removed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
     auto broastResult=broadcastToGroup(groupId,key,groupPushEvent);
-    return makeOk(req,MsgType::KICK_GROUP_MEMBER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"removed",true},{"sent",broastResult.sent},{"closed",broastResult.closed},{"noSuchConnecion",broastResult.noSuchConnection}});
+    return makeOk(req,MsgType::KICK_GROUP_MEMBER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"removed",true},{"sent",broastResult.sent},{"closed",broastResult.closed},{"noSuchConnection",broastResult.noSuchConnection}});
 }
 im::Response im::Imservice::handleSetGroupAdmin(const Request& req, [[maybe_unused]]ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);

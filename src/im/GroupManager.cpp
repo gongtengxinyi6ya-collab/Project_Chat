@@ -79,9 +79,9 @@ bool im::GroupManager::removeGroup(const std::string& groupId){
         auto accountIdIt=accountIdGroups_.find(memberInfo.first);
         if(accountIdIt!=accountIdGroups_.end()){
             accountIdIt->second.erase(groupId);
-        }
-        if(accountIdIt->second.empty()){
-            accountIdGroups_.erase(accountIdIt);
+            if(accountIdIt->second.empty()){
+                accountIdGroups_.erase(accountIdIt);
+            }
         }
     }
     groupsById_.erase(it);

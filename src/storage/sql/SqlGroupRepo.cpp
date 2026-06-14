@@ -119,7 +119,7 @@ storage::RepoResult storage::SqlGroupRepo::updateMemberRole(const std::string& g
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
     }
     if(role>2){
-        return RepoResult{.status=RepoStatus::InvalidArgument,.message="role is invaild"};
+        return RepoResult{.status=RepoStatus::InvalidGroupRole,.message="role is invaild"};
     }
     auto conn=pool_->acquire();
     if(!conn||!conn->connected()){
