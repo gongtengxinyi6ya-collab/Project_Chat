@@ -80,14 +80,39 @@ void im::SessionManager::erase(ConnKey key){
     }
 }
 
-void im::SessionManager::removeJoinedGroup(const std::string& accountId,const std::string& groupId){
+size_t im::SessionManager::removeJoinedGroup(const std::string& accountId,const std::string& groupId){
     //根据账号获取所有在线连接
     auto keys=connKeysByAccountId(accountId);
+    size_t count=0;
     for(const auto& key:keys){
         //遍历所有key找到对应session
         auto it=sessions_.find(key);
         if(it!=sessions_.end()){
             it->second.joinedGroupIds_.erase(groupId);
+            count++;
         }
     }
+    return count;
+}
+
+size_t im::SessionManager::addJoinedGroup(const std::string& accountId,const std::string& groupId){
+    //根据账号获取所有在线连接
+    auto keys=connKeysByAccountId(accountId);
+    size_t count=0;
+    for(const auto& key:keys){
+        //遍历所有key找到对应session
+        auto it=sessions_.find(key);
+        if(it!=sessions_.end()){
+            it->second.joinedGroupIds_.insert(groupId);
+            count++;
+        }
+    }
+    return count;
+}
+size_t im::SessionManager::removeJoinedGroupForAccounts(const std::vector<std::string>& accountIds,const std::string& groupId){
+    size_t count;
+    for(const auto& accountId:accountIds){
+        count+=removeJoinedGroup(accountId,groupId);
+    }
+    return count;
 }

@@ -272,12 +272,48 @@ storage::RepoValueResult<im::GroupInviteResult> im::GroupService::inviteMember(c
     if(resultManager!=JoinResult::OK_JOINED){
         auto resultReload=reloadGroup(groupId);
         if(!resultReload.ok()){
-            return {.status=storage::RepoStatus::Internal,.message="database updated but memory reload failed"};
+            return {.status=storage::RepoStatus::Internal,.message="database invite the member but memory reload failed"};
         }
     }
     return {.status=storage::RepoStatus::Ok,.value=GroupInviteResult{.joined=true,.alreadyIn=false,.groupId=groupId,.targetAccountId=targetAccountId}};
 }
 
 storage::RepoValueResult<im::GroupDissolveResult> im::GroupService::dissolveGroup(const std::string& groupId,const std::string& operatorAccountId,int64_t nowMs){
+    if(groupId.empty()||operatorAccountId.empty()){
+        return {.status=storage::RepoStatus::InvalidArgument};
+    }
+     if(!groupRepo_){
+        return {.status=storage::RepoStatus::Internal,.message="groupRepo or userProfile is not avaiable"};
+    }
+    //查看群状态
+    auto resultGroup=groupRepo_->findGroupById(groupId);
+    if(!resultGroup.ok()){
+        return {.status=resultGroup.status,.message=resultGroup.message};
+    }
+    if(!resultGroup.value.has_value()){
+        return {.status=storage::RepoStatus::NotFound};
+    }
+    if(resultGroup.value.value().status==storage::GroupStatus::Dissolved){
+        return {.status=storage::RepoStatus::Ok,.message="The group has been dissolved"};
+    }
+    if(resultGroup.value.value().ownerAccountId!=operatorAccountId){
+        return {.status=storage::RepoStatus::NoPermission};
+    }
 
+    auto resultDis=groupRepo_->dissolveGroup(groupId,operatorAccountId,nowMs);
+    if(!resultDis.ok()){
+        return {.status=resultDis.status,.message=resultDis.message};
+    }
+    if(!resultDis.value.has_value()){
+        return {.status=storage::RepoStatus::Internal};
+    }
+    //获取解散成员列表
+    GroupDissolveResult dissolveResult;
+    dissolveResult.affectedAccountIds=resultDis.value.value().memberAccountIds;
+    //同步内存
+    if(!groupManager_.removeGroup(groupId)){
+        LOG_WARN("Failed to remove the group in the memory");
+    }
+    dissolveResult.dissolved=true;
+    return {.status=storage::RepoStatus::Ok,.value=dissolveResult};
 }
