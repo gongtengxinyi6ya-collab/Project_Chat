@@ -196,7 +196,8 @@ std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConv
     FROM conversations
     WHERE owner_account_id = ?
     ORDER BY last_ts_ms DESC
-    LIMIT ?)";
+    LIMIT ?
+    )";
     auto result=conn->queryPrepared(sql,{ownerAccountId,limit});
     if(!result.ok()){
         return {};

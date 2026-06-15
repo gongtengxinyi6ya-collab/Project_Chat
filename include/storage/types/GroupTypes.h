@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <optional>
 namespace storage{
 
 struct GroupSnapshot
@@ -29,4 +30,15 @@ struct GroupDissolveRecord {
     bool alreadyDissolved{false};
     std::vector<std::string> memberAccountIds;
 };
+
+inline std::optional<GroupStatus> getGroupStatusFromUint(uint64_t value){
+    switch(value){
+        case 0:
+            return GroupStatus::Active;
+        case 1:
+            return GroupStatus::Dissolved;
+        default:
+            return std::nullopt;
+    }
+}
 }

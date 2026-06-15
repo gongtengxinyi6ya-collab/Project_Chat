@@ -20,6 +20,7 @@ enum class RepoStatus{
     OwnerCannotLeave,//群主无法直接退群
     OwnerCannotBeKicked,//群主不能被踢
     InvalidGroupRole,//设置角色非法
+    GroupDissolved,//群已解散
     Internal,//内部未知错误
 };
 

@@ -314,7 +314,7 @@ storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::strin
         return RepoResult{.status=RepoStatus::InvalidArgument};
     }
     auto conn=pool_->acquire();//获取连接
-    if(!conn){
+    if(!conn||!conn->connected()){
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to accquire a conn"};
     }
     SqlTransaction tx(*conn);//开启事务
@@ -338,4 +338,161 @@ storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::strin
         return RepoResult{.status=RepoStatus::SqlError,.message=e.what()};
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Unknown error"};
+}
+
+storage::RepoValueResult<storage::GroupSnapshot> storage::SqlGroupRepo::findGroupById(const std::string& groupId){
+    if(groupId.empty()){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();//获取连接
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::SqlError,.message="Failed to accquire a conn"};
+    }
+    std::string sql=R"(
+    SELECT
+        group_id,
+        group_name,
+        owner,
+        status,
+        COALESCE(dissolved_at_ms, 0) AS dissolved_at_ms
+    FROM chat_groups
+    WHERE group_id = ?
+    LIMIT 1
+    )";
+    auto result=conn->queryPrepared(sql,{groupId});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    if(result.rows.empty()){
+        return {.status=RepoStatus::NotFound,.message=result.error};
+    }
+    const auto& row=result.rows.front();
+    GroupSnapshot snapShot;
+    snapShot.groupId=getString(row,"group_id");
+    snapShot.groupName=getString(row,"group_name");
+    snapShot.ownerAccountId=getString(row,"owner");
+    auto statusOpt=getGroupStatusFromUint(getUInt64(row,"status"));
+    if(statusOpt.has_value()){
+        snapShot.status=statusOpt.value();
+    }
+    return {.status=RepoStatus::Ok,.value=snapShot};
+
+}
+storage::RepoValueResult<size_t> storage::SqlGroupRepo::countMembers(const std::string& groupId){
+    if(groupId.empty()){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();//获取连接
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::SqlError,.message="Failed to accquire a conn"};
+    }
+    std::string sql=R"(
+    SELECT COUNT(*) AS member_count
+    FROM group_members
+    WHERE group_id = ?;
+    )";
+    auto result=conn->queryPrepared(sql,{groupId});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    if(result.rows.empty()){
+        return {.status=RepoStatus::NotFound,.message=result.error};
+    }
+    const auto&row=result.rows.front();
+    size_t count=static_cast<size_t>(getUInt64(row,"member_count"));
+    return {.status=RepoStatus::Ok,.value=count};
+}
+storage::RepoValueResult<storage::GroupDissolveRecord> storage::SqlGroupRepo::dissolveGroup(const std::string& groupId,const std::string& ownerAccountId,int64_t dissolvedAtMs){
+    if(groupId.empty()||ownerAccountId.empty()){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();//获取连接
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::SqlError,.message="Failed to accquire a conn"};
+    }
+    //开启事务
+    try{
+        SqlTransaction transation(*conn);
+        //锁定群记录
+        std::string sqlRecord=R"(
+        SELECT owner, status
+        FROM chat_groups
+        WHERE group_id = ?
+        FOR UPDATE;
+        )";
+        auto resultLockRecord=conn->queryPrepared(sqlRecord,{groupId});
+        if(!resultLockRecord.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultLockRecord.error};
+        }
+        if(resultLockRecord.rows.empty()){
+            return {.status=RepoStatus::NotFound,.message=resultLockRecord.error};
+        }
+        const auto& rowRecord=resultLockRecord.rows.front();
+        if(getString(rowRecord,"owner")!=ownerAccountId){
+            return {.status=RepoStatus::NoPermission,.message="only the owner can dissolveGroup"};
+        }
+        auto statusOpt=getGroupStatusFromUint(getUInt64(rowRecord,"status"));
+        if(!statusOpt.has_value()){
+            return {.status = RepoStatus::Internal,.message = "invalid group status"};
+        }
+        if(statusOpt.value()==GroupStatus::Dissolved){//已解散幂等成功
+            return {.status=RepoStatus::Ok,.value=GroupDissolveRecord{.alreadyDissolved=true}};
+        }
+        //解散前查询成员
+        auto resultMember=conn->queryPrepared("SELECT account_id FROM group_members WHERE group_id=?",{groupId});
+        if(!resultMember.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultMember.error};
+        }
+        if(resultMember.rows.empty()){
+            return {.status=RepoStatus::NotFound,.message=resultMember.error};
+        }
+        GroupDissolveRecord record;
+        for(const auto& row:resultMember.rows){
+            auto accountId=getString(row,"account_id");
+            if(!accountId.empty()){
+                record.memberAccountIds.push_back(accountId);
+            }
+        }
+        //标记群解散
+        std::string sql=R"(
+        UPDATE chat_groups
+        SET status = 1,
+            dissolved_at_ms = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE group_id = ?
+        AND owner = ?
+        AND status = 0;
+        )";
+        auto resultDissolved=conn->executePrepared(sql,{dissolvedAtMs,groupId,ownerAccountId});
+        if(!resultDissolved.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultDissolved.error};
+        }
+        if(resultDissolved.affectedRows==0){
+            return {.status=RepoStatus::NotFound,.message=resultDissolved.error};
+        }
+        //删除成员关系
+        auto resultDeleteMember=conn->executePrepared("DELETE FROM group_members WHERE group_id=?",{groupId});
+        if(!resultDeleteMember.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultDeleteMember.error};
+        }
+        if(resultDeleteMember.affectedRows==0){
+            return {.status=RepoStatus::NotFound,.message=resultDeleteMember.error};
+        }
+        //删除未投递群离线索引
+        auto resultDeleteOfflineMsg=conn->executePrepared("DELETE FROM offline_messages WHERE msg_type=1 AND group_id=?",{groupId});
+        if(!resultDeleteOfflineMsg.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultDeleteOfflineMsg.error};
+        }
+        //删除群会话摘要
+        auto resultDeleteConv=conn->executePrepared("DELETE FROM conversations WHERE conversation_type=2 AND target_id=?",{groupId});
+        if(!resultDeleteConv.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultDeleteConv.error};
+        }
+        //提交事务
+        transation.commit();
+        record.changed=true;
+        return {.status=RepoStatus::Ok,.value=record};
+    }catch(const std::exception& e){
+        return {.status=RepoStatus::Internal,.message=e.what()};
+    }
 }
