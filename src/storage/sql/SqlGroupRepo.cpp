@@ -39,7 +39,7 @@ bool storage::SqlGroupRepo::groupExists(const std::string& groupId){
         return false;
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT id FROM chat_groups WHERE group_id=? LIMIT 1",{groupId});
+        auto result=conn->queryPrepared("SELECT id FROM chat_groups WHERE group_id=? AND status=0 LIMIT 1",{groupId});
         if(result.ok()&&!result.rows.empty()){
             return true;
         }
@@ -72,15 +72,19 @@ storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,c
     if(accountId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
     }
-    if(!groupExists(groupId)){
-        return RepoResult{.status=RepoStatus::NotFound,.message="Group not found"};
-    }
     auto conn=pool_->acquire();
     if(!conn){
         return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
     if(conn->connected()){
-        auto result=conn->executePrepared("INSERT INTO group_members(group_id,account_id,role) VALUES(?,?,?)",{groupId,accountId,static_cast<uint64_t>(role)});
+        std::string sql=R"(
+        INSERT INTO group_members(group_id, account_id, role)
+        SELECT group_id, ?, ?
+        FROM chat_groups
+        WHERE group_id = ?
+        AND status = 0;
+        )";
+        auto result=conn->executePrepared(sql,{accountId,static_cast<uint64_t>(role),groupId});
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
@@ -244,18 +248,20 @@ std::vector<storage::GroupSnapshot> storage::SqlGroupRepo::listGroups(){
         return {};
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT group_id,group_name,owner FROM chat_groups",{});
+        auto result=conn->queryPrepared("SELECT group_id,group_name,owner,status,COALESCE(dissolved_at_ms, 0) AS dissolved_at_ms FROM chat_groups",{});
         if(result.ok()){
             std::vector<GroupSnapshot> groupSnapshots;
             for(const auto& row:result.rows){
-                GroupSnapshot groupSnapshot;
-                auto idPair=row.find("group_id");
-                groupSnapshot.groupId=idPair!=row.end()?idPair->second:"";
-                auto namePair=row.find("group_name");
-                groupSnapshot.groupName=namePair!=row.end()?namePair->second:"";
-                auto ownerPair=row.find("owner");
-                groupSnapshot.ownerAccountId=ownerPair!=row.end()?ownerPair->second:"";
-                groupSnapshots.emplace_back(std::move(groupSnapshot));
+                GroupSnapshot snapShot;
+                snapShot.groupId=getString(row,"group_id");
+                snapShot.groupName=getString(row,"group_name");
+                snapShot.ownerAccountId=getString(row,"owner");
+                auto statusOpt=getGroupStatusFromUint(getUInt64(row,"status"));
+                if(statusOpt.has_value()){
+                    snapShot.status=statusOpt.value();
+                }
+                snapShot.dissolvedAtMs=getInt64(row,"dissolved_at_ms");
+                groupSnapshots.emplace_back(std::move(snapShot));
             }
             return groupSnapshots;
         }
@@ -292,7 +298,7 @@ std::vector<storage::GroupSnapshot> storage::SqlGroupRepo::findGroupsByIds(const
     if(!conn||!conn->connected()){
         return {};
     }
-    auto result=conn->queryPrepared("SELECT group_id,group_name,owner FROM chat_groups WHERE group_id IN ("+placeholders+")",params);
+    auto result=conn->queryPrepared("SELECT group_id,group_name,owner FROM chat_groups WHERE group_id IN ("+placeholders+") AND status=0",params);
     if(!result.ok()){
         return {};
     }
@@ -375,6 +381,7 @@ storage::RepoValueResult<storage::GroupSnapshot> storage::SqlGroupRepo::findGrou
     if(statusOpt.has_value()){
         snapShot.status=statusOpt.value();
     }
+    snapShot.dissolvedAtMs=getInt64(row,"dissolved_at_ms");
     return {.status=RepoStatus::Ok,.value=snapShot};
 
 }

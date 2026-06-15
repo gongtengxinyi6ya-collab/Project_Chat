@@ -21,6 +21,9 @@ enum class RepoStatus{
     OwnerCannotBeKicked,//群主不能被踢
     InvalidGroupRole,//设置角色非法
     GroupDissolved,//群已解散
+    CannotInivteSelf,//禁止邀请自己
+    InviteRequestsFriend,//需要好友邀请
+    GroupMemberLimitReach,//群人数达到限制
     Internal,//内部未知错误
 };
 
