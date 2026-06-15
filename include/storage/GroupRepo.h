@@ -24,5 +24,9 @@ public:
     virtual std::vector<GroupSnapshot> listGroups()=0;//启动时读取所有群基础信息
     virtual RepoResult createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& accountId);//创建群基础信息，同时把owner加入群列表
     virtual std::vector<GroupSnapshot> findGroupsByIds(const std::vector<std::string>& groupIds)=0;//根据多个groupId查询群基础信息，用于会话列表展示
+
+    virtual RepoValueResult<GroupSnapshot> findGroupById(const std::string& groupId)=0;//查询群是否存在，是否解散，群主是谁
+    virtual RepoValueResult<size_t> countMembers(const std::string& groupId)=0;//获取成员数量，用于邀请前检查人数上限
+    virtual RepoValueResult<GroupDissolveRecord> dissolveGroup(const std::string& groupId,const std::string& ownerAccountId,int64_t dissolvedAtMs)=0;//解散群
 };
 }

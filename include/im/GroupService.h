@@ -18,6 +18,20 @@ namespace im{
         std::string avatarUrl;
         GroupRole role{GroupRole::Member};
 };
+
+struct GroupInviteResult {//群聊邀请结果
+    bool joined{false};//新增成员
+    bool alreadyIn{false};//目标已经在群
+    std::string groupId{};
+    std::string targetAccountId{};//被邀请账号
+};
+
+struct GroupDissolveResult {//群聊解散结果
+    bool dissolved{false};//解散是否完成
+    bool alreadyDissolved{false};//之前是否已经解散
+    std::string groupId;//目标群
+    std::vector<std::string> affectedAccountIds;//解散前所有成员，
+};
 class GroupService{
 public:
     GroupService(GroupManager& GroupManager,std::shared_ptr<storage::GroupRepo> groupRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo);

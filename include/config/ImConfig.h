@@ -16,4 +16,7 @@ public:
     size_t maxMessageLen{4096};//消息最长长度
     bool allowDebugAuth{false};
     size_t maxAckBatchSize{200};//限制单次ack的最大消息数量
+    size_t maxGroupMembers{200};//限制单群成员数
+    bool requireFriendForGroupInvite{true};//控制邀请者和被邀请者是否必须是好友
+    
 };

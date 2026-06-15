@@ -31,7 +31,9 @@
     "max_group_name_len": 64,
     "max_message_len": 4096,
     "allow_debug_auth":false,
-    "max_ack_batch_size": 200
+    "max_ack_batch_size": 200,
+    "max_group_members": 100,
+    "require_friend_for_group_invite": true
   },
   
   "database": {
