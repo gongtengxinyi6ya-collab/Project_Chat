@@ -100,3 +100,12 @@ std::vector<storage::GroupMemberRecord> storage::MemoryGroupRepo::listMemberReco
 storage::RepoResult storage::MemoryGroupRepo::createGroupWithOwner([[maybe_unused]]const std::string& groupId,[[maybe_unused]]const std::string& groupName,[[maybe_unused]]const std::string& ownerAccountId){
     return createGroup(groupId,groupName,ownerAccountId);
 }
+storage::RepoValueResult<storage::GroupSnapshot> storage::MemoryGroupRepo::findGroupById([[maybe_unused]]const std::string& groupId){
+    return RepoValueResult<GroupSnapshot>{.status=RepoStatus::Ok,.value=GroupSnapshot{}};
+}
+storage::RepoValueResult<size_t> storage::MemoryGroupRepo::countMembers([[maybe_unused]]const std::string& groupId){
+    return RepoValueResult<size_t>{.status=RepoStatus::Ok,.value=0};
+}
+storage::RepoValueResult<storage::GroupDissolveRecord> storage::MemoryGroupRepo::dissolveGroup([[maybe_unused]]const std::string& groupId,[[maybe_unused]]const std::string& ownerAccountId,[[maybe_unused]]int64_t dissolvedAtMs){
+    return RepoValueResult<GroupDissolveRecord>{.status=RepoStatus::Ok,.value=GroupDissolveRecord{}};
+}

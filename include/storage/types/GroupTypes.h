@@ -4,6 +4,11 @@
 #include <optional>
 namespace storage{
 
+enum class GroupStatus:uint8_t{//群生命周期状态
+    Active=0,
+    Dissolved=1
+};
+
 struct GroupSnapshot
 {
     std::string groupId;
@@ -18,11 +23,6 @@ struct GroupMemberRecord {
     std::string accountId;
     uint8_t role{0};
     int64_t joinedAtMs{0};
-};
-
-enum class GroupStatus:uint8_t{//群生命周期状态
-    Active=0,
-    Dissolved=1
 };
 
 struct GroupDissolveRecord {

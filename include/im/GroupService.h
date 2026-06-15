@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include "storage/RepoResult.h"
+#include "storage/RepoValueResult.h"
 #include "storage/types/GroupTypes.h"
 #include "im/GroupRole.h"
 namespace storage{

@@ -157,7 +157,7 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
         messageAckService_=std::make_unique<MessageAckService>(repos_.messageRepo,repos_.offlineMessageRepo,repos_.conversationRepo);
     }
     if(repos_.groupRepo&&repos_.userProfileRepo&&repos_.friendRepo){
-        groupService_=std::make_unique<GroupService>(groupManager_,repos_.groupRepo,repos_.userProfileRepo);
+        groupService_=std::make_unique<GroupService>(groupManager_,repos_.groupRepo,repos_.userProfileRepo,repos_.friendRepo,imConfig_.requireFriendForGroupInvite,imConfig_.maxGroupMembers);
     }
 }
 bool im::Imservice::hasRepositories()const{
@@ -663,7 +663,7 @@ im::Response im::Imservice::handleInviteGroupMember(const Request& req,[[maybe_u
         sessionManager_.addJoinedGroup(targetAccountId,groupId);
         //群内邀请成员事件广播
         im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="member_invired",.data=nlohmann::json{{"event","member_invited"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
-        auto broastResult=broadcastToGroup(groupId,key,pushEvent);
+        broadcastToGroup(groupId,key,pushEvent);
     }
     if(result.value.value().alreadyIn){
         return makeOk(req,MsgType::INVITE_GROUP_MEMBER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"joined",false},{"alreadyIn",true}});

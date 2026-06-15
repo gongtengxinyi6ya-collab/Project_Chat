@@ -29,6 +29,10 @@ struct GroupRecord{
     std::vector<GroupSnapshot> listGroups()override;
     RepoResult createGroupWithOwner(const std::string& groupId,const std::string& groupName,const std::string& ownerAccountId);//
     std::vector<GroupSnapshot> findGroupsByIds(const std::vector<std::string>& groupIds)override;//根据多个groupId查询群基础信息，用于会话列表展示
+
+    RepoValueResult<GroupSnapshot> findGroupById(const std::string& groupId)override;//查询群是否存在，是否解散，群主是谁
+    RepoValueResult<size_t> countMembers(const std::string& groupId)override;//获取成员数量，用于邀请前检查人数上限
+    RepoValueResult<GroupDissolveRecord> dissolveGroup(const std::string& groupId,const std::string& ownerAccountId,int64_t dissolvedAtMs)override;//解散群
 private:
     std::unordered_map<std::string,GroupRecord> groups_;//groupId映射GroupRecord
     mutable std::mutex mutex_;//保护groups_的读写
