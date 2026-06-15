@@ -48,6 +48,10 @@ enum class ErrorCode: uint16_t{
     OWNER_CANNOT_BE_KICKED,//无法踢出群主
     INVALID_GROUP_ROLE,//设置角色非法
     CANNOT_KICK_SELF,
+    GROUP_DISSOLVED,
+    CANNOT_INVITE_SELF,
+    INVITE_REQUIRES_FRIEND,
+    GROUP_MEMBER_LIMIT_REACHED,
     INTERNAL//服务器内部错误
 
 };
@@ -140,6 +144,14 @@ inline const char* errCodeToString(ErrorCode code){
             return "Invalid group role";
         case ErrorCode::CANNOT_KICK_SELF:
             return "Cannot kick yourself";
+        case ErrorCode::GROUP_DISSOLVED:
+            return "The group has been dissolved";
+        case ErrorCode::CANNOT_INVITE_SELF:
+            return "Cannot invite yourself";
+        case ErrorCode::INVITE_REQUIRES_FRIEND:
+            return "Only friends can be invited";
+        case ErrorCode::GROUP_MEMBER_LIMIT_REACHED:
+            return "Group member limit reached";
         default:
             return "Unknown Error Code";
     }

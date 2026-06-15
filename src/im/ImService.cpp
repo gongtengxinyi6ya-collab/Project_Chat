@@ -156,7 +156,7 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
     if(repos_.conversationRepo&&repos_.messageRepo&&repos_.offlineMessageRepo){
         messageAckService_=std::make_unique<MessageAckService>(repos_.messageRepo,repos_.offlineMessageRepo,repos_.conversationRepo);
     }
-    if(repos_.groupRepo&&repos_.userProfileRepo){
+    if(repos_.groupRepo&&repos_.userProfileRepo&&repos_.friendRepo){
         groupService_=std::make_unique<GroupService>(groupManager_,repos_.groupRepo,repos_.userProfileRepo);
     }
 }
@@ -631,6 +631,81 @@ im::Response im::Imservice::handleTransferGroupOwner(const Request& req,[[maybe_
     return makeOk(req,MsgType::TRANSFER_GROUP_OWNER_RESP,nlohmann::json{{"groupId",groupId},{"oldOwner",session.accountId_},{"newOwner",targetAccountId},{"sent",broastResult.sent},{"closed",broastResult.closed},{"noSuchConnection",broastResult.noSuchConnection}});
 }
 
+im::Response im::Imservice::handleInviteGroupMember(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    //读取groupId
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return getGroupId.value();
+    }
+    //读取目标账号
+    std::string targetAccountId;
+    auto getAccountId=getStringField(req,"targetAccountId",targetAccountId);
+    if(getAccountId){
+        return getAccountId.value();
+    }
+    if(!groupService_){
+        return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
+    }
+
+    auto result=groupService_->inviteMember(groupId,session.accountId_,targetAccountId);
+    if(!result.ok()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    if(!result.value.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"groupInviteResult value is empty");
+    }
+    if(result.value.value().joined){
+        sessionManager_.addJoinedGroup(targetAccountId,groupId);
+        //群内邀请成员事件广播
+        im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="member_invired",.data=nlohmann::json{{"event","member_invited"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
+        auto broastResult=broadcastToGroup(groupId,key,pushEvent);
+    }
+    if(result.value.value().alreadyIn){
+        return makeOk(req,MsgType::INVITE_GROUP_MEMBER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"joined",false},{"alreadyIn",true}});
+    }
+    return makeOk(req,MsgType::TRANSFER_GROUP_OWNER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"joined",true},{"alreadyIn",false}});
+}
+im::Response im::Imservice::handleDissolveGroup(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    //读取groupId
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return getGroupId.value();
+    }
+    if(!groupService_){
+        return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
+    }
+
+    auto result=groupService_->dissolveGroup(groupId,session.accountId_,nowMs());
+    if(!result.ok()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    if(!result.value.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"groupDissolveResult value is empty");
+    }
+    if(result.value.value().alreadyDissolved){
+        return makeOk(req,MsgType::DISSOLVE_GROUP_RESP);
+    }
+    auto accountIds=result.value.value().affectedAccountIds;
+    im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="group dissolved",.data=nlohmann::json{{"event","group_dissolved"},{"groupId",groupId},{"operatorAccountId",session.accountId_}}};
+    //广播群解散事件
+    for(const auto& accountId:accountIds){
+        pushToAccount(accountId,pushEvent);
+    }
+    //同步在线状态
+    sessionManager_.removeJoinedGroupForAccounts(accountIds,groupId);
+    return makeOk(req,MsgType::DISSOLVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"operatorAccountId",session.accountId_},{"dissolved",true},{"alreadyDissolved",false},"affectedMembers",accountIds.size()});
+}
+
 std::optional<std::string> im::Imservice::usernameByKey(ConnKey key)const{
     auto it=sessionManager_.find(key);
     if(it&&!it->username_.empty()){
@@ -764,6 +839,10 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
         case im::ErrorCode::OWNER_CANNOT_BE_KICKED:
         case im::ErrorCode::INVALID_GROUP_ROLE:
         case im::ErrorCode::CANNOT_KICK_SELF:
+        case im::ErrorCode::GROUP_DISSOLVED:
+        case im::ErrorCode::CANNOT_INVITE_SELF:
+        case im::ErrorCode::INVITE_REQUIRES_FRIEND:
+        case im::ErrorCode::GROUP_MEMBER_LIMIT_REACHED:
             return LogLevel::WARN;
         case im::ErrorCode::INTERNAL:
             return LogLevel::ERROR;
@@ -924,6 +1003,10 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleSetGroupAdmin(req,key,session);
         case im::MsgType::TRANSFER_GROUP_OWNER_REQ:
             return handleTransferGroupOwner(req,key,session);
+        case im::MsgType::INVITE_GROUP_MEMBER_REQ:
+            return handleInviteGroupMember(req,key,session);
+        case im::MsgType::DISSOLVE_GROUP_REQ:
+            return handleDissolveGroup(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }
@@ -963,6 +1046,14 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
             return im::ErrorCode::OWNER_CANNOT_BE_KICKED;
         case storage::RepoStatus::InvalidGroupRole:
             return im::ErrorCode::INVALID_GROUP_ROLE;
+        case storage::RepoStatus::GroupDissolved:
+            return im::ErrorCode::GROUP_DISSOLVED;
+        case storage::RepoStatus::CannotInivteSelf:
+            return im::ErrorCode::CANNOT_INVITE_SELF;
+        case storage::RepoStatus::InviteRequestsFriend:
+            return im::ErrorCode::INVITE_REQUIRES_FRIEND;
+        case storage::RepoStatus::GroupMemberLimitReach:
+            return im::ErrorCode::GROUP_MEMBER_LIMIT_REACHED;
         case storage::RepoStatus::Internal:
             return im::ErrorCode::INTERNAL;
     }

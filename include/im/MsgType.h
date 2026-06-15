@@ -79,6 +79,12 @@ enum class MsgType:uint16_t{
 
     TRANSFER_GROUP_OWNER_REQ,//转让群主请求
     TRANSFER_GROUP_OWNER_RESP,   
+
+    INVITE_GROUP_MEMBER_REQ = 73,//邀请成员请求
+    INVITE_GROUP_MEMBER_RESP = 74,
+
+    DISSOLVE_GROUP_REQ = 75,//解散群聊请求
+    DISSOLVE_GROUP_RESP = 76,
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -228,6 +234,15 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::TRANSFER_GROUP_OWNER_REQ;
         case 72:
             return MsgType::TRANSFER_GROUP_OWNER_RESP;
+        
+        case 73:
+            return MsgType::INVITE_GROUP_MEMBER_REQ;
+        case 74:
+            return MsgType::INVITE_GROUP_MEMBER_RESP;
+        case 75:
+            return MsgType::DISSOLVE_GROUP_REQ;
+        case 76:
+            return MsgType::DISSOLVE_GROUP_RESP;
         case 255:
             return MsgType::ERR;
         

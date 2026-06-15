@@ -216,8 +216,8 @@ storage::RepoValueResult<im::GroupInviteResult> im::GroupService::inviteMember(c
     if(inviterAccountId==targetAccountId){
         return {.status=storage::RepoStatus::CannotInivteSelf,.message="can not invite yourself"};
     }
-    if(!groupRepo_||!userProfileRepo_){
-        return {.status=storage::RepoStatus::Internal,.message="groupRepo or userProfile is not avaiable"};
+    if(!groupRepo_){
+        return {.status=storage::RepoStatus::Internal,.message="groupRepo is not avaiable"};
     }
     //查看群状态
     auto resultGroup=groupRepo_->findGroupById(groupId);
@@ -283,7 +283,7 @@ storage::RepoValueResult<im::GroupDissolveResult> im::GroupService::dissolveGrou
         return {.status=storage::RepoStatus::InvalidArgument};
     }
      if(!groupRepo_){
-        return {.status=storage::RepoStatus::Internal,.message="groupRepo or userProfile is not avaiable"};
+        return {.status=storage::RepoStatus::Internal,.message="groupRepo  is not avaiable"};
     }
     //查看群状态
     auto resultGroup=groupRepo_->findGroupById(groupId);
