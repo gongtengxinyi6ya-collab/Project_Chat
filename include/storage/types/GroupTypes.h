@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <vector>
 #include <optional>
 namespace storage{
 

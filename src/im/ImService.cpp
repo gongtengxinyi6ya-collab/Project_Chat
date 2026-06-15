@@ -668,7 +668,7 @@ im::Response im::Imservice::handleInviteGroupMember(const Request& req,[[maybe_u
     if(result.value.value().alreadyIn){
         return makeOk(req,MsgType::INVITE_GROUP_MEMBER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"joined",false},{"alreadyIn",true}});
     }
-    return makeOk(req,MsgType::TRANSFER_GROUP_OWNER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"joined",true},{"alreadyIn",false}});
+    return makeOk(req,MsgType::INVITE_GROUP_MEMBER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"joined",true},{"alreadyIn",false}});
 }
 im::Response im::Imservice::handleDissolveGroup(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
@@ -703,7 +703,7 @@ im::Response im::Imservice::handleDissolveGroup(const Request& req,[[maybe_unuse
     }
     //同步在线状态
     sessionManager_.removeJoinedGroupForAccounts(accountIds,groupId);
-    return makeOk(req,MsgType::DISSOLVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"operatorAccountId",session.accountId_},{"dissolved",true},{"alreadyDissolved",false},"affectedMembers",accountIds.size()});
+    return makeOk(req,MsgType::DISSOLVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"operatorAccountId",session.accountId_},{"dissolved",true},{"alreadyDissolved",false},{"affectedMembers",accountIds.size()}});
 }
 
 std::optional<std::string> im::Imservice::usernameByKey(ConnKey key)const{

@@ -238,6 +238,10 @@ storage::RepoValueResult<im::GroupInviteResult> im::GroupService::inviteMember(c
     if(!userProfileRepo_->findByAccountId(targetAccountId).has_value()){
         return {.status=storage::RepoStatus::NotFound};
     }
+    //检查目标是否已经入群
+    if(groupRepo_->isMember(groupId,targetAccountId)){//幂等返回
+        return {.status=storage::RepoStatus::Ok,.value=GroupInviteResult{.joined=false,.alreadyIn=true,.groupId=groupId,.targetAccountId=targetAccountId}};
+    }
     //若限制只能好友邀请
     if(requireFriendForInvite_){
         if(!friendRepo_){
@@ -247,10 +251,6 @@ storage::RepoValueResult<im::GroupInviteResult> im::GroupService::inviteMember(c
             return {.status=storage::RepoStatus::InviteRequestsFriend,.message="only can invite your friend into the group"};
         }
     }
-    //检查目标是否已经入群
-    if(groupRepo_->isMember(groupId,targetAccountId)){//幂等返回
-        return {.status=storage::RepoStatus::Ok,.value=GroupInviteResult{.joined=false,.alreadyIn=true,.groupId=groupId,.targetAccountId=targetAccountId}};
-    }
     //检查成员上限
     auto resultCount=groupRepo_->countMembers(groupId);
     if(!resultCount.ok()){
@@ -259,7 +259,7 @@ storage::RepoValueResult<im::GroupInviteResult> im::GroupService::inviteMember(c
     if(!resultCount.value.has_value()){
         return {.status=storage::RepoStatus::Internal};
     }
-    if(resultCount.value.value()>maxGroupMembers_){
+    if(resultCount.value.value()>=maxGroupMembers_){
         return {.status=storage::RepoStatus::GroupMemberLimitReach};
     }
     //加入数据库
@@ -294,7 +294,7 @@ storage::RepoValueResult<im::GroupDissolveResult> im::GroupService::dissolveGrou
         return {.status=storage::RepoStatus::NotFound};
     }
     if(resultGroup.value.value().status==storage::GroupStatus::Dissolved){
-        return {.status=storage::RepoStatus::Ok,.message="The group has been dissolved"};
+        return {.status=storage::RepoStatus::Ok,.message="The group has been dissolved",.value=GroupDissolveResult{.alreadyDissolved=true,.groupId=groupId}};
     }
     if(resultGroup.value.value().ownerAccountId!=operatorAccountId){
         return {.status=storage::RepoStatus::NoPermission};
@@ -307,6 +307,9 @@ storage::RepoValueResult<im::GroupDissolveResult> im::GroupService::dissolveGrou
     if(!resultDis.value.has_value()){
         return {.status=storage::RepoStatus::Internal};
     }
+    if(resultDis.value.value().alreadyDissolved){
+        return {.status=storage::RepoStatus::Ok,.value=GroupDissolveResult{.alreadyDissolved=true,.groupId=groupId}}
+    }
     //获取解散成员列表
     GroupDissolveResult dissolveResult;
     dissolveResult.affectedAccountIds=resultDis.value.value().memberAccountIds;
@@ -315,5 +318,7 @@ storage::RepoValueResult<im::GroupDissolveResult> im::GroupService::dissolveGrou
         LOG_WARN("Failed to remove the group in the memory");
     }
     dissolveResult.dissolved=true;
+    dissolveResult.alreadyDissolved=false;
+    dissolveResult.groupId=groupId;
     return {.status=storage::RepoStatus::Ok,.value=dissolveResult};
 }

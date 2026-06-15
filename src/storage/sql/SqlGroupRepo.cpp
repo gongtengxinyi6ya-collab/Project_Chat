@@ -248,7 +248,7 @@ std::vector<storage::GroupSnapshot> storage::SqlGroupRepo::listGroups(){
         return {};
     }
     if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT group_id,group_name,owner,status,COALESCE(dissolved_at_ms, 0) AS dissolved_at_ms FROM chat_groups",{});
+        auto result=conn->queryPrepared("SELECT group_id,group_name,owner,status,COALESCE(dissolved_at_ms, 0) AS dissolved_at_ms FROM chat_groups WHERE status=0",{});
         if(result.ok()){
             std::vector<GroupSnapshot> groupSnapshots;
             for(const auto& row:result.rows){

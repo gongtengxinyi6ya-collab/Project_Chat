@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS chat_groups(
     owner VARCHAR(64) NOT NULL,
     status TINYINT UNSIGNED NOT NULL DEFAULT 0,
     dissolved_at_ms BIGINT UNSIGNED NULL,
-    KEY idx_chat_groups_status (status)
+    KEY idx_chat_groups_status (status),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),

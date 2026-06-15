@@ -110,7 +110,7 @@ size_t im::SessionManager::addJoinedGroup(const std::string& accountId,const std
     return count;
 }
 size_t im::SessionManager::removeJoinedGroupForAccounts(const std::vector<std::string>& accountIds,const std::string& groupId){
-    size_t count;
+    size_t count=0;
     for(const auto& accountId:accountIds){
         count+=removeJoinedGroup(accountId,groupId);
     }
