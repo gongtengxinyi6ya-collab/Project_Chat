@@ -114,9 +114,102 @@ storage::RepoValueResult<std::vector<storage::GroupJoinRequestRecord>> storage::
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
     }
-    auto result=conn->queryPrepared()
+    if(limit>100){
+        limit=100;
+    }
+    auto result=conn->queryPrepared(R"(
+        SELECT
+            id AS request_id,
+            group_id,
+            applicant_account_id,
+            status,
+            request_message,
+            COALESCE(reviewer_account_id, '') AS reviewer_account_id,
+            created_at_ms,
+            reviewed_at_ms
+        FROM group_join_requests
+        WHERE group_id = ?
+        AND status = 0
+        ORDER BY created_at_ms ASC, id ASC
+        LIMIT ?;
+        )",{groupId,limit});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    std::vector<GroupJoinRequestRecord> records;
+    for(const auto& row:result.rows){
+        GroupJoinRequestRecord record;
+        record.requestId=getUInt64(row,"request_id");
+        record.groupId=getString(row,"group_id");
+        record.applicantAccountId=getString(row,"applicant_account_id");
+        record.requestMessage=getString(row,"request_message");
+        record.reviewerAccountId=getString(row,"reviewer_account_id");
+        record.createdAtMs=getInt64(row,"created_at_ms");
+        record.reviewedAtMs=getInt64(row,"reviewed_at_ms");
+        records.emplace_back(std::move(record));
+    }
+    return {.status=RepoStatus::Ok,.value=records};
 }
-storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRequestRepo::review(const std::string&groupId,const std::string&applicationAccountId,const std::string& reviewAccountId,bool approve,size_t maxGroupMembers,int64_t nowMs){
-
+storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRequestRepo::review(const std::string&groupId,const std::string&applicantAccountId,const std::string& reviewAccountId,bool approve,size_t maxGroupMembers,int64_t nowMs){
+    if(groupId.empty()||applicantAccountId.empty()||reviewAccountId.empty()){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the Database"};
+    }
+    //事务处理
+    try{
+        SqlTransaction transaction(*conn);
+        //锁定目标群
+        auto resultGroup=conn->queryPrepared(R"(
+            SELECT owner, status
+            FROM chat_groups
+            WHERE group_id = ?
+            AND status=0
+            FOR UPDATE;
+            )"
+            ,{groupId});
+        if(!resultGroup.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultGroup.error};
+        }
+        //检查群存在且未解散
+        if(resultGroup.rows.empty()){
+            return {.status=RepoStatus::GroupNotFound,.message="group not found"};
+        }
+        //查询审核人角色
+        auto resultRole=conn->queryPrepared(R"(
+            SELECT role
+            FROM group_members
+            WHERE group_id=? AND account_id=?
+            LIMIT 1
+            )",{groupId,reviewAccountId});
+        if(!resultRole.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultRole.error};
+        }
+        if(resultRole.rows.empty()){
+            return {.status=RepoStatus::UserNotFound,.message="user not found"};
+        }
+        auto role=getUInt64(resultRole.rows.front(),"role");
+        if(role!=1||role!=2){
+            return {.status=RepoStatus::NoPermission};
+        }
+        //检查是否有pending申请
+        auto resultRequest=conn->queryPrepared(R"(
+            SELECT id,status 
+            FROM group_join_requests
+            WHERE group_id=? AND applicant_account_id=?
+            LIMIT 1 FOR UPDATE
+            )",{groupId,applicantAccountId});
+        if(!resultRequest.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultRequest.error};
+        }
+        if(resultRequest.rows.empty()){
+            return {.status=RepoStatus::JoinRequestNotFound};
+        }
+        
+    }catch(const std::exception& e){
+        return {.status=RepoStatus::SqlError,.message=e.what()};
+    }
 }
     

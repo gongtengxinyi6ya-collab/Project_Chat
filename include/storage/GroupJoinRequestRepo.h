@@ -10,9 +10,9 @@ namespace storage{
 class GroupJoinRequestRepo{
 public:
     virtual ~GroupJoinRequestRepo()=default;
-    virtual RepoValueResult<GroupJoinApplyResult> submit(const std::string& groupId,const std::string& applicantAAccountId,const std::string& requestMessage,int64_t nowMs)=0;//提交入群申请
+    virtual RepoValueResult<GroupJoinApplyResult> submit(const std::string& groupId,const std::string& applicantAccountId,const std::string& requestMessage,int64_t nowMs)=0;//提交入群申请
     virtual RepoValueResult<std::vector<GroupJoinRequestRecord>> listPending(const std::string& groupId,size_t limit)=0;//列出待审批申请
-    virtual RepoValueResult<GroupJoinReviewResult> review(const std::string&groupId,const std::string&applicationAccountId,const std::string& reviewAccountId,bool approve,size_t maxGroupMembers,int64_t nowMs)=0;//审批申请
+    virtual RepoValueResult<GroupJoinReviewResult> review(const std::string&groupId,const std::string&applicantAccountId,const std::string& reviewAccountId,bool approve,size_t maxGroupMembers,int64_t nowMs)=0;//审批申请
     
 };
 }
