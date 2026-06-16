@@ -378,9 +378,10 @@ storage::RepoValueResult<storage::GroupSnapshot> storage::SqlGroupRepo::findGrou
     snapShot.groupName=getString(row,"group_name");
     snapShot.ownerAccountId=getString(row,"owner");
     auto statusOpt=getGroupStatusFromUint(getUInt64(row,"status"));
-    if(statusOpt.has_value()){
-        snapShot.status=statusOpt.value();
+    if(!statusOpt.has_value()){
+        return {.status=RepoStatus::Internal,.message="status invalid"};
     }
+    snapShot.status=statusOpt.value();
     snapShot.dissolvedAtMs=getInt64(row,"dissolved_at_ms");
     return {.status=RepoStatus::Ok,.value=snapShot};
 

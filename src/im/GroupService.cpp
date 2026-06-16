@@ -236,7 +236,7 @@ storage::RepoValueResult<im::GroupInviteResult> im::GroupService::inviteMember(c
     }
     //检查目标账号存在
     if(!userProfileRepo_->findByAccountId(targetAccountId).has_value()){
-        return {.status=storage::RepoStatus::NotFound};
+        return {.status=storage::RepoStatus::UserNotFound};
     }
     //检查目标是否已经入群
     if(groupRepo_->isMember(groupId,targetAccountId)){//幂等返回
@@ -265,6 +265,9 @@ storage::RepoValueResult<im::GroupInviteResult> im::GroupService::inviteMember(c
     //加入数据库
     auto resultAdd=groupRepo_->addMember(groupId,targetAccountId,static_cast<uint8_t>(GroupRole::Member));
     if(!resultAdd.ok()){
+        if(resultAdd.status==storage::RepoStatus::AlreadyExists){
+            return {.status=storage::RepoStatus::Ok,.value=GroupInviteResult{.joined=false,.alreadyIn=false}};
+        }
         return {.status=resultAdd.status,.message=resultAdd.message};
     }
     //同步内存
@@ -308,7 +311,7 @@ storage::RepoValueResult<im::GroupDissolveResult> im::GroupService::dissolveGrou
         return {.status=storage::RepoStatus::Internal};
     }
     if(resultDis.value.value().alreadyDissolved){
-        return {.status=storage::RepoStatus::Ok,.value=GroupDissolveResult{.alreadyDissolved=true,.groupId=groupId}}
+        return {.status=storage::RepoStatus::Ok,.value=GroupDissolveResult{.alreadyDissolved=true,.groupId=groupId}};
     }
     //获取解散成员列表
     GroupDissolveResult dissolveResult;

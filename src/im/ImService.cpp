@@ -693,7 +693,7 @@ im::Response im::Imservice::handleDissolveGroup(const Request& req,[[maybe_unuse
         return makeErr(req,ErrorCode::INTERNAL,"groupDissolveResult value is empty");
     }
     if(result.value.value().alreadyDissolved){
-        return makeOk(req,MsgType::DISSOLVE_GROUP_RESP);
+        return makeOk(req,MsgType::DISSOLVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"dissolved",false},{"alreadyDissolved",true}});
     }
     auto accountIds=result.value.value().affectedAccountIds;
     im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="group dissolved",.data=nlohmann::json{{"event","group_dissolved"},{"groupId",groupId},{"operatorAccountId",session.accountId_}}};

@@ -47,14 +47,14 @@ struct GroupJoinRequestRecord{//保存一次入群申请的完整持久化状态
     int64_t createdAtMs{0};//创建时间
     int64_t reviewedAtMs{0};
 };
-struct GroupJoinApplyResult {//加群结果
+struct GroupJoinApplyResult {//入群申请结果
     bool submitted{false};
     bool alreadyPending{false};
     bool alreadyIn{false};
     std::string groupId;
     std::string applicantAccountId;//申请人账号
 };
-struct GroupJoinReviewResult {
+struct GroupJoinReviewResult {//入群审核结果
     bool approved{false};//审核是否同意
     bool rejected{false};//审核是否拒绝
     bool memberAdded{false};//同意时成员是否成功入群

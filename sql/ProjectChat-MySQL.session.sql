@@ -16,3 +16,30 @@ ALTER TABLE chat_groups
         COMMENT '0=active,1=dissolved',
     ADD COLUMN dissolved_at_ms BIGINT UNSIGNED NULL,
     ADD KEY idx_chat_groups_status (status);
+
+
+CREATE TABLE IF NOT EXISTS group_join_requests (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    group_id VARCHAR(64) NOT NULL,
+    applicant_account_id VARCHAR(32) NOT NULL,
+    status TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    request_message VARCHAR(255) NOT NULL DEFAULT '',
+    reviewer_account_id VARCHAR(32) NULL,
+    created_at_ms BIGINT UNSIGNED NOT NULL,
+    reviewed_at_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_group_join_applicant (
+        group_id,
+        applicant_account_id
+    ),
+    KEY idx_group_join_pending (
+        group_id,
+        status,
+        created_at_ms
+    ),
+    KEY idx_group_join_applicant (
+        applicant_account_id,
+        status
+    )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
