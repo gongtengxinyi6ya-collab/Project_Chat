@@ -77,6 +77,9 @@ storage::RepoValueResult<storage::GroupJoinApplyResult> storage::SqlGroupJoinReq
                 if(!resultUpdate.ok()){
                     return {.status=RepoStatus::SqlError,.message=resultUpdate.error};
                 }
+                if(resultUpdate.affectedRows==0){
+                    return {.status=RepoStatus::NotFound};
+                }
                 transaction.commit();
                 return {.status=RepoStatus::Ok,.value=GroupJoinApplyResult{.submitted=true,.groupId=groupId,.applicantAccountId=applicantAccountId}};
             }

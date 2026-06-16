@@ -46,7 +46,7 @@ public:
     
     storage::RepoValueResult<GroupInviteResult> inviteMember(const std::string& groupId,const std::string& inviterAccountId,const std::string& targetAccountId);//邀请好友入群
     storage::RepoValueResult<GroupDissolveResult> dissolveGroup(const std::string& groupId,const std::string& operatorAccountId,int64_t nowMs);//解散群聊
-
+    storage::RepoResult reloadGroup(const std::string& groupId);//查数据库进行内存更新
 private:
     GroupManager& groupManager_;
     std::shared_ptr<storage::GroupRepo> groupRepo_;
@@ -54,7 +54,6 @@ private:
     std::shared_ptr<storage::FriendRepo> friendRepo_;
     bool requireFriendForInvite_{true};
     size_t maxGroupMembers_{500};//群人数上限
-
     storage::RepoResult reloadGroup(const std::string& groupId);//查数据库进行内存更新
 };
 }

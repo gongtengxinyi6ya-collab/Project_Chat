@@ -85,6 +85,15 @@ enum class MsgType:uint16_t{
 
     DISSOLVE_GROUP_REQ = 75,//解散群聊请求
     DISSOLVE_GROUP_RESP = 76,
+
+    APPLY_GROUP_JOIN_REQ = 77,
+    APPLY_GROUP_JOIN_RESP = 78,
+    LIST_GROUP_JOIN_REQUESTS_REQ = 79,
+    LIST_GROUP_JOIN_REQUESTS_RESP = 80,
+    REVIEW_GROUP_JOIN_REQUEST_REQ = 81,
+    REVIEW_GROUP_JOIN_REQUEST_RESP = 82,
+    SEARCH_PUBLIC_GROUPS_REQ = 83,
+    SEARCH_PUBLIC_GROUPS_RESP = 84,
     ERR=255
 };
 //从整数转换为MsgType枚举
@@ -243,6 +252,22 @@ inline std::optional<MsgType> msgTypeFromInt(uint32_t v){
             return MsgType::DISSOLVE_GROUP_REQ;
         case 76:
             return MsgType::DISSOLVE_GROUP_RESP;
+        case 77:
+            return MsgType::APPLY_GROUP_JOIN_REQ;
+        case 78:
+            return MsgType::APPLY_GROUP_JOIN_RESP;
+        case 79:
+            return MsgType::LIST_GROUP_JOIN_REQUESTS_REQ;
+        case 80:
+            return MsgType::LIST_GROUP_JOIN_REQUESTS_RESP;
+        case 81:
+            return MsgType::REVIEW_GROUP_JOIN_REQUEST_REQ;
+        case 82:
+            return MsgType::REVIEW_GROUP_JOIN_REQUEST_RESP;
+        case 83:
+            return MsgType::SEARCH_PUBLIC_GROUPS_REQ;
+        case 84:
+            return MsgType::SEARCH_PUBLIC_GROUPS_RESP;
         case 255:
             return MsgType::ERR;
         
