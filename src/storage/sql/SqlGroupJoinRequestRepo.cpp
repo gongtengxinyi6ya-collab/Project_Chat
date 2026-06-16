@@ -183,6 +183,7 @@ storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRe
             FROM group_members
             WHERE group_id=? AND account_id=?
             LIMIT 1
+            FOR UPDATE
             )",{groupId,reviewAccountId});
         if(!resultRole.ok()){
             return {.status=RepoStatus::SqlError,.message=resultRole.error};
@@ -191,7 +192,7 @@ storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRe
             return {.status=RepoStatus::UserNotFound,.message="user not found"};
         }
         auto role=getUInt64(resultRole.rows.front(),"role");
-        if(role!=1||role!=2){
+        if(role!=1&&role!=2){
             return {.status=RepoStatus::NoPermission};
         }
         //检查是否有pending申请
@@ -207,7 +208,102 @@ storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRe
         if(resultRequest.rows.empty()){
             return {.status=RepoStatus::JoinRequestNotFound};
         }
-        
+        GroupJoinRequestStatus requestRes{GroupJoinRequestStatus::Pending};
+        if(approve){
+            requestRes=GroupJoinRequestStatus::Approved;
+        }
+        else{
+            requestRes=GroupJoinRequestStatus::Rejected;
+        }
+        auto statusOpt=getGroupJoinRequestStatus(getUInt64(resultRequest.rows.front(),"status"));
+        if(!statusOpt.has_value()){
+            return {.status=RepoStatus::Internal};
+        }
+        if(statusOpt.value()!=GroupJoinRequestStatus::Pending){//申请不是待处理
+            if(statusOpt.value()==requestRes){//已经按相同结果处理，幂等成功
+                return {.status=RepoStatus::Ok,.value=GroupJoinReviewResult{.approved=approve,.rejected=!approve,.alreadyHandled=true,.groupId=groupId,.applicantAccountId=applicantAccountId}};
+            }
+            else{//已经按相反结果处理
+                return {.status=RepoStatus::AlreadyHandled,.value=GroupJoinReviewResult{.approved=!approve,.rejected=approve,.alreadyHandled=true,.groupId=groupId,.applicantAccountId=applicantAccountId}};
+            }
+        }
+        auto request_id=getUInt64(resultRequest.rows.front(),"id");
+        GroupJoinReviewResult reviewResult;
+        if(!approve){
+            auto resultReject=conn->executePrepared(R"(
+                UPDATE group_join_requests
+                SET status=2,
+                reviewer_account_id=?,
+                reviewed_at_ms=?
+                WHERE id=?
+                AND applicant_account_id=?
+                AND status=0
+                )",{reviewAccountId,nowMs,request_id,applicantAccountId});
+            if(!resultReject.ok()){
+                return {.status=RepoStatus::SqlError,.message=resultReject.error};
+            }
+            if(resultReject.affectedRows==0){
+                return {.status=RepoStatus::JoinRequestNotFound};
+            }
+            reviewResult.rejected=true;
+        }
+        else{
+            //同意申请则检查人数
+            auto resultCount=conn->queryPrepared(R"(
+                SELECT COUNT(*) AS member_count
+                FROM group_members
+                WHERE group_id = ?;
+                )",{groupId});
+            if(!resultCount.ok()){
+                return {.status=RepoStatus::SqlError,.message=resultCount.error};
+            }
+            if(resultCount.rows.empty()){
+                return {.status=RepoStatus::NotFound};
+            }
+            if(getUInt64(resultCount.rows.front(),"member_count")>=maxGroupMembers){
+                return {.status=RepoStatus::GroupMemberLimitReach};
+            }
+            //人数未满插入成员
+            auto resultInsert=conn->executePrepared(R"(
+                INSERT INTO group_members(group_id, account_id, role)
+                SELECT group_id, ?, ?
+                FROM chat_groups
+                WHERE group_id = ?
+                AND status = 0;
+                )",{applicantAccountId,static_cast<uint64_t>(0),groupId});
+            if(!resultInsert.ok()){
+                if(resultInsert.error.find("Duplicate entry")!=std::string::npos){
+                    return {.status=RepoStatus::AlreadyExists,.message="User is already a member of the group"};
+                }
+                return {.status=RepoStatus::SqlError,.message=resultInsert.error};
+            }
+            if(resultInsert.affectedRows==0){
+                return {.status=RepoStatus::GroupNotFound};
+            }
+            //插入成功后更新申请
+            auto resultApprove=conn->executePrepared(R"(
+                UPDATE group_join_requests
+                SET status = 1,
+                    reviewer_account_id = ?,
+                    reviewed_at_ms = ?
+                WHERE id = ?
+                AND applicant_account_id = ?
+                AND status = 0;
+                )",{reviewAccountId,nowMs,request_id,applicantAccountId});
+            if(!resultApprove.ok()){
+                return {.status=RepoStatus::SqlError,.message=resultApprove.error};
+            }
+            if(resultApprove.affectedRows==0){
+                return {.status=RepoStatus::JoinRequestNotFound};
+            }
+            reviewResult.approved=true;
+            reviewResult.memberAdded=true;
+        }
+        transaction.commit();
+        reviewResult.groupId=groupId;
+        reviewResult.applicantAccountId=applicantAccountId;
+        return {.status=RepoStatus::Ok,.value=reviewResult};
+
     }catch(const std::exception& e){
         return {.status=RepoStatus::SqlError,.message=e.what()};
     }
