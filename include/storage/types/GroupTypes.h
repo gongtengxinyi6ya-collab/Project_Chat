@@ -72,4 +72,17 @@ inline std::optional<GroupStatus> getGroupStatusFromUint(uint64_t value){
             return std::nullopt;
     }
 }
+
+inline std::optional<GroupJoinRequestStatus> getGroupJoinRequestStatus(uint64_t value){
+    switch(value){
+        case 0:
+            return GroupJoinRequestStatus::Pending;
+        case 1:
+            return GroupJoinRequestStatus::Approved;
+        case 2:
+            return GroupJoinRequestStatus::Rejected;
+        default:
+            return std::nullopt;
+    }
+}
 }
