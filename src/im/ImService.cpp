@@ -840,6 +840,7 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
         case im::ErrorCode::CANNOT_INVITE_SELF:
         case im::ErrorCode::INVITE_REQUIRES_FRIEND:
         case im::ErrorCode::GROUP_MEMBER_LIMIT_REACHED:
+        case im::ErrorCode::JOIN_REQUEST_NOT_FOUND:
             return LogLevel::WARN;
         case im::ErrorCode::INTERNAL:
             return LogLevel::ERROR;
@@ -1051,6 +1052,10 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
             return im::ErrorCode::INVITE_REQUIRES_FRIEND;
         case storage::RepoStatus::GroupMemberLimitReach:
             return im::ErrorCode::GROUP_MEMBER_LIMIT_REACHED;
+        case storage::RepoStatus::UserNotFound:
+            return im::ErrorCode::NO_SUCH_USER;
+        case storage::RepoStatus::JoinRequestNotFound:
+            return im::ErrorCode::JOIN_REQUEST_NOT_FOUND;
         case storage::RepoStatus::Internal:
             return im::ErrorCode::INTERNAL;
     }

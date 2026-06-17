@@ -117,6 +117,10 @@ private:
     Response handleTransferGroupOwner(const Request& req, ConnKey key, Session& session);//转让群主
     Response handleInviteGroupMember(const Request& req,ConnKey key,Session& session);
     Response handleDissolveGroup(const Request& req,ConnKey key,Session& session);
+    Response handleApplyGroupJoin(const Request& req, ConnKey key, Session& session);//处理入群申请
+    Response handleListGroupJoinRequest(const Request& req,ConnKey key,Session& session);//获取入群申请列表
+    Response handleSearchGroups(const Request& req,ConnKey key,Session& session);//查询群
+    
     //日志上下文生成辅助方法
     LogContext makeReqCtx(ConnKey,const Request&,const Session&,const std::string& )const;//生成请求入口日志上下文
     LogContext makeRespCtx(ConnKey,const Request&,const Response&,const Session&,const std::string&)const;//生成响应出口日志上下文

@@ -52,6 +52,7 @@ enum class ErrorCode: uint16_t{
     CANNOT_INVITE_SELF,
     INVITE_REQUIRES_FRIEND,
     GROUP_MEMBER_LIMIT_REACHED,
+    JOIN_REQUEST_NOT_FOUND,
     INTERNAL//服务器内部错误
 
 };
@@ -152,6 +153,8 @@ inline const char* errCodeToString(ErrorCode code){
             return "Only friends can be invited";
         case ErrorCode::GROUP_MEMBER_LIMIT_REACHED:
             return "Group member limit reached";
+        case ErrorCode::JOIN_REQUEST_NOT_FOUND:
+            return "Group join request not found";
         default:
             return "Unknown Error Code";
     }
