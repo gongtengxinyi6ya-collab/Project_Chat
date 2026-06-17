@@ -35,6 +35,7 @@ namespace im{
     class MessageSyncService;//消息同步服务
     class MessageAckService;//消息确认服务
     class GroupService;//群管理服务
+    class GroupJoinService;//管理入群申请
 class Imservice{
 public:
     class BroadcastResult{
@@ -117,6 +118,9 @@ private:
     Response handleTransferGroupOwner(const Request& req, ConnKey key, Session& session);//转让群主
     Response handleInviteGroupMember(const Request& req,ConnKey key,Session& session);
     Response handleDissolveGroup(const Request& req,ConnKey key,Session& session);
+
+    //入群申请
+    std::unique_ptr<GroupJoinService> groupJoinService_;
     Response handleApplyGroupJoin(const Request& req, ConnKey key, Session& session);//处理入群申请
     Response handleListGroupJoinRequest(const Request& req,ConnKey key,Session& session);//获取入群申请列表
     Response handleSearchGroups(const Request& req,ConnKey key,Session& session);//查询群

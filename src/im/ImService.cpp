@@ -16,6 +16,7 @@
 #include "im/MessageAckService.h"
 #include "im/GroupService.h"
 #include "storage/UserProfileRepo.h"
+#include "im/GroupJoinService.h"
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
@@ -702,6 +703,98 @@ im::Response im::Imservice::handleDissolveGroup(const Request& req,[[maybe_unuse
     sessionManager_.removeJoinedGroupForAccounts(accountIds,groupId);
     return makeOk(req,MsgType::DISSOLVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"operatorAccountId",session.accountId_},{"dissolved",true},{"alreadyDissolved",false},{"affectedMembers",accountIds.size()}});
 }
+im::Response im::Imservice::handleApplyGroupJoin(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    //读取groupId
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return getGroupId.value();
+    }
+    //读取申请信息
+    std::string message;
+    auto getMsg=getStringField(req,"message",message);
+    if(getMsg){
+        return getMsg.value();
+    }
+    if(!groupJoinService_){
+        return makeErr(req,ErrorCode::INTERNAL,"groupJoinService is not avaiable");
+    }
+    auto result=groupJoinService_->applyToJoin(groupId,session.accountId_,message,nowMs());
+    if(!result.ok()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    if(!result.value.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"value is empty");
+    }
+    auto applyRes=result.value.value();
+    return makeOk(req,MsgType::APPLY_GROUP_JOIN_RESP,nlohmann::json{{"groupId",groupId},{"applicantAccountId",session.accountId_},{"submitted",applyRes.submitted},{"alreadyPending",applyRes.alreadyPending},{"alreadyIn",applyRes.alreadyIn}});
+}
+im::Response im::Imservice::handleListGroupJoinRequest(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    //读取groupId
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return getGroupId.value();
+    }
+    //读取limit
+    auto limit=parseLimit(req,"limit",20,100);
+    if(!groupJoinService_){
+        return makeErr(req,ErrorCode::INTERNAL,"groupJoinService is not avaiable");
+    }
+
+    auto result=groupJoinService_->listPendingRequests(groupId,session.accountId_,limit);
+    if(!result.ok()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    if(!result.value.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"value is empty");
+    }
+    auto requestRecords=result.value.value();
+    nlohmann::json recordJsons=nlohmann::json::array();
+    for(const auto& record:requestRecords){
+        recordJsons.emplace_back(nlohmann::json{{"applicant_account_id",record.applicantAccountId},
+        {"request_id",record.requestId},{"group_id",record.groupId},
+        {"reviewer_account_id",record.reviewerAccountId},{"message",record.requestMessage},
+        {"status",record.status},{"created_at_ms",record.createdAtMs},
+        {"reviewed_at_ms",record.reviewedAtMs}});
+    }
+    return makeOk(req,MsgType::LIST_GROUP_JOIN_REQUESTS_RESP,nlohmann::json{{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"requestRecord",recordJsons}});
+}
+im::Response im::Imservice::handleSearchGroups(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    //读取groupId
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return getGroupId.value();
+    }
+    
+    if(!groupService_){
+        return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
+    }
+    auto result=groupService_->
+    if(!result.ok()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    if(!result.value.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"value is empty");
+    }
+    auto applyRes=result.value.value();
+    return makeOk(req,MsgType::APPLY_GROUP_JOIN_RESP,nlohmann::json{{"groupId",groupId},{"applicantAccountId",session.accountId_},{"submitted",applyRes.submitted},{"alreadyPending",applyRes.alreadyPending},{"alreadyIn",applyRes.alreadyIn}});
+}
+
+
 
 std::optional<std::string> im::Imservice::usernameByKey(ConnKey key)const{
     auto it=sessionManager_.find(key);
