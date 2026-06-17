@@ -25,8 +25,8 @@ public:
 private:
     GroupManager& groupManager_;
     std::shared_ptr<storage::GroupRepo> groupRepo_;
-    std::shared_ptr<storage::GroupJoinRequestRepo> joinRequestRepo_;
     std::shared_ptr<storage::UserProfileRepo> userProfileRepo_;
+    std::shared_ptr<storage::GroupJoinRequestRepo> joinRequestRepo_;
     size_t maxGroupMembers_;
     storage::RepoResult reloadGroup(const std::string& groupId);//查数据库进行内存更新
 };

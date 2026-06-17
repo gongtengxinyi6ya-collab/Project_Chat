@@ -17,7 +17,7 @@ uint64_t snowflakeId::SnowflakeIdGenerator::nextId(){
     //加锁保证线程安全
     std::lock_guard lk(mutex_);
     //获取系统毫秒时间
-    auto nowMs=currentMs();
+    uint64_t nowMs=currentMs();
     if(nowMs<lastTimestampMs_){//时钟回拨
         auto diff=lastTimestampMs_-nowMs;
         if(diff<=5){//小幅回拨等待即可

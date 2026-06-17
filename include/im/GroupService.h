@@ -19,10 +19,10 @@ namespace im{
     class GroupManager;
 
     struct GroupMemberView {
-        std::string accountId;
-        std::string username;
-        std::string nickname;
-        std::string avatarUrl;
+        std::string accountId{};
+        std::string username{};
+        std::string nickname{};
+        std::string avatarUrl{};
         GroupRole role{GroupRole::Member};
 };
 
@@ -36,7 +36,7 @@ struct GroupInviteResult {//群聊邀请结果
 struct GroupDissolveResult {//群聊解散结果
     bool dissolved{false};//解散是否完成
     bool alreadyDissolved{false};//之前是否已经解散
-    std::string groupId;//目标群
+    std::string groupId{};//目标群
     std::vector<std::string> affectedAccountIds;//解散前所有成员，
 };
 struct GroupCreateResult{
