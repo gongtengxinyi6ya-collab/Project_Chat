@@ -7,6 +7,7 @@
 #include <optional>
 #include "ImMessage.h"
 #include "SyncParseResult.h"
+#include "im/HistoryQuery.h"
 /*
 */
 namespace im{   
@@ -22,12 +23,20 @@ namespace im{
     std::vector<uint64_t> msgIds;
     std::vector<uint64_t> offlineMsgIds;
 };
-    struct MessageAckParseResult {//解析结果
+struct MessageAckParseResult {//解析结果
     bool ok{false};
     ErrorCode code{ErrorCode::OK};
     std::string message{};
     MessageAckPayload payload{};
 };
+
+struct HistoryQueryParseResult {
+    bool ok{false};
+    ErrorCode code{ErrorCode::OK};
+    std::string message{};
+    HistoryQuery query{};
+};
     MessageAckParseResult parseMessageAck(const Request& req,size_t maxBatchSize);//从JSON请求中解析msgIds和offlineIds
     std::optional<im::Response> parseUint64ArrayField(const Request&req,const std::string&field,std::vector<uint64_t>& out,size_t maxBatchSize);
+    HistoryQueryParseResult parseHistoryQuery(const Request&req,size_t defaultLimit,size_t maxLimit);//统一解析历史消息请求
 }

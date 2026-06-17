@@ -1225,34 +1225,7 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     if(auto errField=getStringField(req,"groupId",groupId)){
         return errField.value();
     }
-    uint64_t beforeMsgId=0;
-    if(req.body.contains("beforeMsgId")){
-        if(req.body["beforeMsgId"].is_number_unsigned()){
-            beforeMsgId=req.body["beforeMsgId"].get<uint64_t>();
-        }
-        else if(req.body["beforeMsgId"].is_number_integer()&&req.body["beforeMsgId"].get<int64_t>()>=0){
-            beforeMsgId=static_cast<uint64_t>(req.body["beforeMsgId"].get<int64_t>());
-        }
-        else{
-            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid beforeMsgId");
-        }
-    }
-    size_t limit=20;
-    if(req.body.contains("limit")){
-        
-        if(req.body["limit"].is_number_unsigned()){
-            limit=req.body["limit"].get<size_t>();
-        }
-        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
-            limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
-        }
-        else{
-            return makeErr(req,im::ErrorCode::BAD_REQUEST,"Invalid limit");
-        }
-    }
-    if(limit>100){//limit最大值限制
-        limit=100;
-    }
+    
     auto accountId=sessionManager_.accountIdByConn(key);
     if(!accountId){
         return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");
@@ -1263,14 +1236,24 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     if(!hasRepositories()||!repos_.messageRepo){
         return makeErr(req,im::ErrorCode::INTERNAL,"Message repository is not configured");
     }
-    //调用群历史消息查询
-    auto messages=repos_.messageRepo->listGroupMessages(groupId,beforeMsgId,limit);
-    //返回JSON数组mwssages
+    auto historyQuery=parseHistoryQuery(req,20,100);
+    if(!historyQuery.ok){
+        return makeErr(req,historyQuery.code,historyQuery.message);
+    }
+    std::vector<storage::MessageRecord> messages;
+    if(historyQuery.query.mode==HistoryQueryMode::After){
+        messages=repos_.messageRepo->listGroupMessagesAfter(groupId,historyQuery.query.lastMsgId,historyQuery.query.limit);
+    }
+    else {
+        messages=repos_.messageRepo->listGroupMessages(groupId,historyQuery.query.beforeMsgId,historyQuery.query.limit);
+    }
+
+    //返回JSON数组messages
     nlohmann::json messagesJson=nlohmann::json::array();
     for(const auto& msg:messages){
         messagesJson.push_back(nlohmann::json{{"msgId",msg.messageId},{"groupId",msg.groupId},{"senderAccountId",msg.senderAccountId},{"senderUsername",msg.senderUsername},{"content",msg.content},{"serverTsMs",msg.serverTsMs}});
     }
-    return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"messages",messagesJson}});
+    return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"mode",historyQuery.query.mode},{"beforeMsgId",historyQuery.query.beforeMsgId},{"lastMsgId",historyQuery.query.lastMsgId},{"limit",historyQuery.query.limit},{"messages",messagesJson}});
 
 }
 im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
@@ -1296,77 +1279,30 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
     if(!friendService_->areFriends(session.accountId_,peerAccountId)){
         return makeErr(req,ErrorCode::NOT_FRIENDS,"not your friends");
     }
-    //解析beforeMsgId,limit
-    uint64_t beforeMsgId=0;
-    if(req.body.contains("beforeMsgId")){
-        if(req.body["beforeMsgId"].is_number_unsigned()){
-            beforeMsgId=req.body["beforeMsgId"].get<uint64_t>();
-        }
-        else if(req.body["beforeMsgId"].is_number_integer()&&req.body["beforeMsgId"].get<int64_t>()>=0){
-            beforeMsgId=static_cast<uint64_t>(req.body["beforeMsgId"].get<int64_t>());
-        }
-        else{
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid beforeMsgId");
-        }
-    }
-    uint64_t lastMsgId = 0;
-    if(req.body.contains("lastMsgId")){
-        if(req.body["lastMsgId"].is_number_unsigned()){
-            lastMsgId=req.body["lastMsgId"].get<uint64_t>();
-        }
-        else if(req.body["lastMsgId"].is_number_integer()&&req.body["lastMsgId"].get<int64_t>()>=0){
-            lastMsgId=static_cast<uint64_t>(req.body["lastMsgId"].get<int64_t>());
-        }
-        else{
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid lastMsgId");
-        }
-    }
-    //处理冲突
-    if (beforeMsgId > 0 && lastMsgId > 0) {
-    return makeErr(req, ErrorCode::BAD_REQUEST, "beforeMsgId and lastMsgId cannot both be set");
-}
-    size_t limit=20;
-    if(req.body.contains("limit")){
-        
-        if(req.body["limit"].is_number_unsigned()){
-            limit=req.body["limit"].get<size_t>();
-        }
-        else if(req.body["limit"].is_number_integer()&&req.body["limit"].get<int64_t>()>0){
-            limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
-        }
-        else{
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid limit");
-        }
-    }
-    if(limit>100){//limit最大值限制
-        limit=100;
-    }
     //生成会话key
     auto conversationKey=buildDirectConversationKey(session.accountId_,peerAccountId);
     //获取历史私聊消息
     if(!repos_.messageRepo){
         return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not avaiable");
     }
+    //解析beforeMsgId,limit
+    auto historyQuery=parseHistoryQuery(req,20,100);
+    if(!historyQuery.ok){
+        return makeErr(req,historyQuery.code,historyQuery.message);
+    }
     //分支查询
     std::vector<storage::DirectMessageRecord> result;
-    if(lastMsgId>0){
-        result=repos_.messageRepo->listDirectMessagesAfter(conversationKey,lastMsgId,limit);
+    if(historyQuery.query.mode==HistoryQueryMode::After){
+        result=repos_.messageRepo->listDirectMessagesAfter(conversationKey,historyQuery.query.lastMsgId,historyQuery.query.limit);
     }
     else{
-        result=repos_.messageRepo->listDirectMessages(conversationKey,beforeMsgId,limit);
-    }
-    std::string mode="lastest";
-    if(beforeMsgId>0){
-        mode="older";
-    }
-    else if(lastMsgId>0){
-        mode="newer";
+        result=repos_.messageRepo->listDirectMessages(conversationKey,historyQuery.query.beforeMsgId,historyQuery.query.limit);
     }
     nlohmann::json messagesJson=nlohmann::json::array();
     for(const auto&message:result){
         messagesJson.push_back(nlohmann::json{{"msgId",message.messageId},{"fromAccountId",message.senderAccountId},{"toAccountId",message.receiverAccountId},{"fromUsername",message.senderUsername},{"content",message.content},{"serverTsMs",message.serverTsMs}});
     }
-    return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"mode",mode},{"beforeMsgId",beforeMsgId},{"lastMsgId",lastMsgId},{"messages",messagesJson}});
+    return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"conversationKey",conversationKey},{"mode",historyQuery.query.mode},{"beforeMsgId",historyQuery.query.beforeMsgId},{"lastMsgId",historyQuery.query.lastMsgId},{"limit",historyQuery.query.limit},{"messages",messagesJson}});
     
 }
 void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromAccountId,uint64_t msgId){

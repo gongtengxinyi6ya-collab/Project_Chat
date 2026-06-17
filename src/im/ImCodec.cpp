@@ -206,3 +206,74 @@ im::MessageAckParseResult im::parseMessageAck(const Request& req,size_t maxBatch
     result.ok=true;
     return result;
 }
+
+im::HistoryQueryParseResult im::parseHistoryQuery(const Request&req,size_t defaultLimit,size_t maxLimit){
+    size_t limit=0;
+    if (req.body.contains("limit")) {//存在字段
+        if (req.body["limit"].is_number_unsigned()) {
+            limit = req.body["limit"].get<size_t>();
+        } 
+        else if (req.body["limit"].is_number_integer() &&req.body["limit"].get<int64_t>() > 0)
+        {
+            limit =static_cast<size_t>(req.body["limit"].get<int64_t>());
+        } 
+        else{//存在但不是非负整数
+            return {.code=ErrorCode::BAD_REQUEST};
+        }
+    }
+    else{//不存在取默认值
+        limit=defaultLimit;
+    }
+    if(limit>maxLimit){//超过限制截断
+        limit=maxLimit;
+    }
+
+    //读取beforeMsgId
+    uint64_t beforeMsgId=0;
+    if (req.body.contains("beforeMsgId")) {//存在字段
+        if (req.body["beforeMsgId"].is_number_unsigned()) {
+            beforeMsgId = req.body["beforeMsgId"].get<size_t>();
+        } 
+        else if (req.body["beforeMsgId"].is_number_integer() &&req.body["beforeMsgId"].get<int64_t>() > 0)
+        {
+            beforeMsgId =static_cast<size_t>(req.body["beforeMsgId"].get<int64_t>());
+        } 
+        else{//存在但不是非负整数
+            return {.code=ErrorCode::BAD_REQUEST};
+        }
+    }
+    else{
+        beforeMsgId=0;
+    }
+    //读取lastMsgId
+    uint64_t lastMsgId=0;
+    if (req.body.contains("lastMsgId")) {//存在字段
+        if (req.body["lastMsgId"].is_number_unsigned()) {
+            lastMsgId = req.body["lastMsgId"].get<size_t>();
+        } 
+        else if (req.body["lastMsgId"].is_number_integer() &&req.body["lastMsgId"].get<int64_t>() > 0)
+        {
+            lastMsgId =static_cast<size_t>(req.body["lastMsgId"].get<int64_t>());
+        } 
+        else{//存在但不是非负整数
+            return {.code=ErrorCode::BAD_REQUEST};
+        }
+    }
+    //互斥校验
+    if(beforeMsgId>0&&lastMsgId>0){
+        return {.code=ErrorCode::BAD_REQUEST};
+    }
+    HistoryQueryMode mode;
+    //模式判断
+    if(beforeMsgId==0&&lastMsgId==0){
+        mode=HistoryQueryMode::Latest;
+    }
+    else if(beforeMsgId>0&&lastMsgId==0){
+        mode=HistoryQueryMode::Before;
+    }
+    else if(beforeMsgId==0&&lastMsgId>0){
+        mode=HistoryQueryMode::After;
+    }
+    HistoryQuery query{.mode=mode,.beforeMsgId=beforeMsgId,.lastMsgId=lastMsgId,.limit=limit};
+    return {.ok=true,.query=query};
+}
