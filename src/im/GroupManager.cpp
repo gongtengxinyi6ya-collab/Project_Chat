@@ -1,20 +1,19 @@
 #include "im/GroupManager.h"
 #include "logger/LogMacros.h"
-std::pair<bool,std::string> im::GroupManager::createGroup(const std::string& ownerAccountId,const std::string& name){
-    if(ownerAccountId.empty()||name.empty()){
-        return {false,""};
+bool im::GroupManager::createGroup(const std::string& groupId,const std::string& ownerAccountId,const std::string& name){
+    if(groupId.empty()||ownerAccountId.empty()||name.empty()){
+        return false;
     }
-    std::string groupId="Group"+std::to_string(nextGroupSeq_++);
     Group g(groupId,name,ownerAccountId);
     if(!g.addMember(ownerAccountId,GroupRole::Owner)){
-        return {false,""};
+        return false;
     }
     auto [it, success] = groupsById_.emplace(groupId,std::move(g));
     if (!success) {
-        return {false,""};
+        return false;
     }
     accountIdGroups_[ownerAccountId].insert(groupId);
-    return {true, groupId};
+    return true;
 }
 im::JoinResult im::GroupManager::joinGroup(const std::string& groupId,const std::string& accountId){
     auto it=groupsById_.find(groupId);
@@ -159,20 +158,6 @@ bool im::GroupManager::restoreGroup(const std::string& groupId,const std::string
         accountIdGroups_[newMembeInfo.first].insert(groupId);//恢复成员成功时同步添加映射
     }
     groupsById_.emplace(groupId,std::move(g));//同步保存群
-    //解析Group数字，更新nextGroupSeq_以避免groupId冲突，例如Group1,Group2等
-    if(groupId.rfind("Group",0)==0){//如果groupId以"Group"开头
-        try{
-            uint64_t idNum=std::stoull(groupId.substr(5));
-            uint64_t expectedNextSeq=idNum+1;
-            uint64_t currentNextSeq=nextGroupSeq_.load();
-            while(currentNextSeq<expectedNextSeq){
-                nextGroupSeq_.compare_exchange_weak(currentNextSeq,expectedNextSeq);
-            }
-        }
-        catch(const std::exception& e){
-            //解析失败时不更新nextGroupSeq_
-        }
-    }
     return true;
 }
 

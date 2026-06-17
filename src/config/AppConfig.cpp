@@ -18,6 +18,7 @@ AppConfig AppConfig::loadFromFile(const std::string& path){
         config.im_=ImConfig::fromJson(j.value("im", nlohmann::json::object()));
         config.databaseConfig_=DatabaseConfig::fromJson(j.value("database",nlohmann::json::object()));
         config.storageConfig_=StorageConfig::fromJson(j.value("storage",nlohmann::json::object()));
+        config.idConfig_=IdConfig::fromJson(j.value("id", nlohmann::json::object()));
         return config;
     }catch(const nlohmann::json::exception& e){
         throw std::runtime_error("Failed to parse config file: "+std::string(e.what()));
@@ -31,12 +32,14 @@ void AppConfig::applyEnvOverrides(){
     im_.applyEnvOverrides();
     databaseConfig_.loadFromEnv();
     storageConfig_.loadFromEnv();
+    idConfig_.applyEnvOverrides();
 }
 void AppConfig::validateOrThrow() const{
     server_.validateOrThrow();
     net_.validateOrThrow();
     log_.validateOrThrow();
-    im_.validateOrThrow();  
+    im_.validateOrThrow();
+    idConfig_.validateOrThrow();
     databaseConfig_.validate();
     storageConfig_.validateOrThrow();
 }
@@ -47,6 +50,7 @@ std::string AppConfig::dumpSummary() const{
       <<"Log(level="<<logLevelToString(log_.level)<<",toConsole="<<log_.toConsole<<",toFile="<<log_.toFile<<",filePath="<<log_.filePath<<",jsonFormat="<<log_.jsonFormat<<"); "
       <<"IM(requireGroupIdForSend="<<im_.requireGroupIdForSend<<",maxGroupNameLen="<<im_.maxGroupNameLen<<",maxMessageLen="<<im_.maxMessageLen<<");"
       <<"Database(host="<<databaseConfig_.host()<<",port="<<databaseConfig_.port()<<",user="<<databaseConfig_.user()<<",database="<<databaseConfig_.database()<<",poolSize="<<databaseConfig_.poolSize()<<",connectTimeoutMs="<<databaseConfig_.connectTimeoutMs()<<")"
-      <<"Storage(type="<<storageConfig_.type()<<",fallbackToMemory="<<storageConfig_.fallbackToMemory()<<"); ";
+      <<"Storage(type="<<storageConfig_.type()<<",fallbackToMemory="<<storageConfig_.fallbackToMemory()<<"); "
+      <<"Id(snowflakeNodeId="<<idConfig_.snowflakeNodeId<<",snowflakeEpochMs="<<idConfig_.snowflakeEpochMs<<")";
     return ss.str();
 }

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include <optional>
-#include <atomic>
+
 #include "im/Group.h"
 #include "storage/types/GroupTypes.h"
 //群关系管理器
@@ -26,7 +26,7 @@ struct GroupMemberInfo{//成员信息，带成员角色
 class GroupManager{
 
 public:
-    std::pair<bool,std::string> createGroup(const std::string& ownerAccountId,const std::string& groupname);//创建群并让owner自动入群
+    bool createGroup(const std::string& groupId,const std::string& ownerAccountId,const std::string& groupname);//创建群并让owner自动入群
     JoinResult joinGroup(const std::string &groupId,const std::string& accountId);//用户入群
     QuitResult leaveGroup(const std::string& groupId,const std::string& accountId);//用户退群
     bool removeMember(const std::string&groupId,const std::string&accountId);//将用户移出群聊；
@@ -46,6 +46,6 @@ public:
 private:
     std::unordered_map<std::string,std::unordered_set<std::string>>  accountIdGroups_;//accountId映射groupId
     std::unordered_map<std::string,Group> groupsById_;//groupId映射Group主储存
-    std::atomic<uint64_t> nextGroupSeq_{1};//生成groupId的递增序列,用于生成唯一groupId
+    
 };
 }

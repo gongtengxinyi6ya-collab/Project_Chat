@@ -49,7 +49,12 @@
   "storage": {
   "type": "sql",
   "fallback_to_memory": false
-}
+},
 
+  "id":{
+    "snowflake_node_id": 1,
+    "snowflake_epoch_ms": 1735689600000
+
+  }
 
 }
