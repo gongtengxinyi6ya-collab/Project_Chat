@@ -2,6 +2,7 @@
 #include "storage/MessageRepo.h"
 #include "storage/OfflineMessageRepo.h"
 #include "im/ConversationKey.h"
+#include <algorithm>
 im::MessageSyncService::MessageSyncService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo)
 :messageRepo_(std::move(messageRepo)),offlineMessageRepo_(std::move(offlineMessageRepo)){
 
@@ -18,10 +19,21 @@ im::SyncResult im::MessageSyncService::sync(const std::string& accountId,const s
                 auto conversationKey=buildDirectConversationKey(accountId,cursor.targetId);
                 auto result=messageRepo_->listDirectMessagesAfter(conversationKey,cursor.lastMsgId,cursor.limit);
                 nlohmann::json messagesRecordJson=nlohmann::json::array();
+                uint64_t lastestMsgId=0;
                 for(const auto& message:result){
                     messagesRecordJson.emplace_back(nlohmann::json{{"msgId",message.messageId},{"fromAccountId",message.senderAccountId},{"toAccountId",message.receiverAccountId},{"fromUsername",message.senderUsername},{"content",message.content},{"serverTsMs",message.serverTsMs}});
+                    lastestMsgId=std::max(lastestMsgId,message.messageId);
                 }
-                syncResult.deltas.emplace_back(ConversationDelta{.type=storage::ConversationType::Direct,.targetId=cursor.targetId,.messages=std::move(messagesRecordJson)});
+                //获取客户端本地该会话最后一条消息id
+                if(result.empty()){
+                    lastestMsgId=cursor.lastMsgId;
+                }
+                //判断是否还要更多消息
+                bool hasMore=false;
+                if(result.size()>=cursor.limit){
+                    hasMore=true;
+                }
+                syncResult.deltas.emplace_back(ConversationDelta{.type=storage::ConversationType::Direct,.targetId=cursor.targetId,.fromMsgId=cursor.lastMsgId,.latestMsgId=lastestMsgId,.hasMore=hasMore,.messages=std::move(messagesRecordJson)});
             
             }
             else if(cursor.type==storage::ConversationType::Group){//群聊
