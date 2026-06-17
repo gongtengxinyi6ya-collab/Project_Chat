@@ -317,21 +317,18 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
         return makeErr(req,im::ErrorCode::GROUP_NAME_INVALID,"Group name is too long");
     }
     std::string owner=session.accountId_;
-    auto [success,groupIdOrErr]=groupManager_.createGroup(owner,groupName);
-    if(!success){
-        return makeErr(req,im::ErrorCode::INTERNAL,"Failed to create group:"+groupIdOrErr);
+    if(!groupService_){
+        return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
     }
-    std::string groupId=groupIdOrErr;
-    if(hasRepositories()){
-        auto result=repos_.groupRepo->createGroupWithOwner(groupId,groupName,owner);
-        if(!result.ok()){
-            LOG_ERROR_CTX("repo create group failed",makeReqCtx(key,req,session,"Repo failed"));
-            groupManager_.removeGroup(groupId);
-            return makeRepoError(req,result.status,"failed to persist group");
-        }
+    auto resultCreate=groupService_->creeateGroup(owner,groupName);
+    if(!resultCreate.ok()){
+        return makeRepoError(req,resultCreate.status,resultCreate.message);
     }
-    session.joinedGroupIds_.insert(groupId);
-    return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"groupName",groupName},{"ownerAccountId",owner},{"ownerUsername",session.username_}});
+    if(!resultCreate.value.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"value invalid");
+    }
+    session.joinedGroupIds_.insert(resultCreate.value.value().groupId);
+    return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",resultCreate.value.value().groupId},{"groupName",groupName},{"ownerAccountId",owner},{"ownerUsername",session.username_}});
 }
 im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,ConnKey senderkey,im::Response& push){
     BroadcastResult result;

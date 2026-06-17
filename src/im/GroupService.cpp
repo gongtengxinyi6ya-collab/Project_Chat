@@ -204,8 +204,12 @@ storage::RepoValueResult<im::GroupCreateResult> im::GroupService::creeateGroup(c
     if(!groupManager_.createGroup(groupId,ownerAccountId,groupName));
     {
         //内存失败则重数据库恢复
-        
+        auto resultReload=reloadGroup(groupId);
+        if(!resultReload.ok()){
+            return {.status=storage::RepoStatus::Internal,.message="database invite the member but memory reload failed"};
+        }
     }
+    return {.status=storage::RepoStatus::Ok,.value=GroupCreateResult{.groupId=groupId,.groupName=groupName,.ownerAccountId=ownerAccountId}};
 
 }
 storage::RepoResult im::GroupService::reloadGroup(const std::string& groupId){
