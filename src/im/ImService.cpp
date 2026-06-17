@@ -17,7 +17,8 @@
 #include "im/GroupService.h"
 #include "storage/UserProfileRepo.h"
 #include "im/GroupJoinService.h"
-im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config):supportedVer_(supportedVer),imConfig_(config){}
+#include "storage/GroupJoinRequestRepo.h"
+im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config,const IdConfig& idconfig):supportedVer_(supportedVer),imConfig_(config),idGenerator_(idConfig_.snowflakeNodeId,idConfig_.snowflakeEpochMs){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
     sendToConnKey_=std::move(fn);
@@ -158,7 +159,10 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
         messageAckService_=std::make_unique<MessageAckService>(repos_.messageRepo,repos_.offlineMessageRepo,repos_.conversationRepo);
     }
     if(repos_.groupRepo&&repos_.userProfileRepo&&repos_.friendRepo){
-        groupService_=std::make_unique<GroupService>(groupManager_,repos_.groupRepo,repos_.userProfileRepo,repos_.friendRepo,imConfig_.requireFriendForGroupInvite,imConfig_.maxGroupMembers);
+        groupService_=std::make_unique<GroupService>(groupManager_,idGenerator_,repos_.groupRepo,repos_.userProfileRepo,repos_.friendRepo,imConfig_.requireFriendForGroupInvite,imConfig_.maxGroupMembers);
+    }
+    if(repos_.groupRepo&&repos_.userProfileRepo&&repos_.groupJoinRequestRepo){
+        groupJoinService_=std::make_unique<GroupJoinService>(groupManager_,repos_.groupRepo,repos_.userProfileRepo,repos_.groupJoinRequestRepo,imConfig_.maxGroupMembers);
     }
 }
 bool im::Imservice::hasRepositories()const{
@@ -321,7 +325,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
     if(!groupService_){
         return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
     }
-    auto resultCreate=groupService_->creeateGroup(owner,groupName);
+    auto resultCreate=groupService_->createGroup(owner,groupName);
     if(!resultCreate.ok()){
         return makeRepoError(req,resultCreate.status,resultCreate.message);
     }
@@ -783,15 +787,63 @@ im::Response im::Imservice::handleSearchGroups(const Request& req,[[maybe_unused
     if(!groupService_){
         return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
     }
-    auto result=groupService_->
+    auto result=groupService_->searchGroupById(groupId,session.accountId_);
     if(!result.ok()){
         return makeRepoError(req,result.status,result.message);
     }
     if(!result.value.has_value()){
         return makeErr(req,ErrorCode::INTERNAL,"value is empty");
     }
-    auto applyRes=result.value.value();
-    return makeOk(req,MsgType::APPLY_GROUP_JOIN_RESP,nlohmann::json{{"groupId",groupId},{"applicantAccountId",session.accountId_},{"submitted",applyRes.submitted},{"alreadyPending",applyRes.alreadyPending},{"alreadyIn",applyRes.alreadyIn}});
+    auto groupRes=result.value.value();
+    return makeOk(req,MsgType::SEARCH_PUBLIC_GROUPS_RESP,nlohmann::json{{"groupId",groupId},{"requesterAccountId",session.accountId_},{"groupName",groupRes.groupName},{"ownerAccountId",groupRes.ownerAccountId},{"memberCount",groupRes.memberCount},{"alreadyMember",groupRes.alreadyMember}});
+}
+
+
+
+im::Response im::Imservice::handleReviewGroupJoin(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return err.value();
+    }
+    //读取groupId
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return getGroupId.value();
+    }
+    //读取申请人账号
+    std::string applicantAccountId;
+    auto getApplicant=getStringField(req,"applicantAccountId",applicantAccountId);
+    if(getApplicant){
+        return getApplicant.value();
+    }
+    //读取是否同意
+    bool approve=false;
+    if(!req.body.contains("approve")||!req.body["approve"].is_boolean()){
+        return makeErr(req,ErrorCode::MISSING_FIELD,"missing field approve ");
+    }
+    approve=req.body["approve"].get<bool>();
+    if(!groupJoinService_){
+        return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
+    }
+    auto result=groupJoinService_->reviewRequest(groupId,applicantAccountId,session.accountId_,approve,imConfig_.maxGroupMembers,nowMs());
+    if(!result.ok()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    if(!result.value.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"value is empty");
+    }
+    auto reviewRes=result.value.value();
+    //向申请人推送
+    im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="join request approve",.data=nlohmann::json{{"event","join_request"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId},{"approved",reviewRes.approved},{"rejected",reviewRes.rejected},{"memberAdded",reviewRes.memberAdded}}};
+    pushToAccount(applicantAccountId,pushEvent);
+    if(reviewRes.memberAdded){//成功入群同步状态
+        sessionManager_.addJoinedGroup(applicantAccountId,groupId);
+        //向申请人推送
+        im::Response push{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="member joined",.data=nlohmann::json{{"event","member_joined"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId}}};
+        broadcastToGroup(groupId,key,push);
+    }
+    return makeOk(req,MsgType::REVIEW_GROUP_JOIN_REQUEST_RESP,nlohmann::json{{"groupId",groupId},{"requesterAccountId",session.accountId_},{"applicantAccountId",applicantAccountId}});
 }
 
 
@@ -1098,6 +1150,14 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
             return handleInviteGroupMember(req,key,session);
         case im::MsgType::DISSOLVE_GROUP_REQ:
             return handleDissolveGroup(req,key,session);
+        case im::MsgType::APPLY_GROUP_JOIN_REQ:
+            return handleApplyGroupJoin(req,key,session);
+        case im::MsgType::LIST_GROUP_JOIN_REQUESTS_REQ:
+            return handleListGroupJoinRequest(req,key,session);
+        case im::MsgType::REVIEW_GROUP_JOIN_REQUEST_REQ:
+            return handleReviewGroupJoin(req,key,session);
+        case im::MsgType::SEARCH_PUBLIC_GROUPS_REQ:
+            return handleSearchGroups(req,key,session);
         default:
             return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
     }

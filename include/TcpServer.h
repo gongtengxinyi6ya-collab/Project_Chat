@@ -7,7 +7,6 @@
 #include "logger/LogMacros.h"
 #include "config/AppConfig.h"
 #include "storage/RepositoryFactory.h"
-
 class EventLoop;
 class EventLoopThreadPool;
 class TcpConnection;

@@ -62,6 +62,14 @@ struct GroupJoinReviewResult {//入群审核结果
     std::string groupId;
     std::string applicantAccountId;
 };
+
+struct GroupSearchResult {
+    std::string groupId{};
+    std::string groupName{};
+    std::string ownerAccountId{};
+    size_t memberCount{0};
+    bool alreadyMember{false};
+};
 inline std::optional<GroupStatus> getGroupStatusFromUint(uint64_t value){
     switch(value){
         case 0:

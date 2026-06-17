@@ -12,6 +12,7 @@ class UserProfileRepo;
 class FriendRepo;
 class FriendRequestRepo;
 class ConversationRepo;
+class GroupJoinRequestRepo;
 class RepositoryBundle{
 public:
     std::shared_ptr<UserRepo> userRepo;
@@ -23,6 +24,7 @@ public:
     std::shared_ptr<FriendRepo> friendRepo;//好友关系存储
     std::shared_ptr<FriendRequestRepo> friendRequestRepo;//好友申请存储
     std::shared_ptr<ConversationRepo> conversationRepo;
+    std::shared_ptr<GroupJoinRequestRepo> groupJoinRequestRepo;
     bool valid()const{return userRepo&&groupRepo&&messageRepo;};
 };
 }

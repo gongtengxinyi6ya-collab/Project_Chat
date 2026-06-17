@@ -4,6 +4,11 @@
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlTransaction.h"
 #include <stdexcept>
+
+storage::SqlGroupJoinRequestRepo::SqlGroupJoinRequestRepo(std::shared_ptr<SqlConnectionPool> pool)
+:pool_(std::move(pool)){
+
+}
 storage::RepoValueResult<storage::GroupJoinApplyResult> storage::SqlGroupJoinRequestRepo::submit(const std::string& groupId,const std::string& applicantAccountId,const std::string& requestMessage,int64_t nowMs){
     if(groupId.empty()||applicantAccountId.empty()){
         return {.status=RepoStatus::InvalidArgument};

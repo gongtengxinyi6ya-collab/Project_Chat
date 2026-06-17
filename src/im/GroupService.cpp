@@ -185,7 +185,7 @@ std::vector<im::GroupMemberView> im::GroupService::listMemberViews(const std::st
     return views;
 
 }
-storage::RepoValueResult<im::GroupCreateResult> im::GroupService::creeateGroup(const std::string& ownerAccountId,const std::string& groupName){
+storage::RepoValueResult<im::GroupCreateResult> im::GroupService::createGroup(const std::string& ownerAccountId,const std::string& groupName){
     if(ownerAccountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument};
     }
@@ -351,4 +351,38 @@ storage::RepoValueResult<im::GroupDissolveResult> im::GroupService::dissolveGrou
     dissolveResult.alreadyDissolved=false;
     dissolveResult.groupId=groupId;
     return {.status=storage::RepoStatus::Ok,.value=dissolveResult};
+}
+
+storage::RepoValueResult<storage::GroupSearchResult> im::GroupService::searchGroupById(const std::string&groupId,const std::string& requesterAccountId){
+    if(groupId.empty()||requesterAccountId.empty()){
+        return {.status=storage::RepoStatus::InvalidArgument};
+    }
+     if(!groupRepo_){
+        return {.status=storage::RepoStatus::Internal,.message="groupRepo  is not avaiable"};
+    }
+    //搜索群
+    auto resultGroup=groupRepo_->findGroupById(groupId);
+    if(!resultGroup.ok()){
+        return {.status=resultGroup.status,.message=resultGroup.message};
+    }
+    if(!resultGroup.value.has_value()){
+        return {.status=storage::RepoStatus::NotFound};
+    }
+    auto group=resultGroup.value.value();
+    if(group.status==storage::GroupStatus::Dissolved){
+        return {.status=storage::RepoStatus::GroupDissolved};
+    }
+    //查找群人数
+    auto resultCount=groupRepo_->countMembers(groupId);
+    if(!resultCount.ok()){
+        return {.status=resultCount.status,.message=resultCount.message};
+    }
+    if(!resultCount.value.has_value()){
+        return {.status=storage::RepoStatus::Internal};
+    }
+    auto count=resultCount.value.value();
+    
+    //检查搜索人是否已经在群
+    bool isMember=groupRepo_->isMember(groupId,requesterAccountId);
+    return {.status=storage::RepoStatus::Ok,.value=storage::GroupSearchResult{.groupId=groupId,.groupName=group.groupName,.ownerAccountId=group.ownerAccountId,.memberCount=count,.alreadyMember=isMember}};
 }

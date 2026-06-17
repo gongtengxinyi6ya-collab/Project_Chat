@@ -17,11 +17,12 @@
 #include "im/GroupManager.h"
 #include "im/SessionManager.h"
 #include "config/ImConfig.h"
+#include "config/IdConfig.h"
 #include "logger/LogContext.h"
 #include "logger/LogLevel.h"
 #include "storage/RepositoryBundle.h"
 #include "storage/RepoResult.h"
-
+#include "id/SnowflakeGenerator.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -69,7 +70,7 @@ public:
     using ConnKey=int;//连接标识
     using SendToConnKeyFn=std::function<SendResult (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
 
-    explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig());
+    explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig(),const IdConfig& idconfig);
     ~Imservice();
     void setSendToConnKey(SendToConnKeyFn fn);
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
@@ -93,6 +94,8 @@ private:
 
     GroupManager groupManager_;//房间管理
     ImConfig imConfig_;//IM相关配置
+    IdConfig idConfig_;//id配置
+    snowflakeId::SnowflakeIdGenerator idGenerator_;
 
     im::Response handleEcho(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session);//回显
     im::Response handleAuth(const im::Request& req,ConnKey key,Session& session);//登录，把session状态改为Authed,绑定身份
@@ -124,6 +127,7 @@ private:
     Response handleApplyGroupJoin(const Request& req, ConnKey key, Session& session);//处理入群申请
     Response handleListGroupJoinRequest(const Request& req,ConnKey key,Session& session);//获取入群申请列表
     Response handleSearchGroups(const Request& req,ConnKey key,Session& session);//查询群
+    Response handleReviewGroupJoin(const Request& req,ConnKey key,Session& session);//查询群
     
     //日志上下文生成辅助方法
     LogContext makeReqCtx(ConnKey,const Request&,const Session&,const std::string& )const;//生成请求入口日志上下文
