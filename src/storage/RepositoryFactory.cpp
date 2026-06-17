@@ -14,7 +14,7 @@
 #include "storage/sql/SqlFriendRepo.h"
 #include "storage/sql/SqlFriendRequestRepo.h"
 #include "storage/sql/SqlConversationRepo.h"
-#include "storage/sql/SqLGroupJoinRequestRepo.h"
+#include "storage/sql/SqlGroupJoinRequestRepo.h"
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& dbConfig){
     auto pool=std::make_shared<SqlConnectionPool>(dbConfig);
     if(!pool->start()){

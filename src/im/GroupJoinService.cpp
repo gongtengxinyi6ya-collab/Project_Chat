@@ -5,13 +5,13 @@
 #include "im/GroupManager.h"
 #include "im/GroupRole.h"
 #include <stdexcept>
-im::GroupJoinService::GroupJoinService(GroupManager& GroupManager,std::shared_ptr<storage::GroupRepo> groupRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo,std::shared_ptr<storage::GroupJoinRequestRepo> joinRequestRepo,size_t maxGroupMembers)
-:groupManager_(groupManager_),groupRepo_(std::move(groupRepo)),userProfileRepo_(std::move(userProfileRepo)),joinRequestRepo_(std::move(joinRequestRepo)){
-    if(!groupRepo_||!userProfileRepo_||joinRequestRepo_){
+im::GroupJoinService::GroupJoinService(GroupManager& groupManager,std::shared_ptr<storage::GroupRepo> groupRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo,std::shared_ptr<storage::GroupJoinRequestRepo> joinRequestRepo,size_t maxGroupMembers)
+:groupManager_(groupManager),groupRepo_(std::move(groupRepo)),userProfileRepo_(std::move(userProfileRepo)),joinRequestRepo_(std::move(joinRequestRepo)),maxGroupMembers_(maxGroupMembers){
+    if(!groupRepo_||!userProfileRepo_||!joinRequestRepo_){
         throw std::invalid_argument("GroupService:null dependency");
     }
 }
-storage::RepoValueResult<storage::GroupJoinApplyResult> im::GroupJoinService::GroupJoinService::applyToJoin(const std::string&groupId,const std::string& appliacntAccountId,const std::string&message,int64_t nowMs){
+storage::RepoValueResult<storage::GroupJoinApplyResult> im::GroupJoinService::applyToJoin(const std::string&groupId,const std::string& appliacntAccountId,const std::string&message,int64_t nowMs){
     if(groupId.empty()||appliacntAccountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument};
     }
@@ -28,7 +28,7 @@ storage::RepoValueResult<storage::GroupJoinApplyResult> im::GroupJoinService::Gr
 
 }
 
-storage::RepoValueResult<std::vector<storage::GroupJoinRequestRecord>> im::GroupJoinService::GroupJoinService::listPendingRequests(const std::string& groupId,const std::string& operatorAccountId,size_t limit){
+storage::RepoValueResult<std::vector<storage::GroupJoinRequestRecord>> im::GroupJoinService::listPendingRequests(const std::string& groupId,const std::string& operatorAccountId,size_t limit){
     if(groupId.empty()||operatorAccountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument};
     }
@@ -49,7 +49,7 @@ storage::RepoValueResult<std::vector<storage::GroupJoinRequestRecord>> im::Group
     }
     return joinRequestRepo_->listPending(groupId,limit);
 }
-storage::RepoValueResult<storage::GroupJoinReviewResult> im::GroupJoinService::GroupJoinService::reviewRequest(const std::string&groupId,const std::string&applicantAccountId,const std::string&reviewerAccountId,bool approve,size_t maxMember,int64_t nowMs){
+storage::RepoValueResult<storage::GroupJoinReviewResult> im::GroupJoinService::reviewRequest(const std::string&groupId,const std::string&applicantAccountId,const std::string&reviewerAccountId,bool approve,size_t maxMember,int64_t nowMs){
     if(groupId.empty()||applicantAccountId.empty()||reviewerAccountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument};
     }

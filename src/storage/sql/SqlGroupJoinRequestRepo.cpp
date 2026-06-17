@@ -1,4 +1,4 @@
-#include "storage/sql/SqLGroupJoinRequestRepo.h"
+#include "storage/sql/SqlGroupJoinRequestRepo.h"
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnectionGuard.h"
@@ -47,7 +47,7 @@ storage::RepoValueResult<storage::GroupJoinApplyResult> storage::SqlGroupJoinReq
             return {.status=RepoStatus::SqlError,.message=resultMember.error};
         }
         if(!resultMember.rows.empty()){
-            return {.status=RepoStatus::AlreadyExists,.message="already in the group"};
+            return {.status=RepoStatus::Ok,.value=GroupJoinApplyResult{.alreadyIn=true}};
         }
         //检查是否有pending申请
         auto resultRequest=conn->queryPrepared(R"(
@@ -68,8 +68,8 @@ storage::RepoValueResult<storage::GroupJoinApplyResult> storage::SqlGroupJoinReq
             if(statusOpt.value()==GroupJoinRequestStatus::Pending){//已有Pending,幂等返回
                 return {.status=RepoStatus::Ok,.value=GroupJoinApplyResult{.alreadyPending=true,.groupId=groupId,.applicantAccountId=applicantAccountId}};
             }
-            if(statusOpt.value()==GroupJoinRequestStatus::Rejected){
-                //被拒绝则更新为Pending
+            if(statusOpt.value()!=GroupJoinRequestStatus::Pending){
+                //非Pending更新为Pending
                 auto resultUpdate=conn->executePrepared(R"(
                     UPDATE group_join_requests
                     SET status=0,
@@ -88,27 +88,27 @@ storage::RepoValueResult<storage::GroupJoinApplyResult> storage::SqlGroupJoinReq
                 transaction.commit();
                 return {.status=RepoStatus::Ok,.value=GroupJoinApplyResult{.submitted=true,.groupId=groupId,.applicantAccountId=applicantAccountId}};
             }
-            //创建申请
-            auto resultInsert=conn->executePrepared(R"(
-                INSERT INTO group_join_requests(
-                group_id,
-                applicant_account_id,
-                status,
-                request_message,
-                reviewer_account_id,
-                created_at_ms,
-                reviewed_at_ms
-            )
-            VALUES(?, ?, 0, ?, '', ?, 0)
-                )",{groupId,applicantAccountId,requestMessage,nowMs});
-            if(!resultInsert.ok()){
-                return {.status=RepoStatus::SqlError,.message=resultInsert.error};
-            }
-
-            transaction.commit();
-            return {.status=RepoStatus::Ok,.value=GroupJoinApplyResult{.submitted=true,.groupId=groupId,.applicantAccountId=applicantAccountId}};
-            
         }
+        //创建申请
+        auto resultInsert=conn->executePrepared(R"(
+            INSERT INTO group_join_requests(
+            group_id,
+            applicant_account_id,
+            status,
+            request_message,
+            reviewer_account_id,
+            created_at_ms,
+            reviewed_at_ms
+        )
+        VALUES(?, ?, 0, ?, '', ?, 0)
+            )",{groupId,applicantAccountId,requestMessage,nowMs});
+        if(!resultInsert.ok()){
+            return {.status=RepoStatus::SqlError,.message=resultInsert.error};
+        }
+
+        transaction.commit();
+        return {.status=RepoStatus::Ok,.value=GroupJoinApplyResult{.submitted=true,.groupId=groupId,.applicantAccountId=applicantAccountId}};
+        
     }catch(const std::exception& e){
         return {.status=RepoStatus::SqlError,.message=e.what()};
     }

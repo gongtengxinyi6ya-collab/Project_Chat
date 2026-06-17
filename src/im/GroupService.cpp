@@ -201,7 +201,7 @@ storage::RepoValueResult<im::GroupCreateResult> im::GroupService::createGroup(co
         return {.status=resultCreate.status,.message=resultCreate.message};
     }
     //同步内存
-    if(!groupManager_.createGroup(groupId,ownerAccountId,groupName));
+    if(!groupManager_.createGroup(groupId,ownerAccountId,groupName))
     {
         //内存失败则重数据库恢复
         auto resultReload=reloadGroup(groupId);

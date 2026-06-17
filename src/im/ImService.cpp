@@ -18,7 +18,7 @@
 #include "storage/UserProfileRepo.h"
 #include "im/GroupJoinService.h"
 #include "storage/GroupJoinRequestRepo.h"
-im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config,const IdConfig& idconfig):supportedVer_(supportedVer),imConfig_(config),idGenerator_(idConfig_.snowflakeNodeId,idConfig_.snowflakeEpochMs){}
+im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config,const IdConfig& idconfig):supportedVer_(supportedVer),imConfig_(config),idConfig_(idconfig),idGenerator_(idConfig_.snowflakeNodeId,idConfig_.snowflakeEpochMs){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
     sendToConnKey_=std::move(fn);
@@ -1068,17 +1068,7 @@ im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Sessio
         case im::MsgType::CREATE_GROUP_REQ:
             return handleCreateGroup(req,key,session);
         case im::MsgType::JOIN_GROUP_REQ:
-        {
-            im::Response resp=handleJoin(req,key,session);
-            if(resp.ok&&resp.data.contains("alreadyIn")&&resp.data["alreadyIn"].get<bool>()==false){
-                    std::string groupId=resp.data["groupId"];
-                    LOG_INFO_CTX("user joined group",makeReqCtx(key,req,session,"JOIN_GROUP"));
-                    im::Response event=makeOk(req,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","join"},{"accountId",session.accountId_},{"username",session.username_},{"groupId",groupId}});
-                    broadcastToGroup(groupId,key,event);
-                }
-            return resp;
-        }
-        
+            return handleApplyGroupJoin(req,key,session);
         case im::MsgType::LEAVE_GROUP_REQ:
         {
             im::Response resp=handleLeave(req,key,session);
@@ -1209,6 +1199,8 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
             return im::ErrorCode::NO_SUCH_USER;
         case storage::RepoStatus::JoinRequestNotFound:
             return im::ErrorCode::JOIN_REQUEST_NOT_FOUND;
+        case storage::RepoStatus::GroupNotFound:
+            return im::ErrorCode::NO_SUCH_GROUP;
         case storage::RepoStatus::Internal:
             return im::ErrorCode::INTERNAL;
     }

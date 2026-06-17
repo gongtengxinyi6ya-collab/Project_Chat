@@ -51,16 +51,16 @@ struct GroupJoinApplyResult {//入群申请结果
     bool submitted{false};
     bool alreadyPending{false};
     bool alreadyIn{false};
-    std::string groupId;
-    std::string applicantAccountId;//申请人账号
+    std::string groupId{};
+    std::string applicantAccountId{};//申请人账号
 };
 struct GroupJoinReviewResult {//入群审核结果
     bool approved{false};//审核是否同意
     bool rejected{false};//审核是否拒绝
     bool memberAdded{false};//同意时成员是否成功入群
     bool alreadyHandled{false};//申请是否已经被处理
-    std::string groupId;
-    std::string applicantAccountId;
+    std::string groupId{};
+    std::string applicantAccountId{};
 };
 
 struct GroupSearchResult {

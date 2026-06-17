@@ -1,9 +1,10 @@
 #include "id/SnowflakeGenerator.h"
 #include <stdexcept>
 #include <thread>
+#include <chrono>
 snowflakeId::SnowflakeIdGenerator::SnowflakeIdGenerator(uint16_t nodeId, uint64_t epochMs)
 :nodeId_(nodeId),epochMs_(epochMs){
-    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto nowMs=currentMs();
     if(nodeId_>1023||epochMs_>=nowMs){
         throw std::invalid_argument("nodeId or epochMs exceed");
     }
@@ -32,10 +33,12 @@ uint64_t snowflakeId::SnowflakeIdGenerator::nextId(){
         }
     }
     if(nowMs==lastTimestampMs_){//同一毫秒递增序列
-        sequence_=(sequence_+1)%4095;
+        sequence_=(sequence_+1)&4095;
         if(sequence_==0){//序列达到4095时等待下一毫秒
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            nowMs=currentMs();
+            while(nowMs<=lastTimestampMs_){
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                nowMs=currentMs();
+            }
         }
     }
     else{//新毫秒序列重置为0

@@ -37,7 +37,7 @@ struct GroupDissolveResult {//群聊解散结果
     bool dissolved{false};//解散是否完成
     bool alreadyDissolved{false};//之前是否已经解散
     std::string groupId{};//目标群
-    std::vector<std::string> affectedAccountIds;//解散前所有成员，
+    std::vector<std::string> affectedAccountIds{};//解散前所有成员，
 };
 struct GroupCreateResult{
     std::string groupId{};
