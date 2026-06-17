@@ -7,8 +7,9 @@
 #include "logger/LogMacros.h"
 #include <unordered_map>
 #include "storage/types/GroupTypes.h"
-im::GroupService::GroupService(GroupManager& groupManager,std::shared_ptr<storage::GroupRepo> groupRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo,std::shared_ptr<storage::FriendRepo> friendRepo,bool requireFriendForInvite,size_t maxGroupMembers)
-:groupManager_(groupManager),groupRepo_(std::move(groupRepo)),userProfileRepo_(std::move(userProfileRepo)),friendRepo_(std::move(friendRepo)),requireFriendForInvite_(requireFriendForInvite),maxGroupMembers_(maxGroupMembers){
+#include "id/SnowflakeGenerator.h"
+im::GroupService::GroupService(GroupManager& groupManager,snowflakeId::SnowflakeIdGenerator& idGenerator,std::shared_ptr<storage::GroupRepo> groupRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRepo,std::shared_ptr<storage::FriendRepo> friendRepo,bool requireFriendForInvite,size_t maxGroupMembers)
+:groupManager_(groupManager),idGenerator_(idGenerator),groupRepo_(std::move(groupRepo)),userProfileRepo_(std::move(userProfileRepo)),friendRepo_(std::move(friendRepo)),requireFriendForInvite_(requireFriendForInvite),maxGroupMembers_(maxGroupMembers){
     if(!groupRepo_||!userProfileRepo_){
         throw std::invalid_argument("GroupService:null dependency");
     }
@@ -184,7 +185,29 @@ std::vector<im::GroupMemberView> im::GroupService::listMemberViews(const std::st
     return views;
 
 }
+storage::RepoValueResult<im::GroupCreateResult> im::GroupService::creeateGroup(const std::string& ownerAccountId,const std::string& groupName){
+    if(ownerAccountId.empty()){
+        return {.status=storage::RepoStatus::InvalidArgument};
+    }
+    if(!groupRepo_){
+        return {.status=storage::RepoStatus::Internal};
+    }
+    auto groupId=idGenerator_.nextStringId();
+    if(groupId.empty()){
+        return {.status=storage::RepoStatus::Internal,.message="Failed to generator groupId"};
+    }
+    auto resultCreate=groupRepo_->createGroupWithOwner(groupId,groupName,ownerAccountId);
+    if(!resultCreate.ok()){
+        return {.status=resultCreate.status,.message=resultCreate.message};
+    }
+    //同步内存
+    if(!groupManager_.createGroup(groupId,ownerAccountId,groupName));
+    {
+        //内存失败则重数据库恢复
+        
+    }
 
+}
 storage::RepoResult im::GroupService::reloadGroup(const std::string& groupId){
     if(groupId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument};
