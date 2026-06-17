@@ -49,7 +49,7 @@ storage::RepoValueResult<std::vector<storage::GroupJoinRequestRecord>> im::Group
     }
     return joinRequestRepo_->listPending(groupId,limit);
 }
-storage::RepoValueResult<storage::GroupJoinReviewResult> im::GroupJoinService::reviewRequest(const std::string&groupId,const std::string&applicantAccountId,const std::string&reviewerAccountId,bool approve,size_t maxMember,int64_t nowMs){
+storage::RepoValueResult<storage::GroupJoinReviewResult> im::GroupJoinService::reviewRequest(const std::string&groupId,const std::string&applicantAccountId,const std::string&reviewerAccountId,bool approve,int64_t nowMs){
     if(groupId.empty()||applicantAccountId.empty()||reviewerAccountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument};
     }
@@ -57,7 +57,7 @@ storage::RepoValueResult<storage::GroupJoinReviewResult> im::GroupJoinService::r
         return {.status=storage::RepoStatus::Internal};
     }
     //审核申请
-    auto resultReview=joinRequestRepo_->review(groupId,applicantAccountId,reviewerAccountId,approve,maxMember,nowMs);
+    auto resultReview=joinRequestRepo_->review(groupId,applicantAccountId,reviewerAccountId,approve,maxGroupMembers_,nowMs);
     if(!resultReview.ok()){
         return resultReview;
     }

@@ -1,5 +1,6 @@
 #include "config/IdConfig.h"
 #include "config/ConfigParseHelper.h"
+#include <chrono>
 #include <stdexcept>
 IdConfig IdConfig::fromJson(const nlohmann::json& j) {
     IdConfig config;

@@ -48,16 +48,16 @@ struct GroupJoinRequestRecord{//保存一次入群申请的完整持久化状态
     int64_t reviewedAtMs{0};
 };
 struct GroupJoinApplyResult {//入群申请结果
-    bool submitted{false};
-    bool alreadyPending{false};
-    bool alreadyIn{false};
-    std::string groupId{};
+    bool submitted{false};//本次是否新提交或重新提交
+    bool alreadyPending{false};//是否已有待处理申请
+    bool alreadyIn{false};//是否已经是群成员
+    std::string groupId{};//群id
     std::string applicantAccountId{};//申请人账号
 };
 struct GroupJoinReviewResult {//入群审核结果
     bool approved{false};//审核是否同意
     bool rejected{false};//审核是否拒绝
-    bool memberAdded{false};//同意时成员是否成功入群
+    bool memberAdded{false};//是否真正新增群成员
     bool alreadyHandled{false};//申请是否已经被处理
     std::string groupId{};
     std::string applicantAccountId{};

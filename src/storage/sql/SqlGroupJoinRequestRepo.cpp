@@ -281,7 +281,7 @@ storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRe
                 )",{applicantAccountId,static_cast<uint64_t>(0),groupId});
             if(!resultInsert.ok()){
                 if(resultInsert.error.find("Duplicate entry")!=std::string::npos){
-                    return {.status=RepoStatus::AlreadyExists,.message="User is already a member of the group"};
+                    return {.status=RepoStatus::Ok,.value=GroupJoinReviewResult{.memberAdded=false,.alreadyHandled=true}};
                 }
                 return {.status=RepoStatus::SqlError,.message=resultInsert.error};
             }

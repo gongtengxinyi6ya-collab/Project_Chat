@@ -826,7 +826,7 @@ im::Response im::Imservice::handleReviewGroupJoin(const Request& req,[[maybe_unu
     if(!groupJoinService_){
         return makeErr(req,ErrorCode::INTERNAL,"groupService is not avaiable");
     }
-    auto result=groupJoinService_->reviewRequest(groupId,applicantAccountId,session.accountId_,approve,imConfig_.maxGroupMembers,nowMs());
+    auto result=groupJoinService_->reviewRequest(groupId,applicantAccountId,session.accountId_,approve,nowMs());
     if(!result.ok()){
         return makeRepoError(req,result.status,result.message);
     }
@@ -834,16 +834,18 @@ im::Response im::Imservice::handleReviewGroupJoin(const Request& req,[[maybe_unu
         return makeErr(req,ErrorCode::INTERNAL,"value is empty");
     }
     auto reviewRes=result.value.value();
-    //向申请人推送
-    im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="join request approve",.data=nlohmann::json{{"event","join_request"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId},{"approved",reviewRes.approved},{"rejected",reviewRes.rejected},{"memberAdded",reviewRes.memberAdded}}};
-    pushToAccount(applicantAccountId,pushEvent);
-    if(reviewRes.memberAdded){//成功入群同步状态
-        sessionManager_.addJoinedGroup(applicantAccountId,groupId);
+        if(!reviewRes.alreadyHandled){
         //向申请人推送
-        im::Response push{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="member joined",.data=nlohmann::json{{"event","member_joined"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId}}};
-        broadcastToGroup(groupId,key,push);
+        im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="join request approve",.data=nlohmann::json{{"event","join_request"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId},{"approved",reviewRes.approved},{"rejected",reviewRes.rejected},{"memberAdded",reviewRes.memberAdded}}};
+        pushToAccount(applicantAccountId,pushEvent);
+        if(reviewRes.memberAdded){//成功入群同步状态
+            sessionManager_.addJoinedGroup(applicantAccountId,groupId);
+            //向申请人推送
+            im::Response push{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="member joined",.data=nlohmann::json{{"event","member_joined"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId}}};
+            broadcastToGroup(groupId,key,push);
+        }
     }
-    return makeOk(req,MsgType::REVIEW_GROUP_JOIN_REQUEST_RESP,nlohmann::json{{"groupId",groupId},{"requesterAccountId",session.accountId_},{"applicantAccountId",applicantAccountId}});
+    return makeOk(req,MsgType::REVIEW_GROUP_JOIN_REQUEST_RESP,nlohmann::json{{"groupId",groupId},{"requesterAccountId",session.accountId_},{"applicantAccountId",applicantAccountId},{"approved",reviewRes.approved},{"rejected",reviewRes.rejected},{"memberAdded",reviewRes.memberAdded},{"alreadyHandled",reviewRes.alreadyHandled}});
 }
 
 
