@@ -72,4 +72,6 @@ void ImConfig::validateOrThrow() const{
     ConfigParseHelper::checkRange("maxSyncCursorCount", maxSyncCursorCount, 1, 500);
     ConfigParseHelper::checkRange("maxSyncMessageLimit", maxSyncMessageLimit, 1, 500);
     ConfigParseHelper::checkRange("maxOfflineIndexLimit", maxOfflineIndexLimit, 1, 500);
+    ConfigParseHelper::checkRange("maxSyncMessageLimit", maxSyncMessageLimit, 1, 500);  
+    ConfigParseHelper::checkRange("maxOfflineIndexLimit", maxOfflineIndexLimit, 1, 500);
 }

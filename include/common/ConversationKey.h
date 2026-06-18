@@ -1,6 +1,6 @@
 #pragma once
 #include <string>
-namespace im{
+namespace common{
 inline std::string buildDirectConversationKey(const std::string& accountA,const std::string& accountB){
     if(accountA.empty()||accountB.empty()){
         return "";

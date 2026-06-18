@@ -23,6 +23,13 @@ struct ConversationSummary{
     uint64_t lastReadAtMs{0};//最近一次已读时间
 };
 
+struct ConversationReadResult {
+    storage::ConversationType type{storage::ConversationType::Unknown};//会话类型：私聊/群聊
+    std::string targetId{};//私聊:账号/群聊：groupId
+    uint64_t readMsgId{0};//用户已读到的最大消息ID
+    int64_t readAtMs{0};//服务端记录的已读时间
+    size_t receiptUpdated{0};//消息级回执更新数量
+};
 inline std::string conversationTypeToString(ConversationType type){
     switch(type){
         case ConversationType::Group:

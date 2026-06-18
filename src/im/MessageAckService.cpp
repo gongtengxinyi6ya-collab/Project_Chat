@@ -9,7 +9,7 @@ im::MessageAckService::MessageAckService(std::shared_ptr<storage::MessageRepo> m
         throw std::invalid_argument("MessageAckService: null dependency");
     }
 }
-storage::RepoResult im::MessageAckService::ackMessages(const std::string& accountId,const std::vector<uint64_t>& msgIds,int64_t ackAtMs){
+storage::RepoValueResult<storage::MessageAckResult> im::MessageAckService::ackMessages(const std::string& accountId,const std::vector<uint64_t>& msgIds,int64_t ackAtMs){
     if(accountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument,.message="accountId is empty"};
     }
@@ -20,7 +20,15 @@ storage::RepoResult im::MessageAckService::ackMessages(const std::string& accoun
     if(!messageRepo_){
         return {.status=storage::RepoStatus::Internal,.message="messageRepo is not avaiable"};
     }
-    return messageRepo_->markDelivered(accountId,msgIds,ackAtMs);
+    auto result=messageRepo_->markDelivered(accountId,msgIds,ackAtMs);
+    if(!result.ok()){
+        return {.status=result.status,.message=result.message};
+    }
+    if(!result.value.has_value()){
+        return {.status=storage::RepoStatus::Internal,.message="value from markDelivered valiad"};
+    }
+    auto ackedCount=result.value.value();
+    return {.status=storage::RepoStatus::Ok,.value=storage::MessageAckResult{.requestedCount=msgIds.size(),.ackedCount=ackedCount,.ignoredCount=msgIds.size()-ackedCount}};
 
 }
 storage::RepoResult im::MessageAckService::ackOfflineMessages(const std::string&accountId,const std::vector<uint64_t>& offlineMsgIds){
@@ -36,7 +44,7 @@ storage::RepoResult im::MessageAckService::ackOfflineMessages(const std::string&
     }
     return offlineMessageRepo_->ackOfflineMessages(accountId,offlineMsgIds);
 }
-storage::RepoResult im::MessageAckService::markConversationRead(const std::string&accountId,storage::ConversationType type,const std::string&targetId,uint64_t readMsgId,int64_t readAtMs){
+storage::RepoValueResult<storage::ConversationReadResult> im::MessageAckService::markConversationRead(const std::string&accountId,storage::ConversationType type,const std::string&targetId,uint64_t readMsgId,int64_t readAtMs){
     if(accountId.empty()||targetId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument,.message="accountId or targetId is empty"};
     }
@@ -48,11 +56,14 @@ storage::RepoResult im::MessageAckService::markConversationRead(const std::strin
     }
     auto resultConversation=conversationRepo_->markConversationRead(accountId,type,targetId,readMsgId,readAtMs);
     if(!resultConversation.ok()){
-        return resultConversation;
+        return {.status=resultConversation.status,.message=resultConversation.message};
     }
     auto resultMessage=messageRepo_->markReadBefore(accountId,type,targetId,readMsgId,readAtMs);
     if(!resultMessage.ok()){
-        return resultMessage;
+        return {.status=resultMessage.status,.message=resultMessage.message};
     }
-    return {.status=storage::RepoStatus::Ok};
+    if(!resultMessage.value.has_value()){
+        return {.status=storage::RepoStatus::Internal,.message="markReadBefore value invalid"};
+    }
+    return {.status=storage::RepoStatus::Ok,.value=storage::ConversationReadResult{.type=type,.targetId=targetId,.readMsgId=readMsgId,.readAtMs=readAtMs,.receiptUpdated=resultMessage.value.value()}};
 }

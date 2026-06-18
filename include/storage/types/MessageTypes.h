@@ -45,6 +45,11 @@ struct OfflineMessageIndex{
     std::string peerAccountId{};//私聊对端账号
 };
 
+struct MessageAckResult {//用来表达一次Ack结果
+    size_t requestedCount{0};//客户端请求ACK的消息数量
+    size_t ackedCount{0};//服务端实际写入或更新成功的数量
+    size_t ignoredCount{0};//不属于当前用户，重复ACK，无效msgId等被忽略的数量
+};
 inline std::string offlineMessageTypeToString(OfflineMessageType type){
     switch(type){
         case OfflineMessageType::Group:

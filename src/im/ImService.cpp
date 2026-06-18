@@ -10,7 +10,7 @@
 #include "security/PasswordHasher.h"
 #include "im/FriendService.h"
 #include "im/ConversationService.h"
-#include "im/ConversationKey.h"
+#include "common/ConversationKey.h"
 #include "im/MessageSyncService.h"
 #include "storage/FriendRepo.h"
 #include "im/MessageAckService.h"
@@ -219,7 +219,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     uint64_t msgId=nextMessageId();
     uint64_t serverTsMs=nowMs();
     //保存私聊消息
-    std::string conversationKey=buildDirectConversationKey(session.accountId_,req.to);
+    std::string conversationKey=common::buildDirectConversationKey(session.accountId_,req.to);
     if(!repos_.messageRepo){
        return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not available");
     }
@@ -1280,13 +1280,13 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
         return makeErr(req,ErrorCode::NOT_FRIENDS,"not your friends");
     }
     //生成会话key
-    auto conversationKey=buildDirectConversationKey(session.accountId_,peerAccountId);
+    auto conversationKey=common::buildDirectConversationKey(session.accountId_,peerAccountId);
     //获取历史私聊消息
     if(!repos_.messageRepo){
         return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not avaiable");
     }
     //解析beforeMsgId,limit
-    auto historyQuery=parseHistoryQuery(req,20,100);
+    auto historyQuery=parseHistoryQuery(req,imConfig_.defaultHistoryLimit,imConfig_.maxHistoryLimit);
     if(!historyQuery.ok){
         return makeErr(req,historyQuery.code,historyQuery.message);
     }
@@ -1910,7 +1910,11 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
     if(!result.ok()){
         return makeRepoError(req,result.status,result.message);
     }
-    return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"targetId",targetId},{"conversationType",storage::conversationTypeToString(conversationType)},{"readMsgId",readMsgId},{"unreadCount",0}});
+    if(!result.value.has_value()){
+        return makeErr(req,ErrorCode::INTERNAL,"ConversationReadResult value invalid");
+    }
+    auto conversationRes=result.value.value();
+    return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"targetId",targetId},{"conversationType",storage::conversationTypeToString(conversationType)},{"targetId",conversationRes.targetId},{"readMsgId",readMsgId},{"readAtMs",conversationRes.readAtMs},{"receiptUpdated",conversationRes.receiptUpdated}});
 }
 
 im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
@@ -2007,11 +2011,17 @@ im::Response im::Imservice::handleMessageAck(const Request& req,[[maybe_unused]]
     if(!messageAckService_){
         return makeErr(req,ErrorCode::INTERNAL,"messageAckService is not avaiable");
     }
+    storage::MessageAckResult ackResult;
     if(!messageAck.payload.msgIds.empty()){
         auto resultAckMessage=messageAckService_->ackMessages(session.accountId_,messageAck.payload.msgIds,nowMs());
         if(!resultAckMessage.ok()){
             return makeRepoError(req,resultAckMessage.status,resultAckMessage.message);
         }
+        if(!resultAckMessage.value.has_value()){
+            return makeErr(req,ErrorCode::INTERNAL,"messageAckResult value invalid");
+        }
+        ackResult=resultAckMessage.value.value();
+
     }
     if(!messageAck.payload.offlineMsgIds.empty()){
         auto resultAckOfflineMessage=messageAckService_->ackOfflineMessages(session.accountId_,messageAck.payload.offlineMsgIds);
@@ -2019,5 +2029,5 @@ im::Response im::Imservice::handleMessageAck(const Request& req,[[maybe_unused]]
             return makeRepoError(req,resultAckOfflineMessage.status,resultAckOfflineMessage.message);
         }
     }
-    return makeOk(req,MsgType::MESSAGE_ACK_RESP,nlohmann::json{{"ackedMsgCount",messageAck.payload.msgIds.size()},{"ackOfflineMsgCount",messageAck.payload.offlineMsgIds.size()}});
+    return makeOk(req,MsgType::MESSAGE_ACK_RESP,nlohmann::json{{"requestedMsgCount",ackResult.requestedCount},{"ackedMsgCount",ackResult.ackedCount},{"ignoredMsgCount",ackResult.ignoredCount},{"OfflineMsgCount",messageAck.payload.offlineMsgIds.size()}});
 }

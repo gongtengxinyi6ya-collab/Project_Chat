@@ -1,7 +1,7 @@
 #include "im/MessageSyncService.h"
 #include "storage/MessageRepo.h"
 #include "storage/OfflineMessageRepo.h"
-#include "im/ConversationKey.h"
+#include "common/ConversationKey.h"
 #include <algorithm>
 im::MessageSyncService::MessageSyncService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo)
 :messageRepo_(std::move(messageRepo)),offlineMessageRepo_(std::move(offlineMessageRepo)){
@@ -16,7 +16,7 @@ im::SyncResult im::MessageSyncService::sync(const std::string& accountId,const s
     if(messageRepo_){
         for(const auto& cursor:cursors){
             if(cursor.type==storage::ConversationType::Direct){//私聊
-                auto conversationKey=buildDirectConversationKey(accountId,cursor.targetId);
+                auto conversationKey=common::buildDirectConversationKey(accountId,cursor.targetId);
                 auto result=messageRepo_->listDirectMessagesAfter(conversationKey,cursor.lastMsgId,cursor.limit);
                 nlohmann::json messagesRecordJson=nlohmann::json::array();
                 uint64_t lastestMsgId=0;
@@ -64,7 +64,7 @@ im::SyncResult im::MessageSyncService::sync(const std::string& accountId,const s
     return syncResult;
 }
 im::ConversationDelta im::MessageSyncService::loadDirectDelta(const std::string& selfAccountId,const std::string& peerAccountId,uint64_t lastMsgId,size_t limit){
-    auto conversationKey=buildDirectConversationKey(selfAccountId,peerAccountId);
+    auto conversationKey=common::buildDirectConversationKey(selfAccountId,peerAccountId);
     if(conversationKey.empty()){
         return {};
     }
