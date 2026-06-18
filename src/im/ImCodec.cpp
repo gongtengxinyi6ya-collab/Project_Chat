@@ -49,7 +49,7 @@ std::string im::encodeResponse(const im::Response& resp){
     return j.dump();
 }
 
-im::SyncParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit){
+im::SyncParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit,size_t maxLimit){
     im::SyncParseResult result{.ok=false};
     if(!req.body.contains("cursors")){
         return {.ok=true};
@@ -125,8 +125,8 @@ im::SyncParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit)
         if(cursor.limit==0){
             cursor.limit=defaultLimit;
         }
-        if(cursor.limit>100){
-            cursor.limit=100;
+        if(cursor.limit>maxLimit){
+            cursor.limit=maxLimit;
         }
         result.cursors.emplace_back(std::move(cursor));
     }

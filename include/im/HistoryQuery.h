@@ -25,7 +25,6 @@ inline std::string historyQueryModeToString(HistoryQueryMode mode){
             return "before";
         case HistoryQueryMode::After:
             return "after";
-        
     }
 }
 }

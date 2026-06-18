@@ -281,6 +281,22 @@ storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRe
                 )",{applicantAccountId,static_cast<uint64_t>(0),groupId});
             if(!resultInsert.ok()){
                 if(resultInsert.error.find("Duplicate entry")!=std::string::npos){
+                    //更新状态为approved,但不插入成员，幂等返回
+                    auto resultApprove=conn->executePrepared(R"(
+                        UPDATE group_join_requests
+                        SET status = 1,
+                            reviewer_account_id = ?,
+                            reviewed_at_ms = ?
+                        WHERE id = ?
+                        AND applicant_account_id = ?
+                        AND status = 0;
+                        )",{reviewAccountId,nowMs,request_id,applicantAccountId});
+                    if(!resultApprove.ok()){
+                        return {.status=RepoStatus::SqlError,.message=resultApprove.error};
+                    }
+                    if(resultApprove.affectedRows==0){
+                        return {.status=RepoStatus::JoinRequestNotFound};
+                    }
                     return {.status=RepoStatus::Ok,.value=GroupJoinReviewResult{.memberAdded=false,.alreadyHandled=true}};
                 }
                 return {.status=RepoStatus::SqlError,.message=resultInsert.error};

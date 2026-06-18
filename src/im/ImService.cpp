@@ -1236,7 +1236,7 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     if(!hasRepositories()||!repos_.messageRepo){
         return makeErr(req,im::ErrorCode::INTERNAL,"Message repository is not configured");
     }
-    auto historyQuery=parseHistoryQuery(req,20,100);
+    auto historyQuery=parseHistoryQuery(req,imConfig_.defaultHistoryLimit,imConfig_.maxHistoryLimit);
     if(!historyQuery.ok){
         return makeErr(req,historyQuery.code,historyQuery.message);
     }
@@ -1253,7 +1253,7 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     for(const auto& msg:messages){
         messagesJson.push_back(nlohmann::json{{"msgId",msg.messageId},{"groupId",msg.groupId},{"senderAccountId",msg.senderAccountId},{"senderUsername",msg.senderUsername},{"content",msg.content},{"serverTsMs",msg.serverTsMs}});
     }
-    return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"mode",historyQuery.query.mode},{"beforeMsgId",historyQuery.query.beforeMsgId},{"lastMsgId",historyQuery.query.lastMsgId},{"limit",historyQuery.query.limit},{"messages",messagesJson}});
+    return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"mode",historyQueryModeToString(historyQuery.query.mode)},{"beforeMsgId",historyQuery.query.beforeMsgId},{"lastMsgId",historyQuery.query.lastMsgId},{"limit",historyQuery.query.limit},{"messages",messagesJson}});
 
 }
 im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
@@ -1957,7 +1957,7 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
     }
     size_t limit=parseLimit(req,"limit",50,imConfig_.maxSyncMessageLimit);
     size_t offlineLimit=parseLimit(req,"offlineLimit",100,imConfig_.maxOfflineIndexLimit);
-    auto cursorsResult=parseSyncCursors(req,limit);
+    auto cursorsResult=parseSyncCursors(req,limit,imConfig_.maxSyncMessageLimit);
     if(!cursorsResult.ok){
         return makeErr(req,cursorsResult.code,cursorsResult.message);
     }
@@ -1982,7 +1982,7 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
     auto result=messageSyncService_->sync(session.accountId_,cursorsResult.cursors,offlineLimit);
     nlohmann::json deltasJson=nlohmann::json::array();
     for(const auto& delta:result.deltas){
-        deltasJson.emplace_back(nlohmann::json{{"conversationType",storage::conversationTypeToString(delta.type)},{"targetId",delta.targetId},{"messages",delta.messages}});
+        deltasJson.emplace_back(nlohmann::json{{"conversationType",storage::conversationTypeToString(delta.type)},{"targetId",delta.targetId},{"messages",delta.messages},{"fromMsgId",delta.fromMsgId},{"latestMsgId",delta.latestMsgId},{"hasMore",delta.hasMore}});
     }
     nlohmann::json offlineIndexesJson=nlohmann::json::array();
     for(const auto&index:result.offlineIndexes){

@@ -67,5 +67,9 @@ void ImConfig::validateOrThrow() const{
     ConfigParseHelper::checkRange("maxAckBatchSize",maxAckBatchSize,1,1000);
     ConfigParseHelper::checkRange("maxGroupMembers", maxGroupMembers, 1, 1000);
     ConfigParseHelper::checkRange("requireFriendForGroupInvite", requireFriendForGroupInvite, 0, 1);
-    
+    ConfigParseHelper::checkRange("defaultHistoryLimit", defaultHistoryLimit, 1, maxHistoryLimit);
+    ConfigParseHelper::checkRange("maxHistoryLimit", maxHistoryLimit, 1, 500);
+    ConfigParseHelper::checkRange("maxSyncCursorCount", maxSyncCursorCount, 1, 500);
+    ConfigParseHelper::checkRange("maxSyncMessageLimit", maxSyncMessageLimit, 1, 500);
+    ConfigParseHelper::checkRange("maxOfflineIndexLimit", maxOfflineIndexLimit, 1, 500);
 }
