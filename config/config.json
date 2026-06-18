@@ -33,7 +33,12 @@
     "allow_debug_auth":false,
     "max_ack_batch_size": 200,
     "max_group_members": 100,
-    "require_friend_for_group_invite": true
+    "require_friend_for_group_invite": true,
+    "default_history_limit": 50,
+    "max_history_limit": 100,
+    "max_sync_cursor_count": 50,
+    "max_sync_message_limit": 100,
+    "max_offline_index_limit": 200
   },
   
   "database": {

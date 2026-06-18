@@ -68,7 +68,7 @@ enum class MsgType:uint16_t{
     CONVERSATION_READ_RESP,
     SYNC_REQ,//
     SYNC_RESP,
-    MESSAGE_ACK_REQ,
+    MESSAGE_ACK_REQ,//客户端消息已经处理
     MESSAGE_ACK_RESP,
 
     KICK_GROUP_MEMBER_REQ,//踢出成员请求

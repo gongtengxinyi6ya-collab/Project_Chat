@@ -19,4 +19,9 @@ public:
     size_t maxGroupMembers{200};//限制单群成员数
     bool requireFriendForGroupInvite{true};//控制邀请者和被邀请者是否必须是好友
     
+    size_t defaultHistoryLimit{50};
+    size_t maxHistoryLimit{100};
+    size_t maxSyncCursorCount{50};
+    size_t maxSyncMessageLimit{100};
+    size_t maxOfflineIndexLimit{200};
 };

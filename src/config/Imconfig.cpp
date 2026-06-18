@@ -8,6 +8,11 @@ ImConfig ImConfig::fromJson(const nlohmann::json& j){
     imConfig.maxAckBatchSize=ConfigParseHelper::getOrDefault(j,"max_ack_batch_size",imConfig.maxAckBatchSize);
     imConfig.maxGroupMembers=ConfigParseHelper::getOrDefault(j,"max_group_members",imConfig.maxGroupMembers);
     imConfig.requireFriendForGroupInvite=ConfigParseHelper::getOrDefault(j,"require_friend_for_group_invite",imConfig.requireFriendForGroupInvite);
+    imConfig.defaultHistoryLimit=ConfigParseHelper::getOrDefault(j,"default_history_limit",imConfig.defaultHistoryLimit);   
+    imConfig.maxHistoryLimit=ConfigParseHelper::getOrDefault(j,"max_history_limit",imConfig.maxHistoryLimit);
+    imConfig.maxSyncCursorCount=ConfigParseHelper::getOrDefault(j,"max_sync_cursor_count",imConfig.maxSyncCursorCount);
+    imConfig.maxSyncMessageLimit=ConfigParseHelper::getOrDefault(j,"max_sync_message_limit",imConfig.maxSyncMessageLimit);
+    imConfig.maxOfflineIndexLimit=ConfigParseHelper::getOrDefault(j,"max_offline_index_limit",imConfig.maxOfflineIndexLimit);
     return imConfig;
 }
 void ImConfig::applyEnvOverrides(){
@@ -39,6 +44,22 @@ void ImConfig::applyEnvOverrides(){
     if(envMaxAckSize.has_value()){
         maxAckBatchSize=ConfigParseHelper::parseEnvUInt(envMaxAckSize.value(), "IM_MAX_ACK_BATCH_SIZE", 1024);
     }
+    auto envMaxHistoryLimit=ConfigParseHelper::getEnv("IM_MAX_HISTORY_LIMIT");
+    if(envMaxHistoryLimit.has_value()){
+        maxHistoryLimit=ConfigParseHelper::parseEnvUInt(envMaxHistoryLimit.value(), "IM_MAX_HISTORY_LIMIT", 1000);
+    }
+    auto envMaxSyncCursorCount=ConfigParseHelper::getEnv("IM_MAX_SYNC_CURSOR_COUNT");
+    if(envMaxSyncCursorCount.has_value()){
+        maxSyncCursorCount=ConfigParseHelper::parseEnvUInt(envMaxSyncCursorCount.value(), "IM_MAX_SYNC_CURSOR_COUNT", 1000);
+    }
+    auto envMaxSyncMessageLimit=ConfigParseHelper::getEnv("IM_MAX_SYNC_MESSAGE_LIMIT");
+    if(envMaxSyncMessageLimit.has_value()){
+        maxSyncMessageLimit=ConfigParseHelper::parseEnvUInt(envMaxSyncMessageLimit.value(), "IM_MAX_SYNC_MESSAGE_LIMIT", 1000);
+    }
+    auto envMaxOfflineIndexLimit=ConfigParseHelper::getEnv("IM_MAX_OFFLINE_INDEX_LIMIT");
+    if(envMaxOfflineIndexLimit.has_value()){
+        maxOfflineIndexLimit=ConfigParseHelper::parseEnvUInt(envMaxOfflineIndexLimit.value(), "IM_MAX_OFFLINE_INDEX_LIMIT", 1000);
+    }
 }
 void ImConfig::validateOrThrow() const{
     ConfigParseHelper::checkRange("maxGroupNameLen", maxGroupNameLen, 1, 128);
@@ -46,4 +67,5 @@ void ImConfig::validateOrThrow() const{
     ConfigParseHelper::checkRange("maxAckBatchSize",maxAckBatchSize,1,1000);
     ConfigParseHelper::checkRange("maxGroupMembers", maxGroupMembers, 1, 1000);
     ConfigParseHelper::checkRange("requireFriendForGroupInvite", requireFriendForGroupInvite, 0, 1);
+    
 }

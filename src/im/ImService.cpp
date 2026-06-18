@@ -1955,11 +1955,14 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
     if(!messageSyncService_||!repos_.userRepo||!repos_.friendRepo){
         return makeErr(req,ErrorCode::INTERNAL,"messageSyncService");
     }
-    size_t limit=parseLimit(req,"limit",50,200);
-    size_t offlineLimit=parseLimit(req,"offlineLimit",100,500);
+    size_t limit=parseLimit(req,"limit",50,imConfig_.maxSyncMessageLimit);
+    size_t offlineLimit=parseLimit(req,"offlineLimit",100,imConfig_.maxOfflineIndexLimit);
     auto cursorsResult=parseSyncCursors(req,limit);
     if(!cursorsResult.ok){
         return makeErr(req,cursorsResult.code,cursorsResult.message);
+    }
+    if(cursorsResult.cursors.size()>imConfig_.maxSyncCursorCount){
+        return makeErr(req,ErrorCode::BAD_REQUEST,"too many cursors");
     }
     for(const auto& cursor:cursorsResult.cursors){
         if(cursor.type==storage::ConversationType::Direct){
