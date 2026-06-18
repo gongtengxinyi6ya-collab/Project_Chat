@@ -29,7 +29,7 @@ struct GroupMemberRecord {
 struct GroupDissolveRecord {
     bool changed{false};
     bool alreadyDissolved{false};
-    std::vector<std::string> memberAccountIds;
+    std::vector<std::string> memberAccountIds{};
 };
 
 enum class GroupJoinRequestStatus : uint8_t {//入群申请状态

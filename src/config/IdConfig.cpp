@@ -20,7 +20,7 @@ void IdConfig::applyEnvOverrides() {
 }
 void IdConfig::validateOrThrow() const {
     ConfigParseHelper::checkRange("snowflake_node_id", snowflakeNodeId, 0, 1023);
-    auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    uint64_t nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     if(snowflakeEpochMs>=nowMs){
         throw std::runtime_error("snowflake_epoch_ms must be less than current time");
     }

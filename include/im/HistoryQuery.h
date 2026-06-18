@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace im{
 enum class HistoryQueryMode{
@@ -15,4 +16,16 @@ struct HistoryQuery {
     uint64_t lastMsgId{0};//增量补齐游标，查更新消息
     size_t limit{50};
 };
+
+inline std::string historyQueryModeToString(HistoryQueryMode mode){
+    switch(mode){
+        case HistoryQueryMode::Latest:
+            return "latest";
+        case HistoryQueryMode::Before:
+            return "before";
+        case HistoryQueryMode::After:
+            return "after";
+        
+    }
+}
 }
