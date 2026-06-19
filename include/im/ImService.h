@@ -23,12 +23,16 @@
 #include "storage/RepositoryBundle.h"
 #include "storage/RepoResult.h"
 #include "id/SnowflakeGenerator.h"
+#include "security/RateLimitKeyType.h"
 class TcpConnection;
 
 /*唯一业务入口
 */
 namespace auth{
     class AuthService;
+}
+namespace security{
+    class RateLimiter;
 }
 namespace im{
     class FriendService;//好友关系类向前声明
@@ -104,10 +108,9 @@ private:
     uint64_t nowMs() const;//获取当前时间戳
     uint64_t nextMessageId();
     void decorate(im::Response& resp,std::optional<uint64_t> msgId=std::nullopt,std::optional<uint64_t> clientReqId=std::nullopt);//给任何响应/错误/推送加trace字段
-    std::optional<std::string> usernameByKey(ConnKey key) const;//把connKey映射为username
     SendResult sendPush(ConnKey,const std::string &);//统一对push做decorate,encode,sendToConnKey
-    std::optional<std::string> resolveTargetGroupId(const Request&,const Session&);//群id获取辅助方法
-    //群聊接口
+
+    //群聊
     std::unique_ptr<GroupService> groupService_;
     Response handleCreateGroup(const Request&,[[maybe_unused]]ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
     BroadcastResult broadcastToGroup(const std::string&,[[maybe_unused]]ConnKey,im::Response&push);//对房间内其他成员推送事件；
@@ -192,5 +195,11 @@ private:
     //消息确认服务
     std::unique_ptr<MessageAckService> messageAckService_;
     Response handleMessageAck(const Request& req,ConnKey key,Session& session);
+
+    //业务限流服务
+    std::unique_ptr<security::RateLimiter> rateLimiter_;//处理关键请求前进行频率限制
+    Response makeRateLimitError(const Request& req,const security::RateLimitResult& result);//将限流结果转换为错误响应
+    std::optional<Response> checkRateLimitOrError(const Request& req,const security::RateLimitResult& result);//辅助方法
+
 };
 }

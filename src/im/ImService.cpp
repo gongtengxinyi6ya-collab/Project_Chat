@@ -18,6 +18,7 @@
 #include "storage/UserProfileRepo.h"
 #include "im/GroupJoinService.h"
 #include "storage/GroupJoinRequestRepo.h"
+#include "security/RateLimiter.h"
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config,const IdConfig& idconfig):supportedVer_(supportedVer),imConfig_(config),idConfig_(idconfig),idGenerator_(idConfig_.snowflakeNodeId,idConfig_.snowflakeEpochMs){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
@@ -195,6 +196,12 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     if(err.has_value()){
         return err.value();
     }
+    //发消息限流
+    auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
+    auto resultOpt=checkRateLimitOrError(req,limitResult);
+    if(resultOpt){
+        return resultOpt.value();
+    }
     //取目标
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
@@ -293,18 +300,6 @@ void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> msgId,st
     }
     return SendResult::NoSuchConnection;
     
-}
-std::optional<std::string> im::Imservice::resolveTargetGroupId(const Request& req,const Session& session){
-    if(req.body.contains("groupId")&&req.body["groupId"].is_string()){
-        std::string groupId=req.body["groupId"];
-        if(!groupId.empty()){
-            return groupId;
-        }
-    }
-    if(session.joinedGroupIds_.size()==1){
-        return *session.joinedGroupIds_.begin();
-    }
-    return std::nullopt;
 }
 
 //房间接口
@@ -444,16 +439,23 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     if(err.has_value()){
         return err.value();
     }
+    //发消息限流
+    auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
+    auto resultOpt=checkRateLimitOrError(req,limitResult);
+    if(resultOpt){
+        return resultOpt.value();
+    }
     if(imConfig_.requireGroupIdForSend){//如果配置要求必须提供groupId字段
         if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
             return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
         }
     }
-    auto groupId=resolveTargetGroupId(req,session);
-    if(!groupId.has_value()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupId field and no active group");
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return getGroupId.value();
     }
-    auto errInGroup=guardInGroup(req,session,groupId.value());
+    auto errInGroup=guardInGroup(req,session,groupId);
     if(errInGroup.has_value()){
         return errInGroup.value();
     }
@@ -464,35 +466,35 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     if(content.size()>imConfig_.maxMessageLen){
         return makeErr(req,im::ErrorCode::BAD_REQUEST,"Message content is too long");
     }
-    if(!groupManager_.isMember(groupId.value(),session.accountId_)){
+    if(!groupManager_.isMember(groupId,session.accountId_)){
         return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
     uint64_t serverTsMs=nowMs();
     uint64_t msgId=nextMessageId();
     if(hasRepositories()){//保存消息
-        auto result=repos_.messageRepo->saveGroupMessage(msgId,groupId.value(),session.accountId_,session.username_,content,serverTsMs);
+        auto result=repos_.messageRepo->saveGroupMessage(msgId,groupId,session.accountId_,session.username_,content,serverTsMs);
         if(!result.ok()){
             return makeRepoError(req,result.status,"failed to save group message");
         }
     }
     //更新群聊会话列表
     if(conversationService_){
-        auto memberInfos=groupManager_.memberInfos(groupId.value());
+        auto memberInfos=groupManager_.memberInfos(groupId);
         std::vector<std::string> memberAccountIds;
         memberAccountIds.reserve(memberInfos.size());
         for(const auto& memberInfo:memberInfos){
             memberAccountIds.push_back(memberInfo.accountId);
         }
-        auto conversationResult=conversationService_->recordGroupMessage(groupId.value(),memberAccountIds,session.accountId_,session.username_,msgId,content,serverTsMs);
+        auto conversationResult=conversationService_->recordGroupMessage(groupId,memberAccountIds,session.accountId_,session.username_,msgId,content,serverTsMs);
         if(!conversationResult.ok()){
             LOG_WARN("Failed to update group conversation");
         }
     }
     //广播在线成员
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId.value()},{"content",content},{"msgId",msgId}}};
-    BroadcastResult result=broadcastToGroup(groupId.value(),key,pushMsg);
-    saveOfflineForGroupMembers(groupId.value(),session.accountId_,msgId);
-    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId.value()},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
+    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId},{"content",content},{"msgId",msgId}}};
+    BroadcastResult result=broadcastToGroup(groupId,key,pushMsg);
+    saveOfflineForGroupMembers(groupId,session.accountId_,msgId);
+    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
 }
 im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
@@ -505,18 +507,19 @@ im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_un
             return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
         }
     }
-    auto groupId=resolveTargetGroupId(req,session);
-    if(!groupId.has_value()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing groupId field and no active group");
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return getGroupId.value();
     }
-    auto errInGroup=guardInGroup(req,session,groupId.value());
+    auto errInGroup=guardInGroup(req,session,groupId);
     if(errInGroup.has_value()){
         return errInGroup.value();
     }
     //同步查成员账号资料
 
-    auto membersJson=buildMemberProfileList(groupId.value());
-        return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId.value()},{"members",membersJson}});
+    auto membersJson=buildMemberProfileList(groupId);
+        return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId},{"members",membersJson}});
 }
 
 im::Response im::Imservice::handleKickGroupMember(const Request& req, [[maybe_unused]]ConnKey key, Session& session){
@@ -850,13 +853,6 @@ im::Response im::Imservice::handleReviewGroupJoin(const Request& req,[[maybe_unu
 
 
 
-std::optional<std::string> im::Imservice::usernameByKey(ConnKey key)const{
-    auto it=sessionManager_.find(key);
-    if(it&&!it->username_.empty()){
-        return it->username_;
-    }
-    return std::nullopt;
-}
 im::Response im::Imservice::handleListGroups(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
@@ -1221,6 +1217,12 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     if(err){
         return err.value();
     }
+    //历史消息限流
+    auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
+    auto resultOpt=checkRateLimitOrError(req,limitResult);
+    if(resultOpt){
+        return resultOpt.value();
+    }
     std::string groupId;
     if(auto errField=getStringField(req,"groupId",groupId)){
         return errField.value();
@@ -1260,6 +1262,12 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
+    }
+    //历史消息限流
+    auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
+    auto resultOpt=checkRateLimitOrError(req,limitResult);
+    if(resultOpt){
+        return resultOpt.value();
     }
     //读取目标
     std::string peerAccountId;
@@ -1403,6 +1411,12 @@ im::Response im::Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]
 //登录注册接口
 
 im::Response im::Imservice::handleRegister(const Request& req,[[maybe_unused]]ConnKey key,[[maybe_unused]]Session& session){
+    //注册限流
+    auto limitResult=rateLimiter_->checkRegister(std::to_string(key),nowMs());
+    auto resultOpt=checkRateLimitOrError(req,limitResult);
+    if(resultOpt){
+        return resultOpt.value();
+    }
     std::string username;
     auto getUsername=getStringField(req,"username",username);
     if(getUsername){
@@ -1457,6 +1471,12 @@ im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnK
             return makeErr(req,ErrorCode::USER_NOT_FOUND,"User is not exist");
         }
         if(result.status==auth::AuthStatus::BadPassword){
+            //限制登录失败频率
+            auto limitResult=rateLimiter_->checkLoginFail(accountId,nowMs());
+            auto resultOpt=checkRateLimitOrError(req,limitResult);
+            if(resultOpt){
+                return resultOpt.value();
+            }
             return makeErr(req,ErrorCode::BAD_PASSWORD,"Password is incorrect");
         }
         if(result.status==auth::AuthStatus::UserDisabled){
@@ -1464,6 +1484,8 @@ im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnK
         }
         return makeErr(req,ErrorCode::INTERNAL,"Internal error");
     }
+    //重置限制
+    rateLimiter_->resetLoginFail(accountId);
     auto userInfo=result.user.value();
     if(!sessionManager_.bindUser(key,userInfo.userId,userInfo.accountId,userInfo.username)){
         return makeErr(req,ErrorCode::INTERNAL,"Failed to bind user");
@@ -1956,6 +1978,12 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
     if(err){
         return err.value();
     }
+    //同步消息限流
+    auto limitResult=rateLimiter_->checkSync(session.accountId_,nowMs());
+    auto resultOpt=checkRateLimitOrError(req,limitResult);
+    if(resultOpt){
+        return resultOpt.value();
+    }
     if(!messageSyncService_||!repos_.userRepo||!repos_.friendRepo){
         return makeErr(req,ErrorCode::INTERNAL,"messageSyncService");
     }
@@ -2030,4 +2058,15 @@ im::Response im::Imservice::handleMessageAck(const Request& req,[[maybe_unused]]
         }
     }
     return makeOk(req,MsgType::MESSAGE_ACK_RESP,nlohmann::json{{"requestedMsgCount",ackResult.requestedCount},{"ackedMsgCount",ackResult.ackedCount},{"ignoredMsgCount",ackResult.ignoredCount},{"OfflineMsgCount",messageAck.payload.offlineMsgIds.size()}});
+}
+
+//业务限流服务
+im::Response im::Imservice::makeRateLimitError(const Request& req,const security::RateLimitResult& result){
+    return makeErr(req,ErrorCode::RATE_LIMITED,"too many requests",nlohmann::json{{"retryAfterMs",result.retryAfterMs}});
+}
+std::optional<im::Response> im::Imservice::checkRateLimitOrError(const Request& req,const security::RateLimitResult& result){
+    if(result.allowed){
+        return std::nullopt;
+    }
+    return makeRateLimitError(req,result);
 }
