@@ -10,6 +10,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 option(ENABLE_SQL "Enable MySQL storage backend" ON)
+option(ENABLE_REDIS "Enable Redis cache backend" ON)
 # =========================
 # 库（核心代码）
 # =========================
@@ -21,7 +22,44 @@ if(ENABLE_SQL)
 endif()
 
 add_library(chat_lib ${SRC_FILES})
+if(ENABLE_REDIS)
+    find_path(HIREDIS_HEADER hiredis/hiredis.h
+        PATHS /usr/local/include /usr/include
+    )
 
+    find_library(HIREDIS_LIB hiredis
+        PATHS /usr/local/lib64 /usr/local/lib /usr/lib64 /usr/lib
+    )
+
+    find_path(REDIS_PLUS_PLUS_HEADER sw/redis++/redis++.h
+        PATHS /usr/local/include /usr/include
+    )
+
+    find_library(REDIS_PLUS_PLUS_LIB redis++
+        PATHS /usr/local/lib64 /usr/local/lib /usr/lib64 /usr/lib
+    )
+
+    if(NOT HIREDIS_HEADER OR NOT HIREDIS_LIB)
+        message(FATAL_ERROR "hiredis not found")
+    endif()
+
+    if(NOT REDIS_PLUS_PLUS_HEADER OR NOT REDIS_PLUS_PLUS_LIB)
+        message(FATAL_ERROR "redis-plus-plus not found")
+    endif()
+
+    target_include_directories(chat_lib PUBLIC
+        ${HIREDIS_HEADER}
+        ${REDIS_PLUS_PLUS_HEADER}
+    )
+
+    target_link_libraries(chat_lib PUBLIC
+        ${REDIS_PLUS_PLUS_LIB}
+        ${HIREDIS_LIB}
+        pthread
+    )
+
+    target_compile_definitions(chat_lib PUBLIC PROJECT_CHAT_ENABLE_REDIS)
+endif()
 target_include_directories(chat_lib
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
