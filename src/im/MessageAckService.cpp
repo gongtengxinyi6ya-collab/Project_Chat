@@ -15,7 +15,7 @@ storage::RepoValueResult<storage::MessageAckResult> im::MessageAckService::ackMe
     }
     if(msgIds.empty()){
         //幂等OK
-        return {.status=storage::RepoStatus::Ok};
+        return {.status=storage::RepoStatus::Ok,.value=storage::MessageAckResult{.requestedCount=0,.ackedCount=0,.ignoredCount=0}};
     }
     if(!messageRepo_){
         return {.status=storage::RepoStatus::Internal,.message="messageRepo is not avaiable"};

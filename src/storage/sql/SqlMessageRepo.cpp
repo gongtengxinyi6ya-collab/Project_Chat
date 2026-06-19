@@ -219,7 +219,7 @@ storage::RepoValueResult<size_t> storage::SqlMessageRepo::markDelivered(const st
             if(!result.ok()){
                 return {.status=RepoStatus::SqlError,.message=result.error};
             }
-            count+=static_cast<size_t>(result.affectedRows);
+            count++;
         }
         //提交事务
         transation.commit();

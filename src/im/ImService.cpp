@@ -1914,7 +1914,7 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
         return makeErr(req,ErrorCode::INTERNAL,"ConversationReadResult value invalid");
     }
     auto conversationRes=result.value.value();
-    return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"targetId",targetId},{"conversationType",storage::conversationTypeToString(conversationType)},{"targetId",conversationRes.targetId},{"readMsgId",readMsgId},{"readAtMs",conversationRes.readAtMs},{"receiptUpdated",conversationRes.receiptUpdated}});
+    return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"conversationType",storage::conversationTypeToString(conversationType)},{"targetId",conversationRes.targetId},{"readMsgId",readMsgId},{"readAtMs",conversationRes.readAtMs},{"receiptUpdated",conversationRes.receiptUpdated}});
 }
 
 im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
