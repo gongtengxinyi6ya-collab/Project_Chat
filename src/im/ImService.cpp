@@ -197,6 +197,9 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
         return err.value();
     }
     //发消息限流
+    if(!rateLimiter_){
+        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    }
     auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
     auto resultOpt=checkRateLimitOrError(req,limitResult);
     if(resultOpt){
@@ -440,6 +443,9 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
         return err.value();
     }
     //发消息限流
+    if(!rateLimiter_){
+        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    }
     auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
     auto resultOpt=checkRateLimitOrError(req,limitResult);
     if(resultOpt){
@@ -1218,6 +1224,9 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
         return err.value();
     }
     //历史消息限流
+    if(!rateLimiter_){
+        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    }
     auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
     auto resultOpt=checkRateLimitOrError(req,limitResult);
     if(resultOpt){
@@ -1264,6 +1273,9 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
         return err.value();
     }
     //历史消息限流
+    if(!rateLimiter_){
+        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    }
     auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
     auto resultOpt=checkRateLimitOrError(req,limitResult);
     if(resultOpt){
@@ -1412,6 +1424,9 @@ im::Response im::Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]
 
 im::Response im::Imservice::handleRegister(const Request& req,[[maybe_unused]]ConnKey key,[[maybe_unused]]Session& session){
     //注册限流
+    if(!rateLimiter_){
+        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    }
     auto limitResult=rateLimiter_->checkRegister(std::to_string(key),nowMs());
     auto resultOpt=checkRateLimitOrError(req,limitResult);
     if(resultOpt){
@@ -1472,6 +1487,9 @@ im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnK
         }
         if(result.status==auth::AuthStatus::BadPassword){
             //限制登录失败频率
+            if(!rateLimiter_){
+                return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+            }
             auto limitResult=rateLimiter_->checkLoginFail(accountId,nowMs());
             auto resultOpt=checkRateLimitOrError(req,limitResult);
             if(resultOpt){
@@ -1979,6 +1997,9 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
         return err.value();
     }
     //同步消息限流
+    if(!rateLimiter_){
+        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    }
     auto limitResult=rateLimiter_->checkSync(session.accountId_,nowMs());
     auto resultOpt=checkRateLimitOrError(req,limitResult);
     if(resultOpt){

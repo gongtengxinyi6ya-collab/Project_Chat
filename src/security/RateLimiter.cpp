@@ -19,40 +19,40 @@ security::RateLimitResult security::RateLimiter::checkRegister(const std::string
     if(!store_||ip.empty()){
         return {.allowed=true};
     }
-    return store_->hit("register:ip"+ip,registerRule_,nowMs);
+    return store_->hit("register:ip:"+ip,registerRule_,nowMs);
 }
 
 security::RateLimitResult security::RateLimiter::checkLoginFail(const std::string& accountId, int64_t nowMs){
     if(!store_||accountId.empty()){
         return {.allowed=true};
     }
-    return store_->hit("login_fail:account"+accountId,loginFailRule_,nowMs);
+    return store_->hit("login_fail:account:"+accountId,loginFailRule_,nowMs);
 }
 
 void security::RateLimiter::resetLoginFail(const std::string& accountId){
     if(!store_||accountId.empty()){
         return;
     }
-    store_->reset("login_faile:account"+accountId);
+    store_->reset("login_fail:account:"+accountId);
 }
 
 security::RateLimitResult security::RateLimiter::checkSendMessage(const std::string& accountId, int64_t nowMs){
     if(!store_||accountId.empty()){
         return {.allowed=true};
     }
-    return store_->hit("send_message:account"+accountId,sendMessageRule_,nowMs);
+    return store_->hit("send_message:account:"+accountId,sendMessageRule_,nowMs);
 }
 
 security::RateLimitResult security::RateLimiter::checkSync(const std::string& accountId, int64_t nowMs){
     if(!store_||accountId.empty()){
         return {.allowed=true};
     }
-    return store_->hit("sync:account"+accountId,syncRule_,nowMs);
+    return store_->hit("sync:account:"+accountId,syncRule_,nowMs);
 }
 
 security::RateLimitResult security::RateLimiter::checkHistory(const std::string& accountId, int64_t nowMs){
     if(!store_||accountId.empty()){
         return {.allowed=true};
     }
-    return store_->hit("history:account"+accountId,historyRule_,nowMs);
+    return store_->hit("history:account:"+accountId,historyRule_,nowMs);
 }
