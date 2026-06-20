@@ -2,11 +2,13 @@
 #include <string>
 #include <memory>
 #include <atomic>
+#include <cstdint>
 #include "EventLoop.h"
 #include "Channel.h"
 #include "Buffer.h"
-#include "logger/LogMacros.h"
+
 #include "config/AppConfig.h"
+//向前声明
 class ThreadPool;
 class TcpServer;
 
@@ -38,6 +40,9 @@ public:
     
     EventLoop* getLoop() const;//返回所属的EventLoop，供服务器转发消息时调用
     int fd() const;
+    //真实ip获取
+    const std::string& peerIp()const{return peerIp_;};
+    uint16_t peerPort()const{return peerPort_;};
     
     void connectionEstablished();//连接建立，注册事件
     void connectionDestroyed();//连接销毁，取消事件,最终释放fd
@@ -61,6 +66,8 @@ public:
 private:
     EventLoop* loop_;//
     int fd_;//客户端socket
+    std::string peerIp_;//保存peer地址
+    uint16_t peerPort_{0};//端口
     ThreadPool* threadPool_;//线程池，处理消息转发等耗时操作
     TcpServer* server_;//服务器对象指针，调用服务器的消息转发函数
     std::unique_ptr<Channel> channel_;//事件监听
@@ -71,6 +78,10 @@ private:
     std::atomic<bool> connected_;
     CloseCallback closeCallback_;//删除连接回调
     MessageCallback messageCallback_;//消息回调，保存服务器注册的消息回调函数
+
+    //注册地址ip
+    std::string peerIp_{};//保存peer地址
+    uint16_t peerPort_{0};//端口
 
     //心跳检测
     TimerId heartbeatTimerId_;//周期定时器句柄
