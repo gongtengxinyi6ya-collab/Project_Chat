@@ -11,6 +11,7 @@
 #include "DatabaseConfig.h"
 #include "StorageConfig.h"
 #include "IdConfig.h"
+#include "RedisConfig.h"
 /*
 总配置聚合：统一承载服务端/网络/日志/IM配置，提供加载，校验，查询
 */
@@ -29,6 +30,7 @@ public:
     const DatabaseConfig& database()const{return databaseConfig_;}
     const StorageConfig& storage()const{return storageConfig_;}//获取存储配置
     const IdConfig& id()const{return idConfig_;}//获取ID生成器配置
+    const RedisConfig& redis()const{return redisConfig_;}
 private:
     ServerConfig server_;
     NetConfig net_;
@@ -37,4 +39,5 @@ private:
     DatabaseConfig databaseConfig_;
     StorageConfig storageConfig_;//存储后端配置
     IdConfig idConfig_;//ID生成器配置
+    RedisConfig redisConfig_;//redis配置
 };

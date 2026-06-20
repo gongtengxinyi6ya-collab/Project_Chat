@@ -60,6 +60,17 @@
     "snowflake_node_id": 1,
     "snowflake_epoch_ms": 1735689600000
 
-  }
+  },
 
+  "redis": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 6379,
+    "password": "",
+    "db": 0,
+    "pool_size": 4,
+    "connect_timeout_ms": 3000,
+    "socket_timeout_ms": 3000,
+    "key_prefix": "project_chat:"
+}
 }
