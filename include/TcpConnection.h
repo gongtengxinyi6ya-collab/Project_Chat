@@ -66,8 +66,7 @@ public:
 private:
     EventLoop* loop_;//
     int fd_;//客户端socket
-    std::string peerIp_;//保存peer地址
-    uint16_t peerPort_{0};//端口
+
     ThreadPool* threadPool_;//线程池，处理消息转发等耗时操作
     TcpServer* server_;//服务器对象指针，调用服务器的消息转发函数
     std::unique_ptr<Channel> channel_;//事件监听

@@ -1,5 +1,6 @@
 #include "config/RedisConfig.h"
 #include "config/ConfigParseHelper.h"
+#include <stdexcept>
 RedisConfig RedisConfig::fromJson(const nlohmann::json& j){
     RedisConfig config;
     config.enabled_=ConfigParseHelper::getOrDefault(j,"enabled",config.enabled_);

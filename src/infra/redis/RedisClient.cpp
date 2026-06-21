@@ -208,7 +208,7 @@ std::optional<int64_t> RedisClient::evalInt(const std::string& script,const std:
     if(script.empty()){
         return std::nullopt;
     }
-    if(!impl_||impl_->redis){
+    if(!impl_||!impl_->redis){
         return std::nullopt;
     }
     try{
