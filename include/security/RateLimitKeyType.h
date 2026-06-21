@@ -16,7 +16,7 @@ struct RateLimitRule {
     int64_t blockMs{0};//超限后封禁多久
 };
 
-struct RateLimitResult {
+struct RateLimitResult {//限流结果
     bool allowed{true};//请求是否允许通过
     size_t remaining{0};//当前窗口剩余可请求次数
     int64_t retryAfterMs{0};//被限流后还需要等待多久
