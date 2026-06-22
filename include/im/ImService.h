@@ -91,7 +91,7 @@ public:
     bool hasRepositories()const;//
     void loadFromRepositories();//服务启动时从Repo恢复群和成员关系
 
-    
+    void setRateLimiter(std::unique_ptr<security::RateLimiter> limiter);
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
     SendToConnKeyFn sendToConnKey_;

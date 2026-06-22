@@ -2,8 +2,31 @@
 #include "TcpServer.h"
 #include "ThreadPool.h"
 #include "logger/LogMacros.h"
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <cstring>
+#include <stdexcept>
 TcpConnection::TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config)
 :loop_(loop),fd_(fd),threadPool_(threadPool),server_(server),connected_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
+    //获取peer地址
+    sockaddr_in addr{};
+    socklen_t len=sizeof(addr);
+    if(::getpeername(fd_,reinterpret_cast<sockaddr*>(&addr),&len)<0){
+        peerIp_ = "unknown";
+        peerPort_ = 0;
+        return;
+    }
+    char buf[INET_ADDRSTRLEN]{};
+    if(inet_ntop(AF_INET,&addr.sin_addr,buf,sizeof(buf))==nullptr){
+        peerIp_ = "unknown";
+        peerPort_ = 0;
+        return;
+    }
+    peerIp_=buf;
+    peerPort_=ntohs(addr.sin_port);
+
 }
 
 TcpConnection::~TcpConnection(){

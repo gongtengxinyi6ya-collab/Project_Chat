@@ -18,6 +18,8 @@ struct Session{
     std::string accountId_;//账号唯一标识
     std::unordered_set<std::string> joinedGroupIds_;//已经加入的群聊集合
     uint64_t userId_{0};//数据库稳定主键
+    std::string peerIp_{};
+    uint16_t peerPort_{0};
     
     Session():state_(ConnState::Connected),username_(""){}
 };

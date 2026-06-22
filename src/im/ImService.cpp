@@ -28,6 +28,10 @@ im::Imservice::~Imservice()=default;
 void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const std::string &payload){
     ConnKey key=conn->fd();
     auto &session=sessionManager_.getOrCreate(key);
+    if (session.peerIp_.empty()) {
+        session.peerIp_ = conn->peerIp();
+        session.peerPort_ = conn->peerPort();
+    }
     auto req_or_resp=im::tryParse(payload);
     if(auto req_ptr=std::get_if<im::Request>(&req_or_resp)){
         LOG_INFO_CTX("im request in",makeReqCtx(key,*req_ptr,session,"REQ_IN"));
@@ -166,6 +170,10 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
         groupJoinService_=std::make_unique<GroupJoinService>(groupManager_,repos_.groupRepo,repos_.userProfileRepo,repos_.groupJoinRequestRepo,imConfig_.maxGroupMembers);
     }
 }
+void im::Imservice::setRateLimiter(std::unique_ptr<security::RateLimiter> limiter){
+    rateLimiter_=std::move(limiter);
+}
+
 bool im::Imservice::hasRepositories()const{
     return repos_.valid();
 }
@@ -197,14 +205,14 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
         return err.value();
     }
     //发消息限流
-    if(!rateLimiter_){
-        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    if(rateLimiter_){
+        auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return resultOpt.value();
+        }
     }
-    auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
-    auto resultOpt=checkRateLimitOrError(req,limitResult);
-    if(resultOpt){
-        return resultOpt.value();
-    }
+    
     //取目标
     if(req.to.empty()){
         return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
@@ -443,14 +451,14 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
         return err.value();
     }
     //发消息限流
-    if(!rateLimiter_){
-        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    if(rateLimiter_){
+        auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return resultOpt.value();
+        }    
     }
-    auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
-    auto resultOpt=checkRateLimitOrError(req,limitResult);
-    if(resultOpt){
-        return resultOpt.value();
-    }
+    
     if(imConfig_.requireGroupIdForSend){//如果配置要求必须提供groupId字段
         if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
             return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
@@ -1224,13 +1232,12 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
         return err.value();
     }
     //历史消息限流
-    if(!rateLimiter_){
-        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
-    }
-    auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
-    auto resultOpt=checkRateLimitOrError(req,limitResult);
-    if(resultOpt){
-        return resultOpt.value();
+    if(rateLimiter_){
+        auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return resultOpt.value();
+        }
     }
     std::string groupId;
     if(auto errField=getStringField(req,"groupId",groupId)){
@@ -1273,13 +1280,12 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
         return err.value();
     }
     //历史消息限流
-    if(!rateLimiter_){
-        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
-    }
-    auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
-    auto resultOpt=checkRateLimitOrError(req,limitResult);
-    if(resultOpt){
-        return resultOpt.value();
+    if(rateLimiter_){
+        auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return resultOpt.value();
+        }
     }
     //读取目标
     std::string peerAccountId;
@@ -1424,14 +1430,15 @@ im::Response im::Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]
 
 im::Response im::Imservice::handleRegister(const Request& req,[[maybe_unused]]ConnKey key,[[maybe_unused]]Session& session){
     //注册限流
-    if(!rateLimiter_){
-        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    if(rateLimiter_){
+        std::string ip = session.peerIp_.empty() ? "unknown" : session.peerIp_;
+        auto limitResult=rateLimiter_->checkRegister(ip,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return resultOpt.value();
+        }
     }
-    auto limitResult=rateLimiter_->checkRegister(std::to_string(key),nowMs());
-    auto resultOpt=checkRateLimitOrError(req,limitResult);
-    if(resultOpt){
-        return resultOpt.value();
-    }
+    
     std::string username;
     auto getUsername=getStringField(req,"username",username);
     if(getUsername){
@@ -1487,14 +1494,14 @@ im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnK
         }
         if(result.status==auth::AuthStatus::BadPassword){
             //限制登录失败频率
-            if(!rateLimiter_){
-                return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+            if(rateLimiter_){
+                auto limitResult=rateLimiter_->checkLoginFail(accountId,nowMs());
+                auto resultOpt=checkRateLimitOrError(req,limitResult);
+                if(resultOpt){
+                    return resultOpt.value();
+                }
             }
-            auto limitResult=rateLimiter_->checkLoginFail(accountId,nowMs());
-            auto resultOpt=checkRateLimitOrError(req,limitResult);
-            if(resultOpt){
-                return resultOpt.value();
-            }
+            
             return makeErr(req,ErrorCode::BAD_PASSWORD,"Password is incorrect");
         }
         if(result.status==auth::AuthStatus::UserDisabled){
@@ -1503,7 +1510,9 @@ im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnK
         return makeErr(req,ErrorCode::INTERNAL,"Internal error");
     }
     //重置限制
-    rateLimiter_->resetLoginFail(accountId);
+    if (rateLimiter_) {
+        rateLimiter_->resetLoginFail(accountId);
+    }
     auto userInfo=result.user.value();
     if(!sessionManager_.bindUser(key,userInfo.userId,userInfo.accountId,userInfo.username)){
         return makeErr(req,ErrorCode::INTERNAL,"Failed to bind user");
@@ -1997,14 +2006,14 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
         return err.value();
     }
     //同步消息限流
-    if(!rateLimiter_){
-        return makeErr(req,ErrorCode::INTERNAL,"rateLimiter invalid");
+    if(rateLimiter_){
+        auto limitResult=rateLimiter_->checkSync(session.accountId_,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return resultOpt.value();
+        }
     }
-    auto limitResult=rateLimiter_->checkSync(session.accountId_,nowMs());
-    auto resultOpt=checkRateLimitOrError(req,limitResult);
-    if(resultOpt){
-        return resultOpt.value();
-    }
+    
     if(!messageSyncService_||!repos_.userRepo||!repos_.friendRepo){
         return makeErr(req,ErrorCode::INTERNAL,"messageSyncService");
     }
