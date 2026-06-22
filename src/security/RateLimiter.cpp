@@ -4,8 +4,8 @@
 
 security::RateLimiter::RateLimiter(std::shared_ptr<RateLimitStore> store)
 :store_(std::move(store)),
-registerRule_{.name="register",.maxRequests=10,.windowMs=60*1000,.blockMs=5*60*1000},
 loginFailRule_{.name="login_fail",.maxRequests=5,.windowMs=5*60*1000,.blockMs=5*60*1000},
+registerRule_{.name="register",.maxRequests=10,.windowMs=60*1000,.blockMs=5*60*1000},
 sendMessageRule_{.name="send_message",.maxRequests=20,.windowMs=1000,.blockMs=3000},
 syncRule_{.name="sync",.maxRequests=5,.windowMs=1000,.blockMs=3000},
 historyRule_{.name="history",.maxRequests=10,.windowMs=1000,.blockMs=3000}

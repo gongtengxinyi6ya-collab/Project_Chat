@@ -38,6 +38,7 @@ bool RedisClient::connect(){
             impl_->connected=true;
             return true;
         }
+        return false;
     }catch(const std::exception& e){
         impl_->redis.reset();
         impl_->connected=false;
@@ -231,8 +232,8 @@ std::optional<int64_t> RedisClient::evalInt(const std::string& script,const std:
         return std::nullopt;
     }
     try{
-        auto evalValue=impl_->redis->eval<int64_t>(script,keys.begin(),keys.end(),args.begin(),args.end());
-        return evalValue;
+        auto evalValue=impl_->redis->eval<long long>(script,keys.begin(),keys.end(),args.begin(),args.end());
+        return static_cast<int64_t>(evalValue);
     }catch(const std::exception& e){
         LOG_WARN(std::string("Redis command failed: ") + e.what());
         return std::nullopt;

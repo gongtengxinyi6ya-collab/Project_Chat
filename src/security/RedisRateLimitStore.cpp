@@ -3,7 +3,7 @@
 
 namespace security{
 
-RedisRateLimitStore::RedisRateLimitStore(std::shared_ptr<infra::redis::RedisClient> redis,std::string prefix="project_chat:rate:")
+RedisRateLimitStore::RedisRateLimitStore(std::shared_ptr<infra::redis::RedisClient> redis,std::string prefix)
 :redis_(std::move(redis)),prefix_(std::move(prefix)){
 
 }
