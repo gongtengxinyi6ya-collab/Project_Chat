@@ -38,11 +38,23 @@ RateLimitResult RedisRateLimitStore::hit(const std::string&key,const RateLimitRu
         auto remaining=rule.maxRequests-static_cast<size_t>(count.value());
         return RateLimitResult{.allowed=true,.remaining=remaining};
     }
-    if(count.value()>){
-        if(redis_->setPx(blockKey,"1",rule.blockMs)){
-            return RateLimitResult{.allowed=false,.retryAfterMs=rule.blockMs};
-        }
+    if(rule.blockMs>0){
+        redis_->setPx(blockKey,"1",rule.blockMs);
+        return RateLimitResult{.allowed=false,.retryAfterMs=rule.blockMs};
     }
-    return RateLimitResult{.allowed=true};
+    auto retryAfterMs=redis_->pttl(counterKey);
+    if(retryAfterMs<=0){
+        retryAfterMs=rule.windowMs;
+    }
+    return RateLimitResult{.allowed=false,.retryAfterMs=retryAfterMs};
+}
+void RedisRateLimitStore::reset(const std::string& key,const RateLimitRule& rule){
+    if(!redis_||key.empty()||rule.name.empty()){
+        return ;
+    }
+    std::string counterKey=prefix_+"cnt:"+rule.name+":"+key;
+    std::string blockKey=prefix_+"blk:"+rule.name+":"+key;
+    redis_->del(counterKey);
+    redis_->del(blockKey);
 }
 }

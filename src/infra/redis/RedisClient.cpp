@@ -1,5 +1,7 @@
 #include <sw/redis++/redis++.h>
 #include <chrono>
+#include <stdexcept>
+#include "logger/LogMacros.h"
 #include "infra/redis/RedisClient.h"
 
 namespace infra::redis{
@@ -19,23 +21,29 @@ bool RedisClient::connect(){
     if(!impl_->config.enabled()){
         return false;
     }
-    //构造连接
-    sw::redis::ConnectionOptions connectionOpts;
-    connectionOpts.host=impl_->config.host();
-    connectionOpts.port=impl_->config.port();
-    connectionOpts.password=impl_->config.password();
-    connectionOpts.db=impl_->config.db();
-    connectionOpts.connect_timeout=std::chrono::milliseconds(impl_->config.connectTimeoutMs());
-    connectionOpts.socket_timeout=std::chrono::milliseconds(impl_->config.socketTimeoutMs());
-    //构造连接池
-    sw::redis::ConnectionPoolOptions poolOpts;
-    poolOpts.size=impl_->config.poolSize();
-    impl_->redis=std::make_unique<sw::redis::Redis>(connectionOpts,poolOpts);
-    if(ping()){
-        impl_->connected=true;
-        return true;
+    try{
+        //构造连接
+        sw::redis::ConnectionOptions connectionOpts;
+        connectionOpts.host=impl_->config.host();
+        connectionOpts.port=impl_->config.port();
+        connectionOpts.password=impl_->config.password();
+        connectionOpts.db=impl_->config.db();
+        connectionOpts.connect_timeout=std::chrono::milliseconds(impl_->config.connectTimeoutMs());
+        connectionOpts.socket_timeout=std::chrono::milliseconds(impl_->config.socketTimeoutMs());
+        //构造连接池
+        sw::redis::ConnectionPoolOptions poolOpts;
+        poolOpts.size=impl_->config.poolSize();
+        impl_->redis=std::make_unique<sw::redis::Redis>(connectionOpts,poolOpts);
+        if(ping()){
+            impl_->connected=true;
+            return true;
+        }
+    }catch(const std::exception& e){
+        impl_->redis.reset();
+        impl_->connected=false;
+        LOG_WARN(std::string("Faile to connect redis:")+e.what());
+        return false;
     }
-    return false;
 }
 
 bool RedisClient::connected()const{
@@ -51,8 +59,9 @@ bool RedisClient::ping(){
     try{
         return impl_->redis->ping()=="PONG";
 
-    }catch(...){
+    }catch(const std::exception& e){
         impl_->connected=false;
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }
 }
@@ -72,7 +81,8 @@ std::optional<std::string> RedisClient::get(const std::string& key){
             return std::nullopt;
         }
         return opt.value();
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return std::nullopt;
     }
 }
@@ -86,7 +96,8 @@ bool RedisClient::set(const std::string& key,const std::string&value){
     }
     try{
     return impl_->redis->set(key,value);
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }
 }
@@ -100,7 +111,8 @@ bool RedisClient::setEx(const std::string& key,const std::string&value,int64_t t
     try{
         impl_->redis->setex(key,ttlSeconds,value);
         return true;
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }
 }
@@ -114,7 +126,8 @@ bool RedisClient::setPx(const std::string& key,const std::string&value,int64_t t
     try{
         impl_->redis->set(key,value,std::chrono::milliseconds(ttlMs));
         return true;
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }
 }
@@ -130,7 +143,8 @@ bool RedisClient::del(const std::string& key){
             return true;
         }
         return false;
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }
 }
@@ -144,7 +158,8 @@ std::optional<int64_t> RedisClient::incr(const std::string& key){
     try{
         auto incrValue=impl_->redis->incr(key);
         return incrValue;
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return std::nullopt;
     }
 }
@@ -157,7 +172,8 @@ bool RedisClient::expire(const std::string& key,int64_t ttlSeconds){
     }
     try{
         return impl_->redis->expire(key,std::chrono::seconds(ttlSeconds));
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }
 }
@@ -170,7 +186,8 @@ bool RedisClient::pexpire(const std::string& key,int64_t ttlMs){
     }
     try{
         return impl_->redis->pexpire(key,std::chrono::milliseconds(ttlMs));
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }
 }
@@ -187,7 +204,8 @@ int64_t RedisClient::pttl(const std::string& key){
             return 0;
         }
         return pttlValue;
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }
 }
@@ -200,7 +218,8 @@ bool RedisClient::exists(const std::string& key){
     }
     try{
         return impl_->redis->exists(key)>0;
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }
 }
@@ -214,7 +233,8 @@ std::optional<int64_t> RedisClient::evalInt(const std::string& script,const std:
     try{
         auto evalValue=impl_->redis->eval<int64_t>(script,keys.begin(),keys.end(),args.begin(),args.end());
         return evalValue;
-    }catch(...){
+    }catch(const std::exception& e){
+        LOG_WARN(std::string("Redis command failed: ") + e.what());
         return std::nullopt;
     }
 }
