@@ -8,7 +8,7 @@ RedisRateLimitStore::RedisRateLimitStore(std::shared_ptr<infra::redis::RedisClie
 
 }
 
-RateLimitResult RedisRateLimitStore::hit(const std::string&key,const RateLimitRule& rule,int64_t nowMs){
+RateLimitResult RedisRateLimitStore::hit(const std::string&key,const RateLimitRule& rule,[[maybe_unused]]int64_t nowMs){
     if(!redis_||key.empty()||rule.maxRequests==0||rule.windowMs<=0){
         return {.allowed=true};
     }
@@ -17,6 +17,14 @@ RateLimitResult RedisRateLimitStore::hit(const std::string&key,const RateLimitRu
     //检查blockKey是否存在
     if(redis_->exists(blockKey)){
         auto retryAfterMs=redis_->pttl(blockKey);
+        if(retryAfterMs<=0){
+            if(rule.blockMs>0){
+                retryAfterMs=rule.blockMs;
+            }
+            else{
+                retryAfterMs=rule.windowMs;
+            }
+        }
         return RateLimitResult{.allowed=false,.retryAfterMs=retryAfterMs};
     }
     auto count=redis_->incr(counterKey);
@@ -26,11 +34,11 @@ RateLimitResult RedisRateLimitStore::hit(const std::string&key,const RateLimitRu
     if(count.value()==1){
         redis_->pexpire(counterKey,rule.windowMs);
     }
-    if(count.value()<=rule.maxRequests){
-        auto remaining=rule.maxRequests-count.value();
+    if(count.value()<=static_cast<int64_t>(rule.maxRequests)){
+        auto remaining=rule.maxRequests-static_cast<size_t>(count.value());
         return RateLimitResult{.allowed=true,.remaining=remaining};
     }
-    if(count.value()>rule.maxRequests){
+    if(count.value()>){
         if(redis_->setPx(blockKey,"1",rule.blockMs)){
             return RateLimitResult{.allowed=false,.retryAfterMs=rule.blockMs};
         }
