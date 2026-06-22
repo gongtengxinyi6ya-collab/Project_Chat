@@ -14,11 +14,15 @@ option(ENABLE_REDIS "Enable Redis cache backend" ON)
 # =========================
 # 库（核心代码）
 # =========================
-file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/security/*.cpp src/auth/*.cpp src/id/*.cpp src/infra/redis/*.cpp)
+file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/security/*.cpp src/auth/*.cpp src/id/*.cpp)
 
 if(ENABLE_SQL)
     file(GLOB SQL_SRC_FILES src/storage/sql/*.cpp)
     list(APPEND SRC_FILES ${SQL_SRC_FILES})
+endif()
+if(ENABLE_REDIS)
+    file(GLOB REDIS_SRC_FILES src/infra/redis/*.cpp)
+    list(APPEND SRC_FILES ${REDIS_SRC_FILES})
 endif()
 
 add_library(chat_lib ${SRC_FILES})

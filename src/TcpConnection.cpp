@@ -194,7 +194,7 @@ if(!connected_.load(std::memory_order_relaxed)||!channel_){//防止连接已关�
         droppedMessage_.fetch_add(1,std::memory_order_relaxed);
         uint32_t drops=overloadDropCount_.fetch_add(1,std::memory_order_relaxed)+1;
         if(drops>=maxOverloadDropCount_){
-            LOG_ERROR("Connection " + std::to_string(fd_) + " has dropped " +std::to_string(overloadDropCount_) + " messages due to overload, exceeding max overload drop count of " + std::to_string(maxOverloadDropCount_) + ", closing connection");
+            LOG_ERROR("Connection " + std::to_string(fd_) + " has dropped " +std::to_string(overloadDropCount_.load()) + " messages due to overload, exceeding max overload drop count of " + std::to_string(maxOverloadDropCount_) + ", closing connection");
             scheduleCloseInLoop();
         }
         return;

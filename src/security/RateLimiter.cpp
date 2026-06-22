@@ -11,7 +11,7 @@ syncRule_{.name="sync",.maxRequests=5,.windowMs=1000,.blockMs=3000},
 historyRule_{.name="history",.maxRequests=10,.windowMs=1000,.blockMs=3000}
 {
     if(!store_){
-        throw std::invalid_argument("RateLimitStore invaild");
+        throw std::invalid_argument("RateLimitStore invalid");
     }
 }
 

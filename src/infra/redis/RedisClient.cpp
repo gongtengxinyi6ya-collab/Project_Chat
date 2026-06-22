@@ -197,7 +197,7 @@ int64_t RedisClient::pttl(const std::string& key){
         return false;
     }
     if(!impl_||!impl_->redis){
-        return false;
+        return 0;
     }
     try{
         auto pttlValue=impl_->redis->pttl(key);
@@ -207,7 +207,7 @@ int64_t RedisClient::pttl(const std::string& key){
         return pttlValue;
     }catch(const std::exception& e){
         LOG_WARN(std::string("Redis command failed: ") + e.what());
-        return false;
+        return 0;
     }
 }
 bool RedisClient::exists(const std::string& key){

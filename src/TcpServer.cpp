@@ -2,9 +2,11 @@
 #include "EventLoopThreadPool.h"
 #include "EventLoop.h"
 #include "TcpConnection.h"
+#ifdef PROJECT_CHAT_ENABLE_REDIS
 #include "infra/redis/RedisClient.h"
 #include "security/RedisRateLimitStore.h"
 #include "security/RateLimiter.h"
+#endif
 TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 :baseloop_(loop),acceptor_(baseloop_,port),threadNum_(config.server().ioThreads),started_(false),config_(config){
     iothreadPool_ = std::make_unique<EventLoopThreadPool>(baseloop_);
@@ -31,23 +33,30 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     auto repos=storage::RepositoryFactory::create(config_);
     imService_->setRepositories(std::move(repos));
     imService_->loadFromRepositories();
+    #ifdef PROJECT_CHAT_ENABLE_REDIS
     if (config_.redis().enabled()) {
-    auto redisClient = std::make_shared<infra::redis::RedisClient>(config_.redis());
-    if (redisClient->connect()) {
-        std::string prefix = config_.redis().keyPrefix();
-        if (!prefix.empty() && prefix.back() != ':') {
-            prefix.push_back(':');
+        auto redisClient = std::make_shared<infra::redis::RedisClient>(config_.redis());
+        if (redisClient->connect()) {
+            std::string prefix = config_.redis().keyPrefix();
+            if (!prefix.empty() && prefix.back() != ':') {
+                prefix.push_back(':');
+            }
+            prefix += "rate:";
+
+            auto store = std::make_shared<security::RedisRateLimitStore>(redisClient, prefix);
+            imService_->setRateLimiter(std::make_unique<security::RateLimiter>(store));
+
+            LOG_INFO("Redis rate limiter enabled");
+        } 
+        else {
+            LOG_WARN("Redis connect failed, rate limiter disabled");
         }
-        prefix += "rate:";
-
-        auto store = std::make_shared<security::RedisRateLimitStore>(redisClient, prefix);
-        imService_->setRateLimiter(std::make_unique<security::RateLimiter>(store));
-
-        LOG_INFO("Redis rate limiter enabled");
-    } else {
-        LOG_WARN("Redis connect failed, rate limiter disabled");
     }
-}
+    #else
+    if (config_.redis().enabled()) {
+        LOG_WARN("Redis is enabled in config, but binary was built without PROJECT_CHAT_ENABLE_REDIS");
+    }
+    #endif
 }
 
 TcpServer::~TcpServer(){
