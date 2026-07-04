@@ -18,7 +18,7 @@
 #include "storage/UserProfileRepo.h"
 #include "im/GroupJoinService.h"
 #include "storage/GroupJoinRequestRepo.h"
-#include "security/RateLimiter.h"
+#include "security/rate_limit/RateLimiter.h"
 im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config,const IdConfig& idconfig):supportedVer_(supportedVer),imConfig_(config),idConfig_(idconfig),idGenerator_(idConfig_.snowflakeNodeId,idConfig_.snowflakeEpochMs){}
 
 void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){

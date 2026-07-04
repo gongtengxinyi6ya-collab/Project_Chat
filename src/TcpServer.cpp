@@ -4,8 +4,8 @@
 #include "TcpConnection.h"
 #ifdef PROJECT_CHAT_ENABLE_REDIS
 #include "infra/redis/RedisClient.h"
-#include "security/RedisRateLimitStore.h"
-#include "security/RateLimiter.h"
+#include "security/rate_limit/RedisRateLimitStore.h"
+#include "security/rate_limit/RateLimiter.h"
 #endif
 TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 :baseloop_(loop),acceptor_(baseloop_,port),threadNum_(config.server().ioThreads),started_(false),config_(config){

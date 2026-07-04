@@ -23,7 +23,7 @@
 #include "storage/RepositoryBundle.h"
 #include "storage/RepoResult.h"
 #include "id/SnowflakeGenerator.h"
-#include "security/RateLimitKeyType.h"
+#include "security/rate_limit/RateLimitKeyType.h"
 class TcpConnection;
 
 /*唯一业务入口

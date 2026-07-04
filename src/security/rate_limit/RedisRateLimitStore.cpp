@@ -19,23 +19,23 @@ void RedisRateLimitStore::reset(const std::string& key,const RateLimitRule& rule
     if(!redis_||key.empty()||rule.name.empty()){
         return ;
     }
-    std::string counterKey=prefix_+"cnt:"+rule.name+":"+key;
-    std::string blockKey=prefix_+"blk:"+rule.name+":"+key;
-    redis_->del(counterKey);
-    redis_->del(blockKey);
+    auto cntKey=counterKey(key,rule);
+    std::string blkKey=blockKey(key,rule);
+    redis_->del(cntKey);
+    redis_->del(blkKey);
 }
 
 std::string RedisRateLimitStore::counterKey(const std::string& key, const RateLimitRule& rule) const{
     if(key.empty()||rule.name.empty()){
         return "";
     }
-    return prefix_+"cnt"+rule.name+":"+key;
+    return prefix_+"cnt:"+rule.name+":"+key;
 }
 std::string RedisRateLimitStore::blockKey(const std::string& key, const RateLimitRule& rule) const{
     if(key.empty()||rule.name.empty()){
         return "";
     }
-    return prefix_+"blk"+rule.name+":"+key;
+    return prefix_+"blk:"+rule.name+":"+key;
 }
 RateLimitResult RedisRateLimitStore::hitByLua(const std::string& key, const RateLimitRule& rule){
     if(!redis_||key.empty()||rule.name.empty()){
