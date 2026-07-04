@@ -194,7 +194,7 @@ bool RedisClient::pexpire(const std::string& key,int64_t ttlMs){
 }
 int64_t RedisClient::pttl(const std::string& key){
     if(key.empty()){
-        return false;
+        return 0;
     }
     if(!impl_||!impl_->redis){
         return 0;

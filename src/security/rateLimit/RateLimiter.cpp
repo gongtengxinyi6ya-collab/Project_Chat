@@ -1,5 +1,5 @@
-#include "security/RateLimiter.h"
-#include "security/RateLimitStore.h"
+#include "security/rate_limit/RateLimiter.h"
+#include "security/rate_limit/RateLimitStore.h"
 #include <stdexcept>
 
 security::RateLimiter::RateLimiter(std::shared_ptr<RateLimitStore> store)

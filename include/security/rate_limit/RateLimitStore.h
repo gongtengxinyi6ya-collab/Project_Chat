@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
-#include "security/RateLimitKeyType.h"
+#include "security/rate_limit/RateLimitKeyType.h"
 namespace security{
 
 class RateLimitStore{
