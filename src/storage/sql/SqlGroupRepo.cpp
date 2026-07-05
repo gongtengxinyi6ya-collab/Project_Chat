@@ -3,6 +3,7 @@
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlTransaction.h"
+#include "storage/sql/SqlErrorMapper.h"
 #include <unordered_set>
 #include <stdexcept>
 storage::SqlGroupRepo::SqlGroupRepo(std::shared_ptr<SqlConnectionPool> pool)
@@ -23,10 +24,11 @@ storage::RepoResult storage::SqlGroupRepo::createGroup(const std::string& groupI
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
-        if(result.error.find("Duplicate entry")!=std::string::npos){
-            return RepoResult{.status=RepoStatus::AlreadyExists,.message="Group already exists"};
+        auto status=mapSqlErrorToRepoStatus(result);
+        if(status==RepoStatus::AlreadyExists){
+            return {.status=RepoStatus::AlreadyExists,.message="User already exiest"};
         }
-        return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
+        return RepoResult{.status=RepoStatus::SqlError,.message=formatSqlError(result)};
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
 }

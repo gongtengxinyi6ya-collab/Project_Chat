@@ -1,6 +1,7 @@
 #include "storage/sql/SqlOfflineMessageRepo.h"
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnection.h"
+#include "storage/sql/SqlErrorMapper.h"
 #include "storage/sql/SqlTransaction.h"
 storage::SqlOfflineMessageRepo::SqlOfflineMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
@@ -17,12 +18,12 @@ storage::RepoResult storage::SqlOfflineMessageRepo::saveOfflineMessage(const std
     }
     if(conn->connected()){
         auto result=conn->executePrepared("INSERT INTO offline_messages(account_id,msg_id,group_id) VALUES(?,?,?)",{accountId,msgId,groupId});
-        if(!result.ok()&&result.error.find("Duplicate entry")!=std::string::npos){
-            //重复保存离线索引作为幂等处理
-            return RepoResult{.status=RepoStatus::Ok,.message="Offline message already exists"};
-        }
         if(!result.ok()){
-            return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
+            auto status=mapSqlErrorToRepoStatus(result);
+            if(status==RepoStatus::AlreadyExists)
+                //重复保存离线索引作为幂等处理
+                return RepoResult{.status=RepoStatus::Ok,.message="Offline message already exists"};
+             return RepoResult{.status=RepoStatus::SqlError,.message=formatSqlError(result)};
         }
     }
     return RepoResult{.status=RepoStatus::Ok,.message="Offline message saved successfully"};

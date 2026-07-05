@@ -2,6 +2,7 @@
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnectionGuard.h"
+#include "storage/sql/SqlErrorMapper.h"
 #include <chrono>
 #include <unordered_set>
 #include <unordered_map>
@@ -24,10 +25,11 @@ storage::RepoResult storage::SqlUserProfileRepo::createDefaultProfile(uint64_t u
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
-        if(result.error.find("Duplicate entry")!=std::string::npos){//唯一键冲突
-            return RepoResult{.status=RepoStatus::AlreadyExists,.message="User already exists"};
+        auto status=mapSqlErrorToRepoStatus(result);
+        if(status==RepoStatus::AlreadyExists){
+            return {.status=RepoStatus::AlreadyExists,.message="UserProfile already exiest"};
         }
-         return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
+         return RepoResult{.status=RepoStatus::SqlError,.message=formatSqlError(result)};
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to create userProfile"};
 }

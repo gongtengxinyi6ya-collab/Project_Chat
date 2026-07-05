@@ -3,6 +3,7 @@
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlTransaction.h"
+#include "storage/sql/SqlErrorMapper.h"
 storage::SqlFriendRequestRepo::SqlFriendRequestRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
@@ -23,11 +24,12 @@ storage::RepoValueResult<uint64_t> storage::SqlFriendRequestRepo::createPendingR
     }
     auto result=conn->executePreParedInsert("INSERT INTO friend_requests(requester_account_id,receiver_account_id,status,created_at_ms) VALUES(?,?,0,?)",{requester,receiver,nowMs});
     if(!result.ok()){
-        if(result.error.find("Duplicate entry")!=std::string::npos){
-            return {.status=RepoStatus::AlreadyExists};
+        auto status=mapSqlErrorToRepoStatus(result);
+        if(status==RepoStatus::AlreadyExists){
+            return {.status=RepoStatus::AlreadyExists,.message="Request already exiest"};
         }
         else{
-            return {.status=RepoStatus::SqlError,.message=result.error};
+            return {.status=RepoStatus::SqlError,.message=formatSqlError(result)};
         }
     }
     return {.status=RepoStatus::Ok,.value=result.lastInsertId};

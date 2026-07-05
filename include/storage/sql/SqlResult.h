@@ -20,6 +20,8 @@ public:
     std::vector<SqlRow> rows{};//查询结果
     uint64_t affectedRows{0};//影响行数
     uint64_t lastInsertId{0};//插入后ID
+    int errorCode{0};//保存MySQL原始错误码
+    std::string sqlState;//保存SQL标准状态码，区分连接异常、约束异常
     bool ok()const{return success;}
 };
 

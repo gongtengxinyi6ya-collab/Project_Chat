@@ -2,6 +2,7 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlConnectionGuard.h"
+#include "storage/sql/SqlErrorMapper.h"
 storage::SqlUserRepo::SqlUserRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
@@ -19,10 +20,11 @@ storage::RepoResult storage::SqlUserRepo::createUser(const std::string& accountI
     if(result.ok()){
         return RepoResult{.status=RepoStatus::Ok};
     }
-    if(result.error.find("Duplicate entry")!=std::string::npos){//唯一键冲突
-        return RepoResult{.status=RepoStatus::AlreadyExists,.message="Account already exists"};
+    auto status=mapSqlErrorToRepoStatus(result);
+    if(status==RepoStatus::AlreadyExists){
+        return {.status=RepoStatus::AlreadyExists,.message="User already exiest"};
     }
-    return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
+    return RepoResult{.status=RepoStatus::SqlError,.message=formatSqlError(result)};
 }
 bool storage::SqlUserRepo::userExists(const std::string& accountId){
     if(accountId.empty()){

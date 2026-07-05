@@ -9,6 +9,7 @@ enum class RepoStatus{
     AlreadyExists,//唯一键冲突
     NotFound,//查询不到
     InvalidArgument,//参数非法
+    Conflict,
     SqlError,//SQL执行异常
     UserNotFound,
     JoinRequestNotFound,
