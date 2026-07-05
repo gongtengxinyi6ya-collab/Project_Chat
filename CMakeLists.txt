@@ -24,7 +24,7 @@ if(ENABLE_SQL)
     list(APPEND SRC_FILES ${SQL_SRC_FILES})
 endif()
 if(ENABLE_REDIS)
-    file(GLOB REDIS_SRC_FILES src/infra/redis/*.cpp src/security/rate_limit/RedisRateStore.cpp)
+    file(GLOB REDIS_SRC_FILES src/infra/redis/*.cpp src/security/rate_limit/RedisRateLimitStore.cpp)
     list(APPEND SRC_FILES ${REDIS_SRC_FILES})
 endif()
 

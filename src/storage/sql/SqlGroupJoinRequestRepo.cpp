@@ -3,6 +3,7 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlTransaction.h"
+#include "storage/sql/SqlErrorMapper.h"
 #include <stdexcept>
 
 storage::SqlGroupJoinRequestRepo::SqlGroupJoinRequestRepo(std::shared_ptr<SqlConnectionPool> pool)
@@ -280,7 +281,8 @@ storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRe
                 AND status = 0;
                 )",{applicantAccountId,static_cast<uint64_t>(0),groupId});
             if(!resultInsert.ok()){
-                if(resultInsert.error.find("Duplicate entry")!=std::string::npos){
+                auto status=mapSqlErrorToRepoStatus(resultInsert);
+                if(status==RepoStatus::AlreadyExists){
                     //更新状态为approved,但不插入成员，幂等返回
                     auto resultApprove=conn->executePrepared(R"(
                         UPDATE group_join_requests
@@ -299,7 +301,7 @@ storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRe
                     }
                     return {.status=RepoStatus::Ok,.value=GroupJoinReviewResult{.memberAdded=false,.alreadyHandled=true}};
                 }
-                return {.status=RepoStatus::SqlError,.message=resultInsert.error};
+                return {.status=RepoStatus::SqlError,.message=formatSqlError(resultInsert)};
             }
             if(resultInsert.affectedRows==0){
                 return {.status=RepoStatus::GroupNotFound};

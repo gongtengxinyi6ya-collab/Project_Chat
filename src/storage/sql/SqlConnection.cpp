@@ -44,7 +44,7 @@ storage::SqlResult storage::SqlConnection::execute(const std::string& sql){
         uint64_t affected=stmt->executeUpdate(sql);
         return SqlResult{.success=true,.affectedRows=affected};
     }catch(const sql::SQLException& e){
-        return SqlResult{.success=false,.error=e.what()};
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }
 storage::SqlResult storage::SqlConnection::query(const std::string& sql){
@@ -56,7 +56,7 @@ storage::SqlResult storage::SqlConnection::query(const std::string& sql){
         auto ResultSet=std::unique_ptr<sql::ResultSet>(stmt->executeQuery(sql));
         return readResultSet(ResultSet.get());
     }catch(const sql::SQLException& e){
-        return SqlResult{.success=false,.error=e.what()};
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
@@ -75,7 +75,7 @@ storage::SqlResult storage::SqlConnection::executePrepared(const std::string& sq
         uint64_t affectedRows=stmt->executeUpdate();
         return SqlResult{.success=true,.affectedRows=affectedRows};
     }catch(const sql::SQLException& e){
-        return SqlResult{.success=false,.error=e.what()};
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
@@ -105,7 +105,7 @@ storage::SqlResult storage::SqlConnection::executePreParedInsert(const std::stri
         uint64_t lastInsertId=fetchLastInsertId();
         return SqlResult{.success=true,.affectedRows=affectedRows,.lastInsertId=lastInsertId};
     }catch(const sql::SQLException& e){
-        return SqlResult{.success=false,.error=e.what()};
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
@@ -121,7 +121,7 @@ storage::SqlResult storage::SqlConnection::queryPrepared(const std::string& sql,
         auto ResultSet=std::unique_ptr<sql::ResultSet>(stmt->executeQuery());
         return readResultSet(ResultSet.get());
     }catch(const sql::SQLException& e){
-        return SqlResult{.success=false,.error=e.what()};
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
     return SqlResult{.success=false,.error="unknown error"};
 }

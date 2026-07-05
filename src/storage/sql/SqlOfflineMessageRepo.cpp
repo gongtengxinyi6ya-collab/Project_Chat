@@ -106,12 +106,13 @@ storage::RepoResult storage::SqlOfflineMessageRepo::saveOfflineDirectMessage(con
     }
     if(conn->connected()){
         auto result=conn->executePrepared("INSERT INTO offline_messages(account_id,msg_type,msg_id,peer_account_id,group_id) VALUES(?,2,?,?,NULL)",{accountId,msgId,peerAccountId});
-        if(!result.ok()&&result.error.find("Duplicate entry")!=std::string::npos){
-            //重复保存离线索引作为幂等处理
-            return RepoResult{.status=RepoStatus::Ok,.message="Offline message already exists"};
-        }
         if(!result.ok()){
-            return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
+            //重复保存离线索引作为幂等处理
+            auto status=mapSqlErrorToRepoStatus(result);
+            if(status==RepoStatus::AlreadyExists){
+                return RepoResult{.status=RepoStatus::Ok,.message="Offline message already exists"};
+            }
+            return RepoResult{.status=RepoStatus::SqlError,.message=formatSqlError(result)};
         }
     }
     return RepoResult{.status=RepoStatus::Ok,.message="Offline message saved successfully"};

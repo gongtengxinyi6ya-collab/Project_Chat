@@ -15,6 +15,9 @@ RepoStatus mapSqlErrorToRepoStatus(const SqlResult& result){
     if(result.errorCode==1451){
         return RepoStatus::Conflict;
     }
+    if(result.sqlState.rfind("08",0)==0){
+        return RepoStatus::SqlError;
+    }
     return RepoStatus::SqlError;
 }
 std::string formatSqlError(const SqlResult& result){

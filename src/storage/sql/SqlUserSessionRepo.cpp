@@ -2,6 +2,7 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlConnection.h"
+#include "storage/sql/SqlErrorMapper.h"
 #include <chrono>
 #include <optional>
 
@@ -21,10 +22,11 @@ storage::RepoResult storage::SqlUserSessionRepo::createSession(const storage::St
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
-        if(result.error.find("Duplicate entry")!=std::string::npos){
-            return RepoResult{.status=RepoStatus::AlreadyExists,.message="Session already exists"};
+        auto status=mapSqlErrorToRepoStatus(result);
+        if(status==RepoStatus::AlreadyExists){
+            return {.status=RepoStatus::AlreadyExists,.message="UserSession already exiest"};
         }
-        return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
+        return RepoResult{.status=RepoStatus::SqlError,.message=formatSqlError(result)};
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to create session"};
 }

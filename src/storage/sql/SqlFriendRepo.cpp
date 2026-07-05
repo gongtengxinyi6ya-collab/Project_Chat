@@ -3,6 +3,7 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlTransaction.h"
+#include "storage/sql/SqlErrorMapper.h"
 
 storage::SqlFriendRepo::SqlFriendRepo(std::shared_ptr<SqlConnectionPool> pool):
 pool_(std::move(pool)){
@@ -32,12 +33,14 @@ storage::RepoResult storage::SqlFriendRepo::addFriendPair(const std::string& acc
         SqlTransaction transaction(*conn);//开启事务
         //插入双向关系；
         auto result1=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,created_at_ms,status) VALUES(?,?,?,1) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{accountId,friendAccountId,createAtMs,createAtMs});
-        if(!result1.ok()&&result1.error.find("Duplicate entry")!=std::string::npos){
-            return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
+        auto status=mapSqlErrorToRepoStatus(result1);
+        if(status==RepoStatus::AlreadyExists){
+            return {.status=RepoStatus::AlreadyExists,.message="friend already exiest"};
         }
         auto result2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,created_at_ms,status) VALUES(?,?,?,1) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{friendAccountId,accountId,createAtMs,createAtMs});
-        if(!result2.ok()&&result2.error.find("Duplicate entry")!=std::string::npos){
-            return RepoResult{.status=RepoStatus::AlreadyExists,.message="already exists"};
+        auto status=mapSqlErrorToRepoStatus(result2);
+        if(status==RepoStatus::AlreadyExists){
+            return {.status=RepoStatus::AlreadyExists,.message="User already exiest"};
         }
         if(result1.ok()&&result2.ok()){
             transaction.commit();

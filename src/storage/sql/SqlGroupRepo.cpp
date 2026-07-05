@@ -90,10 +90,11 @@ storage::RepoResult storage::SqlGroupRepo::addMember(const std::string&groupId,c
         if(result.ok()){
             return RepoResult{.status=RepoStatus::Ok};
         }
-        if(result.error.find("Duplicate entry")!=std::string::npos){
-            return RepoResult{.status=RepoStatus::AlreadyExists,.message="User is already a member of the group"};
+        auto status=mapSqlErrorToRepoStatus(result);
+        if(status==RepoStatus::AlreadyExists){
+            return {.status=RepoStatus::AlreadyExists,.message="User already exiest"};
         }
-        return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
+        return RepoResult{.status=RepoStatus::SqlError,.message=formatSqlError(result)};
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to connect to database"};
 }
