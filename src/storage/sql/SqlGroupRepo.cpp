@@ -330,13 +330,14 @@ storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::strin
     try{
         //插入群
         auto result1=conn->executePrepared("INSERT INTO chat_groups(group_id,group_name,owner) VALUES(?,?,?)",{groupId,groupName,ownerAccountId});
-        if(!result1.ok()&&result1.error.find("Duplicate entry")!=std::string::npos){
-            return RepoResult{.status=RepoStatus::AlreadyExists,.message="Group already exists"};
+        if(!result1.ok()){
+            auto status=mapSqlErrorToRepoStatus(result1);
+            if(status==RepoStatus::AlreadyExists){
+                return {.status=RepoStatus::AlreadyExists,.message="group already exiest"};
+            }
+            return RepoResult{.status=RepoStatus::SqlError,.message=formatSqlError(result1)};
         }
-        else if(!result1.ok()){
-            return RepoResult{.status=RepoStatus::SqlError,.message=result1.error};
-
-        }
+        
         //插入群主成员
         auto result2=conn->executePrepared("INSERT INTO group_members(group_id,account_id,role) VALUES(?,?,2)",{groupId,ownerAccountId});
         if(result1.ok()&&result2.ok()){

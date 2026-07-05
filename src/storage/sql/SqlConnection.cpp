@@ -1,11 +1,13 @@
 #include "storage/sql/SqlConnection.h"
-storage::SqlConnection::SqlConnection(const DatabaseConfig& config):config_(config){
+
+namespace storage{
+SqlConnection::SqlConnection(const DatabaseConfig& config):config_(config){
 
 }
-storage::SqlConnection::~SqlConnection(){
+SqlConnection::~SqlConnection(){
     close();
 }
-bool storage::SqlConnection::connect(){
+bool SqlConnection::connect(){
     try{
         driver_=sql::mysql::get_mysql_driver_instance();
         std::string url="tcp://"+config_.host()+":"+std::to_string(config_.port());
@@ -19,13 +21,13 @@ bool storage::SqlConnection::connect(){
     connected_=true;
     return true;
 }
-void storage::SqlConnection::close(){
+void SqlConnection::close(){
     connected_=false;
     if(conn_){
         conn_->close();
     }
 }
-bool storage::SqlConnection::ping(){
+bool SqlConnection::ping(){
     if(!connected_||!conn_){
         return false;
     }
@@ -35,7 +37,7 @@ bool storage::SqlConnection::ping(){
     }
     return false;
 }
-storage::SqlResult storage::SqlConnection::execute(const std::string& sql){
+SqlResult SqlConnection::execute(const std::string& sql){
     if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }
@@ -47,7 +49,7 @@ storage::SqlResult storage::SqlConnection::execute(const std::string& sql){
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }
-storage::SqlResult storage::SqlConnection::query(const std::string& sql){
+SqlResult SqlConnection::query(const std::string& sql){
     if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }
@@ -60,12 +62,12 @@ storage::SqlResult storage::SqlConnection::query(const std::string& sql){
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
-bool storage::SqlConnection::connected()const{
+bool SqlConnection::connected()const{
     return connected_;
 }
-storage::SqlResult storage::SqlConnection::executePrepared(const std::string& sql,const std::vector<SqlParam>& params){
-    if(!connected_||!conn_){
-        return SqlResult{.success=false,.error="not connected"};
+SqlResult SqlConnection::executePrepared(const std::string& sql,const std::vector<SqlParam>& params){
+    if(!ensureConnected()){
+        return {.success=false,.error="not connected"};
     }
     try{
         auto stmt=std::unique_ptr<sql::PreparedStatement>(conn_->prepareStatement(sql));
@@ -79,7 +81,7 @@ storage::SqlResult storage::SqlConnection::executePrepared(const std::string& sq
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
-uint64_t storage::SqlConnection::fetchLastInsertId(){
+uint64_t SqlConnection::fetchLastInsertId(){
     auto stmt=std::unique_ptr<sql::Statement>(conn_->createStatement());
     //执行查询上一次插入id
     auto resultSet=std::unique_ptr<sql::ResultSet>(stmt->executeQuery("SELECT LAST_INSERT_ID()"));
@@ -89,9 +91,9 @@ uint64_t storage::SqlConnection::fetchLastInsertId(){
     //读取结果集第一行
     return resultSet->getUInt64(1);
 }
-storage::SqlResult storage::SqlConnection::executePreParedInsert(const std::string& sql,const std::vector<SqlParam>& params){
-    if(!connected_||!conn_){
-        return SqlResult{.success=false,.error="not connected"};
+SqlResult SqlConnection::executePreParedInsert(const std::string& sql,const std::vector<SqlParam>& params){
+    if(!ensureConnected()){
+        return {.success=false,.error="not connected"};
     }
     try{
         auto stmt=std::unique_ptr<sql::PreparedStatement>(conn_->prepareStatement(sql));
@@ -109,9 +111,9 @@ storage::SqlResult storage::SqlConnection::executePreParedInsert(const std::stri
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
-storage::SqlResult storage::SqlConnection::queryPrepared(const std::string& sql,const std::vector<SqlParam>& params){
-    if(!connected_||!conn_){
-        return SqlResult{.success=false,.error="not conncted"};
+SqlResult SqlConnection::queryPrepared(const std::string& sql,const std::vector<SqlParam>& params){
+    if(!ensureConnected()){
+        return {.success=false,.error="not connected"};
     }
     try{
         auto stmt=std::unique_ptr<sql::PreparedStatement>(conn_->prepareStatement(sql));
@@ -125,7 +127,7 @@ storage::SqlResult storage::SqlConnection::queryPrepared(const std::string& sql,
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
-storage::SqlResult storage::SqlConnection::beginTransaction(){
+SqlResult SqlConnection::beginTransaction(){
     if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }
@@ -134,10 +136,10 @@ storage::SqlResult storage::SqlConnection::beginTransaction(){
         inTransaction_=true;
         return SqlResult{.success=true};
     }catch(const sql::SQLException& e){
-        return SqlResult{.success=false,.error=e.what()};
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }
-storage::SqlResult storage::SqlConnection::commit(){
+SqlResult SqlConnection::commit(){
     if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }
@@ -152,10 +154,10 @@ storage::SqlResult storage::SqlConnection::commit(){
         }catch(const sql::SQLException& e2){
             // Ignore this error
         }
-        return SqlResult{.success=false,.error=e.what()};
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }
-storage::SqlResult storage::SqlConnection::rollback(){
+SqlResult SqlConnection::rollback(){
     if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }
@@ -170,19 +172,19 @@ storage::SqlResult storage::SqlConnection::rollback(){
         }catch(...){
 
         }
-        return SqlResult{.success=false,.error=e.what()};
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }
-bool storage::SqlConnection::inTransaction()const{
+bool SqlConnection::inTransaction()const{
     return inTransaction_;
 }
-void storage::SqlConnection::resetSessionState(){
+void SqlConnection::resetSessionState(){
     if(inTransaction_){
         rollback();
     }
     conn_->setAutoCommit(true);
 }
-storage::SqlResult storage::SqlConnection::readResultSet(sql::ResultSet* resultset){
+SqlResult SqlConnection::readResultSet(sql::ResultSet* resultset){
     SqlResult result;
     while(resultset->next()){
         SqlRow row;
@@ -196,4 +198,48 @@ storage::SqlResult storage::SqlConnection::readResultSet(sql::ResultSet* results
             result.rows.push_back(std::move(row));
     }
     return result;
+}
+
+bool SqlConnection::ensureConnected(){
+    if(connected_&&conn_&&!broken_){
+        return true;
+    }
+    else{
+        if(reconnect()){
+            return true;
+        }
+    }
+    return false;
+}
+bool SqlConnection::reconnect(){
+    //清理旧连接
+    close();
+    if(connect()){
+        broken_=false;
+        reconnectCount_++;
+        return true;
+    }
+    broken_=true;
+    return false;
+}
+bool SqlConnection::resetSessionStateSafe(){
+    //若处于事务中，进行回滚
+    if(inTransaction_){
+        auto result=rollback();
+        if(!result.ok()){
+            broken_=true;
+            return false;
+        }
+        return true;
+    }
+    conn_->setAutoCommit(true);
+    return true;
+}
+void SqlConnection::markBroken(){
+    broken_=true;
+    connected_=false;
+}
+bool SqlConnection::broken() const{
+    return broken_;
+}
 }

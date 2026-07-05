@@ -1,10 +1,11 @@
 #include "storage/sql/SqlConnectionPool.h"
 #include "storage/sql/SqlConnection.h"
 
-storage::SqlConnectionPool::SqlConnectionPool(const DatabaseConfig& config)
+namespace storage{
+SqlConnectionPool::SqlConnectionPool(const DatabaseConfig& config)
 :config_(config){
 }
-bool storage::SqlConnectionPool::start(){
+bool SqlConnectionPool::start(){
     std::lock_guard lock(mutex_);
     if(started_){
         return true;
@@ -21,7 +22,7 @@ bool storage::SqlConnectionPool::start(){
 
     return true;
 }
-void storage::SqlConnectionPool::stop(){
+void SqlConnectionPool::stop(){
     std::lock_guard lk(mutex_);
     for(auto& conn:connections_){
         conn->close();
@@ -34,9 +35,56 @@ void storage::SqlConnectionPool::stop(){
     cv_.notify_all();
 }
 
-storage::SqlConnectionGuard storage::SqlConnectionPool::acquire(){
-    std::unique_lock lk(mutex_);
-    cv_.wait(lk,[this](){return !idle_.empty()||!started_;});
+SqlConnectionGuard SqlConnectionPool::acquire(){
+    return acquireFor(acquireTimeout_);
+}
+size_t SqlConnectionPool::size()const{
+    std::lock_guard lk(mutex_);
+    return connections_.size();
+}
+bool SqlConnectionPool::healthy(){
+
+    std::vector<std::shared_ptr<SqlConnection>> snapshot;
+    {
+        std::lock_guard lk(mutex_);
+        snapshot=connections_;
+    }
+    for(auto& conn:snapshot){
+        if(!conn||!conn->ping()){
+            return false;
+        }
+    }
+    return true;
+}
+void SqlConnectionPool::release(std::shared_ptr<SqlConnection> conn){
+    if(!conn){
+        return;
+    }
+    bool reusable=conn->resetSessionStateSafe();
+    
+    {
+        std::lock_guard lk(mutex_);
+        if(!started_){
+            return;
+        }
+        if(reusable&&!conn->broken()){
+            idle_.push(std::move(conn));
+        }
+        else{
+            //尝试replace
+            replaceConnection(conn);
+        }
+    }
+    cv_.notify_one();
+}
+
+SqlConnectionGuard SqlConnectionPool::acquireFor(std::chrono::milliseconds timeout){
+    std::unique_lock lk(mutex_);//加锁等待
+    bool ready=cv_.wait_for(lk,timeout,[this](){return !idle_.empty()||!started_;});
+    if(!ready){//超时返回空
+        acquireTimeouts_.fetch_add(1,std::memory_order_relaxed);
+        return SqlConnectionGuard(*this,nullptr);
+    }
     if(!started_){
         return SqlConnectionGuard(*this,nullptr);
     }
@@ -45,30 +93,36 @@ storage::SqlConnectionGuard storage::SqlConnectionPool::acquire(){
     SqlConnectionGuard guard(*this,conn);
     return guard;
 }
-size_t storage::SqlConnectionPool::size()const{
+SqlConnectionPoolStats SqlConnectionPool::stats() const{
     std::lock_guard lk(mutex_);
-    return connections_.size();
+    auto total=connections_.size();
+    auto idleCount=idle_.size();
+    return {.total=total,.idle=idleCount,.inUse=total-idleCount,.acquireTimeouts=acquireTimeouts_};
 }
-bool storage::SqlConnectionPool::healthy(){
-    std::lock_guard lk(mutex_);
-    for(auto& conn:connections_){
-        if(!conn->ping()){
-            return false;
-        }
+bool SqlConnectionPool::replaceConnection(const std::shared_ptr<SqlConnection>& oldConn){
+    if(!oldConn){
+        return false;
     }
-    return true;
-}
-void storage::SqlConnectionPool::release(std::shared_ptr<SqlConnection> conn){
-    if(!conn){
-        return;
+    //创建新连接
+    auto newConn=std::make_shared<SqlConnection>(config_);
+    if(!newConn->connect()){
+        return false;
     }
+    //成功后替换旧连接
     {
         std::lock_guard lk(mutex_);
         if(!started_){
-            return;
+            return false;
         }
-        conn->resetSessionState();//防止业务忘记commit/rollback
-        idle_.push(std::move(conn));
+        for(auto& conn:connections_){
+            if(conn==oldConn){
+                conn=newConn;
+                idle_.push(newConn);
+                cv_.notify_one();
+                return true;
+            }
+        }
     }
-    cv_.notify_one();
+    return false;
+}
 }

@@ -34,6 +34,12 @@ public:
     SqlResult rollback();//回滚事务并恢复自动提交
     bool inTransaction()const;//标记当前连接是否处于事务状态
     void resetSessionState();//连接归还连接池前，确保不在事务中
+
+    bool ensureConnected();//执行SQL前确认连接可用
+    bool reconnect();//重新建立MySQL连接
+    bool resetSessionStateSafe();//连接归还连接池前安全恢复状态
+    void markBroken();//标记连接不可继续复用
+    bool broken() const;//连接池判断是否要把连接重新放回idle队列
 private:
     DatabaseConfig config_;
     bool connected_{false};
@@ -43,5 +49,8 @@ private:
     SqlResult readResultSet(sql::ResultSet* resultSet);
 
     bool inTransaction_{false};//标记当前事务是否处于事务状态
+
+    bool broken_{false};
+    uint64_t reconnectCount_{0};
 };
 }

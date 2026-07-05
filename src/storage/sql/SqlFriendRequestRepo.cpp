@@ -228,17 +228,19 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
         //执行双向添加好友
         auto insertResult1=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,status,created_at_ms) VALUES(?,?,1,?) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{friendRequest.requestAccountId,friendRequest.receiveAccountId,nowMs,nowMs});
         if(!insertResult1.ok()){
-            if(insertResult1.error.find("Duplicate entry")!=std::string::npos){
-                return {.status=RepoStatus::AlreadyExists,.message="already exists"};
+           auto status=mapSqlErrorToRepoStatus(insertResult1);
+            if(status==RepoStatus::AlreadyExists){
+                return {.status=RepoStatus::AlreadyExists,.message="request already exiest"};
             }
-            return {.status=RepoStatus::SqlError,.message=insertResult1.error};
+            return {.status=RepoStatus::SqlError,.message=formatSqlError(insertResult1)};
         }
         auto insertResult2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,status,created_at_ms) VALUES(?,?,1,?) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{friendRequest.receiveAccountId,friendRequest.requestAccountId,nowMs,nowMs});
         if(!insertResult2.ok()){
-            if(insertResult2.error.find("Duplicate entry")!=std::string::npos){
-                return {.status=RepoStatus::AlreadyExists,.message="already exists"};
+            auto status=mapSqlErrorToRepoStatus(insertResult2);
+            if(status==RepoStatus::AlreadyExists){
+                return {.status=RepoStatus::AlreadyExists,.message="request already exiest"};
             }
-            return {.status=RepoStatus::SqlError,.message=insertResult2.error};
+            return {.status=RepoStatus::SqlError,.message=formatSqlError(insertResult2)};
         }
         //全部成功后提交事务
         transaction.commit();
