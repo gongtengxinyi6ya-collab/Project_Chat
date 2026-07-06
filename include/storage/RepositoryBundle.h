@@ -13,6 +13,7 @@ class FriendRepo;
 class FriendRequestRepo;
 class ConversationRepo;
 class GroupJoinRequestRepo;
+class SqlConnectionPool;
 class RepositoryBundle{
 public:
     std::shared_ptr<UserRepo> userRepo;
@@ -25,6 +26,8 @@ public:
     std::shared_ptr<FriendRequestRepo> friendRequestRepo;//好友申请存储
     std::shared_ptr<ConversationRepo> conversationRepo;
     std::shared_ptr<GroupJoinRequestRepo> groupJoinRequestRepo;
+    std::shared_ptr<SqlConnectionPool> sqlPool;
     bool valid()const{return userRepo&&groupRepo&&messageRepo;};
+    bool hasSqlPool()const{return sqlPool!=nullptr;}
 };
 }

@@ -7,18 +7,11 @@
 #include <atomic>
 #include "config/DatabaseConfig.h"
 #include "SqlConnectionGuard.h"
+#include "storage/sql/SqlPoolStats.h"
 /*维护固定数量SQL连接*/
 namespace storage{
     class SqlConnection;
-struct SqlConnectionPoolStats {
-    size_t total{0};//连接池总连接数
-    size_t idle{0};//当前空闲连接数
-    size_t inUse{0};//正在被业务使用的连接数
-    uint64_t acquireTimeouts{0};//获取链接超时次数
-    uint64_t reconnects{0};//连接重建次数
-    uint64_t replaceFailures{0};//
-    uint64_t acquireCount{0};
-};
+
 class SqlConnectionPool{
 public:
 
@@ -47,7 +40,7 @@ private:
     std::atomic<uint64_t> acquireCount_{0};//成功获取连接次数
     std::atomic<uint64_t> acquireTimeouts_{0};//
 
-    bool started_{false};//连接池是否启动
+    std::atomic<bool> started_{false};//连接池是否启动
 
     void release(std::shared_ptr<SqlConnection> conn);//guard析构自动归还连接
 };

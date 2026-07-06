@@ -15,6 +15,7 @@ public:
     const std::string& database()const;
     uint32_t poolSize()const;
     uint32_t connectTimeoutMs()const;
+    uint32_t acquireTimeoutMs() const;
 
 private:
     std::string host_{"127.0.0.1"};//数据库地址
@@ -24,4 +25,5 @@ private:
     std::string database_{"project_chat"};//使用哪个数据库
     uint32_t poolSize_{4};//数据库连接池大小
     uint32_t connectTimeoutMs_{3000};//数据库连接超时时间
+    uint32_t acquireTimeoutMs_{3000};
 };

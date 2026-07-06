@@ -9,6 +9,7 @@ DatabaseConfig DatabaseConfig::fromJson(const nlohmann::json& j){
     databaseConfig.database_=ConfigParseHelper::getOrDefault(j,"database",databaseConfig.database_);
     databaseConfig.poolSize_=ConfigParseHelper::getOrDefault(j,"pool_size",databaseConfig.poolSize_);
     databaseConfig.connectTimeoutMs_=ConfigParseHelper::getOrDefault(j,"connect_timeout_ms",databaseConfig.connectTimeoutMs_);
+    databaseConfig.acquireTimeoutMs_ =ConfigParseHelper::getOrDefault(j, "acquire_timeout_ms", databaseConfig.acquireTimeoutMs_);
     return databaseConfig;
 
 }
@@ -41,6 +42,11 @@ void DatabaseConfig::loadFromEnv(){
     if(envConnectTimeoutMs.has_value()){
         connectTimeoutMs_=ConfigParseHelper::parseEnvUInt(envConnectTimeoutMs.value(), "DB_CONNECT_TIMEOUT_MS", 60000);
     }
+    auto envAcquireTimeoutMs = ConfigParseHelper::getEnv("DB_ACQUIRE_TIMEOUT_MS");
+    if (envAcquireTimeoutMs.has_value()) {
+        acquireTimeoutMs_ =
+            ConfigParseHelper::parseEnvUInt(envAcquireTimeoutMs.value(), "DB_ACQUIRE_TIMEOUT_MS", 60000);
+    }
 }
 void DatabaseConfig::validate() const{
     if(host_.empty()){
@@ -55,6 +61,7 @@ void DatabaseConfig::validate() const{
     ConfigParseHelper::checkRange("port", port_, 1, 65535);
     ConfigParseHelper::checkRange("pool_size", poolSize_, 1, 1000);
     ConfigParseHelper::checkRange("connect_timeout_ms", connectTimeoutMs_, 1000, 60000);
+    ConfigParseHelper::checkRange("acquire_timeout_ms", acquireTimeoutMs_, 100, 60000);
 }
 const std::string& DatabaseConfig::host() const{
     return host_;
@@ -76,4 +83,7 @@ uint32_t DatabaseConfig::poolSize()const{
 }
 uint32_t DatabaseConfig::connectTimeoutMs()const{
     return connectTimeoutMs_;
+}
+uint32_t DatabaseConfig::acquireTimeoutMs() const{
+    return acquireTimeoutMs_;
 }

@@ -1,4 +1,5 @@
 #include "storage/RepositoryFactory.h"
+#include "logger/LogMacros.h"
 #include "storage/memory/MemoryUserRepo.h"
 #include "storage/memory/MemoryGroupRepo.h"
 #include "storage/memory/MemoryMessageRepo.h"
@@ -34,8 +35,13 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
     bundle.friendRequestRepo=std::make_shared<SqlFriendRequestRepo>(pool);
     bundle.conversationRepo=std::make_shared<SqlConversationRepo>(pool);
     bundle.groupJoinRequestRepo=std::make_shared<SqlGroupJoinRequestRepo>(pool);
-    return bundle;
-}
+    bundle.sqlPool=pool;
+    auto stats = pool->stats();
+    LOG_INFO("SQL pool started total=" + std::to_string(stats.total) +
+            " idle=" + std::to_string(stats.idle) +
+            " acquireTimeoutMs=" + std::to_string(stats.acquireTimeoutMs));
+        return bundle;
+    }
 #else
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& config){
     throw std::runtime_error("SQL backend is disabled at build time");
