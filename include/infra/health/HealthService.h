@@ -32,8 +32,8 @@ private:
 
     std::function<size_t()> onlineConnectionProvider_;//获取当前在线连接数
 
-    bool checkSql(HealthSnapshot& snapshot);//读取SQL pool状态
-    bool checkRedis(HealthSnapshot& snapshot);//检查Redis客户端状态
+    void checkSql(HealthSnapshot& snapshot);//读取SQL pool状态
+    void checkRedis(HealthSnapshot& snapshot);//检查Redis客户端状态
     void fillRuntimeStats(HealthSnapshot& snapshot);//填充运行时信息
     void decideStatus(HealthSnapshot& snapshot);//根据状态计算总健康状态
 };
