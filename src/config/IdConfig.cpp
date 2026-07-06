@@ -15,7 +15,7 @@ void IdConfig::applyEnvOverrides() {
     }
     auto envEpochMs=ConfigParseHelper::getEnv("SNOWFLAKE_EPOCH_MS");
     if(envEpochMs.has_value()){
-        snowflakeEpochMs=ConfigParseHelper::parseEnvUInt(envEpochMs.value(), "SNOWFLAKE_EPOCH_MS", UINT64_MAX);
+        snowflakeEpochMs=ConfigParseHelper::parseEnvUInt64(envEpochMs.value(), "SNOWFLAKE_EPOCH_MS", UINT64_MAX);
     }
 }
 void IdConfig::validateOrThrow() const {

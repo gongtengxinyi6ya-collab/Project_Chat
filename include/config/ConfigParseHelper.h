@@ -77,6 +77,29 @@ public:
             throw std::runtime_error("Invalid unsigned integer value for environment variable "+envName+": "+value);
         }
     }
+
+    static uint64_t parseEnvUInt64(const std::string& value,const std::string& envName,uint64_t maxValue=UINT64_MAX){
+        if(value.empty()){
+            throw std::runtime_error("Empty unsigned integer value for environment variable " +envName);
+        }
+        if(value[0]=='-'){
+            throw std::runtime_error("Negative value is not allowed for environment variable " +envName + ": " + value);
+        }
+        try{
+            std::size_t pos=0;
+            unsigned long long Value=std::stoull(value,&pos,10);
+            if(pos!=value.size()){
+                throw std::runtime_error("Invalid unsigned integer value for environment variable " +envName + ": " + value);
+            }
+            if(Value>maxValue){
+                throw std::runtime_error("Integer value out of range for environment variable "+envName+": "+value);
+            }
+            return static_cast<uint64_t>(Value);
+        }catch(const std::out_of_range&){
+            throw std::runtime_error("Integer value out of range for environment variable "+envName+": "+value);
+        }
+    }
+    
     //通用范围校验，错误信息包含字段名，当前值，合法范围
     static void checkRange(const std::string& field,int64_t value,int64_t minValue,int64_t maxValue){
         if(value<minValue||value>maxValue){

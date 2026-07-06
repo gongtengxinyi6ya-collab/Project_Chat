@@ -38,8 +38,8 @@ storage::RepoResult storage::SqlFriendRepo::addFriendPair(const std::string& acc
             return {.status=RepoStatus::AlreadyExists,.message="friend already exiest"};
         }
         auto result2=conn->executePrepared("INSERT INTO friend_relations(account_id,friend_account_id,created_at_ms,status) VALUES(?,?,?,1) ON DUPLICATE KEY UPDATE status=1,created_at_ms=?",{friendAccountId,accountId,createAtMs,createAtMs});
-        auto status=mapSqlErrorToRepoStatus(result2);
-        if(status==RepoStatus::AlreadyExists){
+        auto status2=mapSqlErrorToRepoStatus(result2);
+        if(status2==RepoStatus::AlreadyExists){
             return {.status=RepoStatus::AlreadyExists,.message="User already exiest"};
         }
         if(result1.ok()&&result2.ok()){
