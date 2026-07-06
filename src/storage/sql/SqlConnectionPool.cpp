@@ -60,21 +60,22 @@ void SqlConnectionPool::release(std::shared_ptr<SqlConnection> conn){
     if(!conn){
         return;
     }
+    //锁外重置状态安全
     bool reusable=conn->resetSessionStateSafe();
     
-    {
-        std::lock_guard lk(mutex_);
-        if(!started_){
-            return;
-        }
-        if(reusable&&!conn->broken()){
-            idle_.push(std::move(conn));
-        }
-        else{
-            //尝试replace
-            replaceConnection(conn);
-        }
+    if(!started_){
+        return;
     }
+    if(reusable&&!conn->broken()){
+        //连接可复用，加锁放回idle_
+        std::lock_guard lk(mutex_);
+        idle_.push(std::move(conn));
+    }
+    else{
+        //尝试replace
+        replaceConnection(conn);
+    }
+    
     cv_.notify_one();
 }
 
@@ -91,13 +92,14 @@ SqlConnectionGuard SqlConnectionPool::acquireFor(std::chrono::milliseconds timeo
     auto conn=idle_.front();
     idle_.pop();
     SqlConnectionGuard guard(*this,conn);
+    acquireCount_.fetch_add(1,std::memory_order_relaxed);
     return guard;
 }
 SqlConnectionPoolStats SqlConnectionPool::stats() const{
     std::lock_guard lk(mutex_);
     auto total=connections_.size();
     auto idleCount=idle_.size();
-    return {.total=total,.idle=idleCount,.inUse=total-idleCount,.acquireTimeouts=acquireTimeouts_};
+    return {.total=total,.idle=idleCount,.inUse=total-idleCount,.acquireTimeouts=acquireTimeouts_,.reconnects=reconnects_,.replaceFailures=replaceFailures_,.acquireCount=acquireCount_};
 }
 bool SqlConnectionPool::replaceConnection(const std::shared_ptr<SqlConnection>& oldConn){
     if(!oldConn){
@@ -119,10 +121,13 @@ bool SqlConnectionPool::replaceConnection(const std::shared_ptr<SqlConnection>& 
                 conn=newConn;
                 idle_.push(newConn);
                 cv_.notify_one();
+                reconnects_.fetch_add(1,std::memory_order_relaxed);
                 return true;
             }
         }
     }
+    //替换失败
+    replaceFailures_.fetch_add(1,std::memory_order_relaxed);
     return false;
 }
 }

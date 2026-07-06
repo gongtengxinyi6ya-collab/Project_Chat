@@ -16,6 +16,8 @@ struct SqlConnectionPoolStats {
     size_t inUse{0};//正在被业务使用的连接数
     uint64_t acquireTimeouts{0};//获取链接超时次数
     uint64_t reconnects{0};//连接重建次数
+    uint64_t replaceFailures{0};//
+    uint64_t acquireCount{0};
 };
 class SqlConnectionPool{
 public:
@@ -39,7 +41,12 @@ private:
     std::condition_variable cv_;//等待空闲连接
 
     std::chrono::milliseconds acquireTimeout_{3000};
-    std::atomic<uint64_t> acquireTimeouts_{0};
+
+    std::atomic<uint64_t> reconnects_{0};//成功替换坏连接次数
+    std::atomic<uint64_t> replaceFailures_{0};//坏连接替换失败次数
+    std::atomic<uint64_t> acquireCount_{0};//成功获取连接次数
+    std::atomic<uint64_t> acquireTimeouts_{0};//
+
     bool started_{false};//连接池是否启动
 
     void release(std::shared_ptr<SqlConnection> conn);//guard析构自动归还连接

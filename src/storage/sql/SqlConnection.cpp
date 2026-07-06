@@ -38,7 +38,7 @@ bool SqlConnection::ping(){
     return false;
 }
 SqlResult SqlConnection::execute(const std::string& sql){
-    if(!connected_||!conn_){
+    if(!ensureConnected()){
         return SqlResult{.success=false,.error="not connected"};
     }
     try{
@@ -46,11 +46,14 @@ SqlResult SqlConnection::execute(const std::string& sql){
         uint64_t affected=stmt->executeUpdate(sql);
         return SqlResult{.success=true,.affectedRows=affected};
     }catch(const sql::SQLException& e){
+        if (isConnectionError(e)) {
+            markBroken();
+        }
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }
 SqlResult SqlConnection::query(const std::string& sql){
-    if(!connected_||!conn_){
+    if(!ensureConnected()){
         return SqlResult{.success=false,.error="not connected"};
     }
     try{
@@ -58,6 +61,9 @@ SqlResult SqlConnection::query(const std::string& sql){
         auto ResultSet=std::unique_ptr<sql::ResultSet>(stmt->executeQuery(sql));
         return readResultSet(ResultSet.get());
     }catch(const sql::SQLException& e){
+        if (isConnectionError(e)) {
+            markBroken();
+        }
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
     return SqlResult{.success=false,.error="unknown error"};
@@ -77,6 +83,9 @@ SqlResult SqlConnection::executePrepared(const std::string& sql,const std::vecto
         uint64_t affectedRows=stmt->executeUpdate();
         return SqlResult{.success=true,.affectedRows=affectedRows};
     }catch(const sql::SQLException& e){
+        if (isConnectionError(e)) {
+            markBroken();
+        }
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
     return SqlResult{.success=false,.error="unknown error"};
@@ -107,6 +116,9 @@ SqlResult SqlConnection::executePreParedInsert(const std::string& sql,const std:
         uint64_t lastInsertId=fetchLastInsertId();
         return SqlResult{.success=true,.affectedRows=affectedRows,.lastInsertId=lastInsertId};
     }catch(const sql::SQLException& e){
+        if (isConnectionError(e)) {
+            markBroken();
+        }
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
     return SqlResult{.success=false,.error="unknown error"};
@@ -123,12 +135,15 @@ SqlResult SqlConnection::queryPrepared(const std::string& sql,const std::vector<
         auto ResultSet=std::unique_ptr<sql::ResultSet>(stmt->executeQuery());
         return readResultSet(ResultSet.get());
     }catch(const sql::SQLException& e){
+        if (isConnectionError(e)) {
+            markBroken();
+        }
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
 SqlResult SqlConnection::beginTransaction(){
-    if(!connected_||!conn_){
+    if(!ensureConnected()){
         return SqlResult{.success=false,.error="not connected"};
     }
     try{
@@ -136,6 +151,9 @@ SqlResult SqlConnection::beginTransaction(){
         inTransaction_=true;
         return SqlResult{.success=true};
     }catch(const sql::SQLException& e){
+        if (isConnectionError(e)) {
+            markBroken();
+        }
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }
@@ -223,17 +241,29 @@ bool SqlConnection::reconnect(){
     return false;
 }
 bool SqlConnection::resetSessionStateSafe(){
-    //若处于事务中，进行回滚
-    if(inTransaction_){
-        auto result=rollback();
-        if(!result.ok()){
-            broken_=true;
-            return false;
+    try{
+        //若处于事务中，进行回滚
+        if(inTransaction_){
+            auto result=rollback();
+            if(!result.ok()){
+                broken_=true;
+                return false;
+            }
+            return true;
         }
+        conn_->setAutoCommit(true);
         return true;
+    }catch(const sql::SQLException& e){
+        try{
+            conn_->setAutoCommit(true);
+        }catch(...){
+
+        }
+        if (isConnectionError(e)) {
+            markBroken();
+        }
+        return false;
     }
-    conn_->setAutoCommit(true);
-    return true;
 }
 void SqlConnection::markBroken(){
     broken_=true;
@@ -241,5 +271,11 @@ void SqlConnection::markBroken(){
 }
 bool SqlConnection::broken() const{
     return broken_;
+}
+bool SqlConnection::isConnectionError(const sql::SQLException&e)const{
+    if(e.getSQLState().rfind("08")){
+        return true;
+    }
+    return false;
 }
 }

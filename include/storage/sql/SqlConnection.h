@@ -40,6 +40,9 @@ public:
     bool resetSessionStateSafe();//连接归还连接池前安全恢复状态
     void markBroken();//标记连接不可继续复用
     bool broken() const;//连接池判断是否要把连接重新放回idle队列
+
+    uint64_t reconnectCount() const{return reconnectCount_;}
+    bool isConnectionError(const sql::SQLException& e) const;
 private:
     DatabaseConfig config_;
     bool connected_{false};
