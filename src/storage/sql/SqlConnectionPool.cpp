@@ -4,7 +4,7 @@
 #include "logger/LogMacros.h"
 namespace storage{
 SqlConnectionPool::SqlConnectionPool(const DatabaseConfig& config)
-:config_(config),acquireTimeouts_(config_.acquireTimeoutMs()){
+:config_(config),acquireTimeout_(std::chrono::milliseconds(config_.acquireTimeoutMs())){
 }
 bool SqlConnectionPool::start(){
     std::lock_guard lock(mutex_);
@@ -65,12 +65,12 @@ void SqlConnectionPool::release(std::shared_ptr<SqlConnection> conn){
         //锁外重置状态安全
         bool reusable=conn->resetSessionStateSafe();
         
-        if(!started_.load(std::memory_order_acquire)){
-            return;
-        }
         if(reusable&&!conn->broken()){
             //连接可复用，加锁放回idle_
             std::lock_guard lk(mutex_);
+            if(!started_.load(std::memory_order_acquire)){
+                return;
+            }
             idle_.push(std::move(conn));
         }
         else{
@@ -111,7 +111,7 @@ SqlConnectionPoolStats SqlConnectionPool::stats() const{
         .reconnects=reconnects_.load(std::memory_order_relaxed),
         .replaceFailures=replaceFailures_.load(std::memory_order_relaxed),
         .acquireCount=acquireCount_.load(std::memory_order_relaxed),
-        .started=started_.load(std::memory_order_release),
+        .started=started_.load(std::memory_order_relaxed),
         .acquireTimeoutMs=static_cast<uint32_t>(acquireTimeout_.count())};
 }
 bool SqlConnectionPool::replaceConnection(const std::shared_ptr<SqlConnection>& oldConn){
@@ -128,6 +128,7 @@ bool SqlConnectionPool::replaceConnection(const std::shared_ptr<SqlConnection>& 
     {
         std::lock_guard lk(mutex_);
         if(!started_.load(std::memory_order_acquire)){
+            replaceFailures_.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
         for(auto& conn:connections_){

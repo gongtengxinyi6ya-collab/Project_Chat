@@ -273,7 +273,7 @@ bool SqlConnection::broken() const{
     return broken_;
 }
 bool SqlConnection::isConnectionError(const sql::SQLException&e)const{
-    if(e.getSQLState().rfind("08")){
+    if(e.getSQLState().rfind("08")==0){
         return true;
     }
     return false;
