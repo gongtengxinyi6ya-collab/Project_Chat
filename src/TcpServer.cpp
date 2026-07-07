@@ -2,6 +2,8 @@
 #include "EventLoopThreadPool.h"
 #include "EventLoop.h"
 #include "TcpConnection.h"
+#include "infra/health/HealthService.h"
+#include "infra/health/HealthFormatter.h"
 #ifdef PROJECT_CHAT_ENABLE_REDIS
 #include "infra/redis/RedisClient.h"
 #include "security/rate_limit/RedisRateLimitStore.h"
@@ -30,22 +32,32 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
             it->second->send(payload);
             return im::Imservice::SendResult::Ok;
 });
+    //创建healthService_
+    healthService_=std::make_unique<infra::health::HealthService>();
     auto repos=storage::RepositoryFactory::create(config_);
+    if(repos.hasSqlPool()){
+        healthService_->setSqlPool(repos.sqlPool);
+    }
     imService_->setRepositories(std::move(repos));
     imService_->loadFromRepositories();
+    //注入在线连接数provider
+    healthService_->setOnlineConnectionProvider([this](){
+        return connections_.size();
+    });
+    //
     #ifdef PROJECT_CHAT_ENABLE_REDIS
     if (config_.redis().enabled()) {
-        auto redisClient = std::make_shared<infra::redis::RedisClient>(config_.redis());
-        if (redisClient->connect()) {
+        redisClient_= std::make_shared<infra::redis::RedisClient>(config_.redis());
+        if (redisClient_->connect()) {
             std::string prefix = config_.redis().keyPrefix();
             if (!prefix.empty() && prefix.back() != ':') {
                 prefix.push_back(':');
             }
             prefix += "rate:";
 
-            auto store = std::make_shared<security::RedisRateLimitStore>(redisClient, prefix);
+            auto store = std::make_shared<security::RedisRateLimitStore>(redisClient_, prefix);
             imService_->setRateLimiter(std::make_unique<security::RateLimiter>(store));
-
+            healthService_->setRedisClient(redisClient_);
             LOG_INFO("Redis rate limiter enabled");
         } 
         else {
@@ -71,6 +83,10 @@ void TcpServer::start(){
     iothreadPool_->setThreadNum(threadNum_);
     iothreadPool_->start();
     acceptor_.listen();
+    baseloop_->runEvery(std::chrono::seconds(30),[this](){
+        auto snapshot=healthService_->snapshot();
+        LOG_INFO(infra::health::formatHealthSnapshot(snapshot));
+    });
 }
 //从Acceptor接收到新连接，在EventLoopThreadPool中选择一个IO线程，创建TcpConnection对象，
 //再投递到baseloop保存到connections_中

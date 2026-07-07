@@ -11,6 +11,12 @@ class EventLoop;
 class EventLoopThreadPool;
 class TcpConnection;
 
+namespace infra::health{
+    class HealthService;
+}
+namespace infra::redis{
+    class RedisClient;
+}
 //管理所有客户端连接，创建TcpConnection,删除/关闭连接，处理聊天逻辑
 //在主线程中监听新连接，分发到IO线程处理，IO线程中创建TcpConnection对象，保存到connections_中
 class TcpServer{
@@ -42,4 +48,9 @@ private:
     
     //配置
     AppConfig config_;//服务器配置，传递给TcpConnection使用
+
+    std::unique_ptr<infra::health::HealthService> healthService_;//健康检查
+
+    //RedisClient
+    std::shared_ptr<infra::redis::RedisClient> redisClient_;
 };
