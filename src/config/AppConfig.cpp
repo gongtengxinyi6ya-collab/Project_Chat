@@ -20,6 +20,7 @@ AppConfig AppConfig::loadFromFile(const std::string& path){
         config.storageConfig_=StorageConfig::fromJson(j.value("storage",nlohmann::json::object()));
         config.idConfig_=IdConfig::fromJson(j.value("id", nlohmann::json::object()));
         config.redisConfig_=RedisConfig::fromJson(j.value("redis",nlohmann::json::object()));
+        config.healthConfig_=HealthConfig::fromJson(j.value("health",nlohmann::json::object()));
         return config;
     }catch(const nlohmann::json::exception& e){
         throw std::runtime_error("Failed to parse config file: "+std::string(e.what()));
@@ -35,6 +36,7 @@ void AppConfig::applyEnvOverrides(){
     storageConfig_.loadFromEnv();
     idConfig_.applyEnvOverrides();
     redisConfig_.loadFromEnv();
+    healthConfig_.loadFromEnv();
 }
 void AppConfig::validateOrThrow() const{
     server_.validateOrThrow();
@@ -45,6 +47,7 @@ void AppConfig::validateOrThrow() const{
     databaseConfig_.validate();
     storageConfig_.validateOrThrow();
     redisConfig_.validateOrThrow();
+    healthConfig_.validateOrThrow();
 }
 std::string AppConfig::dumpSummary() const{
     std::stringstream ss;
@@ -55,6 +58,7 @@ std::string AppConfig::dumpSummary() const{
       <<"Database(host="<<databaseConfig_.host()<<",port="<<databaseConfig_.port()<<",user="<<databaseConfig_.user()<<",database="<<databaseConfig_.database()<<",poolSize="<<databaseConfig_.poolSize()<<",connectTimeoutMs="<<databaseConfig_.connectTimeoutMs()<<")"
       <<"Storage(type="<<storageConfig_.type()<<",fallbackToMemory="<<storageConfig_.fallbackToMemory()<<"); "
       <<"Id(snowflakeNodeId="<<idConfig_.snowflakeNodeId<<",snowflakeEpochMs="<<idConfig_.snowflakeEpochMs<<")"
-      <<"Redis(enabled="<<redisConfig_.enabled()<<",host="<<redisConfig_.host()<<",port="<<redisConfig_.port()<<",db="<<redisConfig_.db()<<",poolSize="<<redisConfig_.poolSize()<<"); ";
+      <<"Redis(enabled="<<redisConfig_.enabled()<<",host="<<redisConfig_.host()<<",port="<<redisConfig_.port()<<",db="<<redisConfig_.db()<<",poolSize="<<redisConfig_.poolSize()<<"); "
+      <<"Health(enable="<<healthConfig_.enabled()<<",logIntervalMs="<<healthConfig_.logIntervalMs()<<",redisPingEnabled="<<healthConfig_.redisPingEnabled()<<",sqlTimeoutDeltaMode="<<healthConfig_.sqlTimeoutDeltaMode()<<");";
     return ss.str();
 }

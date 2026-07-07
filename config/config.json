@@ -73,5 +73,12 @@
     "connect_timeout_ms": 3000,
     "socket_timeout_ms": 3000,
     "key_prefix": "project_chat:"
+},
+
+"health": {
+  "enabled": true,
+  "log_interval_ms": 30000,
+  "redis_ping_enabled": true,
+  "sql_timeout_delta_mode": true
 }
 }

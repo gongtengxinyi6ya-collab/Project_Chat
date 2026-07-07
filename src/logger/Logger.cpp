@@ -9,7 +9,7 @@ void Logger::setLevel(LogLevel level){
     minLevel_.store(level,std::memory_order_relaxed);
 }
 void Logger::setSink(std::unique_ptr<LogSink> sink){
-    if(asyncEnabled_){
+    if(asyncEnabled_.load(std::memory_order_acquire)){
         if(asynclogger_){//如果已经启用异步日志，先停止旧的异步日志器，再创建新的
             asynclogger_->stop();
         }
@@ -107,13 +107,13 @@ void Logger::logWithContext(LogLevel level,std::string_view msg,const LogContext
 }
 //异步日志接口
 void Logger::setAsync(bool enable){
-    asyncEnabled_=enable;
+    asyncEnabled_.store(true,std::memory_order_release);
 }
 void Logger::setAsyncOptions(size_t queueSize,std::chrono::milliseconds flushInterval){
     asyncQueueSize_=queueSize;
     asyncFlushInterval_=flushInterval;
     //若asynclogger_已在运行，重建它，保留当前sink_配置
-    if(asyncEnabled_){
+    if(asyncEnabled_.load(std::memory_order_acquire)){
         std::unique_ptr<LogSink> currentSink;
         {
             std::lock_guard lk(mutex_);
@@ -127,7 +127,7 @@ void Logger::setAsyncOptions(size_t queueSize,std::chrono::milliseconds flushInt
     }
 }
 void Logger::shutdown(){
-    if(asyncEnabled_&&asynclogger_){
+    if(asyncEnabled_.load(std::memory_order_acquire)&&asynclogger_){
         asynclogger_->stop();
     }
     else{
@@ -138,7 +138,7 @@ void Logger::shutdown(){
     }
 }
 void Logger::writeLine(std::string&& line){
-    if(asyncEnabled_&&asynclogger_){
+    if(asyncEnabled_.load(std::memory_order_acquire)&&asynclogger_){
         asynclogger_->append(std::move(line));
     }
     else{
@@ -147,5 +147,17 @@ void Logger::writeLine(std::string&& line){
             sink_->write(line);
             sink_->flush();
         }
+    }
+}
+
+LoggerStats Logger::stats()const{
+    if(!asyncEnabled_.load(std::memory_order_acquire)){
+        return LoggerStats{.asyncEnabled=false};
+    }
+    if(asynclogger_){
+        return LoggerStats{.asyncEnabled=true,.asyncRunning=asynclogger_->isRunning(),
+        .written=asynclogger_->writtenCount(),
+        .dropped=asynclogger_->droppedCount(),
+        .queueSize=asynclogger_->queueSize()};
     }
 }

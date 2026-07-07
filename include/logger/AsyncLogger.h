@@ -22,6 +22,7 @@ public:
     uint64_t droppedCount()const;//返回累计丢弃日志数
     uint64_t writtenCount()const;//返回累计写入条数
     bool isRunning()const;
+    size_t queueSize() const;//队列大小
 private:
     std::mutex mutex_;//保护队列与状态
     std::condition_variable cv_;//唤醒后台线程

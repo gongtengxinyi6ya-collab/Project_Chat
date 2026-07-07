@@ -88,7 +88,7 @@ void SqlConnectionPool::release(std::shared_ptr<SqlConnection> conn){
 
 SqlConnectionGuard SqlConnectionPool::acquireFor(std::chrono::milliseconds timeout){
     std::unique_lock lk(mutex_);//加锁等待
-    bool ready=cv_.wait_for(lk,timeout,[this](){return !idle_.empty()||!started_;});
+    bool ready=cv_.wait_for(lk,timeout,[this](){return !idle_.empty()||!started_.load(std::memory_order_acquire);});
     if(!ready){//超时返回空
         acquireTimeouts_.fetch_add(1,std::memory_order_relaxed);
         return SqlConnectionGuard(*this,nullptr);

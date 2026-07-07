@@ -66,3 +66,8 @@ uint64_t AsyncLogger::writtenCount()const{
 bool AsyncLogger::isRunning()const{
     return running_.load();
 }
+
+size_t AsyncLogger::queueSize() const{
+    std::lock_guard lk(mutex_);
+    return queue_.size();
+}

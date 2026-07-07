@@ -34,6 +34,7 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 });
     //创建healthService_
     healthService_=std::make_unique<infra::health::HealthService>();
+    healthService_->setConfig(config_.health());
     auto repos=storage::RepositoryFactory::create(config_);
     if(repos.hasSqlPool()){
         healthService_->setSqlPool(repos.sqlPool);
@@ -83,10 +84,12 @@ void TcpServer::start(){
     iothreadPool_->setThreadNum(threadNum_);
     iothreadPool_->start();
     acceptor_.listen();
-    baseloop_->runEvery(std::chrono::seconds(30),[this](){
-        auto snapshot=healthService_->snapshot();
-        LOG_INFO(infra::health::formatHealthSnapshot(snapshot));
-    });
+    if(config_.health().enabled()){
+        baseloop_->runEvery(std::chrono::seconds(config_.health().logIntervalMs()),[this](){
+            auto snapshot=healthService_->snapshot();
+            LOG_INFO(infra::health::formatHealthSnapshot(snapshot));
+        });
+    }
 }
 //从Acceptor接收到新连接，在EventLoopThreadPool中选择一个IO线程，创建TcpConnection对象，
 //再投递到baseloop保存到connections_中

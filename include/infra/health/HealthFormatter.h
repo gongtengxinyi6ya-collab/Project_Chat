@@ -11,6 +11,8 @@ inline std::string healthStatusToString(HealthStatus status){
             return "degraded";
         case HealthStatus::Unhealthy:
             return "unhealthy";   
+        default:
+            return "unknown";
     }
 }
 std::string formatHealthSnapshot(const HealthSnapshot& snapshot);
