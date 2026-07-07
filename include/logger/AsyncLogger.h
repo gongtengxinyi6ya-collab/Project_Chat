@@ -24,7 +24,7 @@ public:
     bool isRunning()const;
     size_t queueSize() const;//队列大小
 private:
-    std::mutex mutex_;//保护队列与状态
+    mutable std::mutex mutex_;//保护队列与状态
     std::condition_variable cv_;//唤醒后台线程
     std::vector<std::string> queue_;//前台写入队列
     std::vector<std::string> buffer_;//后台批量交换缓存，减少锁持有时间
