@@ -10,6 +10,9 @@
 #include <cstring>
 
 namespace infra::signal{
+std::atomic<int> SignalHandler::receivedSignal_{0};
+int SignalHandler::notifyFd_{-1};
+
 
 SignalHandler::SignalHandler(EventLoop* loop)
 :loop_(loop){

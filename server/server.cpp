@@ -33,10 +33,9 @@ int main()
     signalHandler.setSignalCallback([&](int signo){
         LOG_WARN("received signal " + std::to_string(signo) + ", stopping server");
         server.stop();
-        loop.quit();
     });
     signalHandler.start();
-    
+
     server.setThreadNum(config.server().ioThreads);
     server.start();
     LOG_INFO("Server started on port " + std::to_string(config.server().port));
