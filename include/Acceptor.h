@@ -2,6 +2,7 @@
 
 #include "Socket.h"
 #include <memory>
+#include <functional>
 //监听客户端连接,accept连接，触发新连接回调
 
 class EventLoop;
