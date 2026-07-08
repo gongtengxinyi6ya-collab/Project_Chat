@@ -1,7 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <string>
-
+#include <cstddef>
 /*表示日志系统运行状态*/
 
 struct LoggerStats {

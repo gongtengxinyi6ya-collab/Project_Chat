@@ -107,7 +107,7 @@ void Logger::logWithContext(LogLevel level,std::string_view msg,const LogContext
 }
 //异步日志接口
 void Logger::setAsync(bool enable){
-    asyncEnabled_.store(true,std::memory_order_release);
+    asyncEnabled_.store(enable,std::memory_order_release);
 }
 void Logger::setAsyncOptions(size_t queueSize,std::chrono::milliseconds flushInterval){
     asyncQueueSize_=queueSize;
@@ -160,4 +160,5 @@ LoggerStats Logger::stats()const{
         .dropped=asynclogger_->droppedCount(),
         .queueSize=asynclogger_->queueSize()};
     }
+    return LoggerStats{.asyncEnabled=true,.asyncRunning=false};
 }

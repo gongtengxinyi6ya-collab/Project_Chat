@@ -85,7 +85,7 @@ void TcpServer::start(){
     iothreadPool_->start();
     acceptor_.listen();
     if(config_.health().enabled()){
-        baseloop_->runEvery(std::chrono::seconds(config_.health().logIntervalMs()),[this](){
+        baseloop_->runEvery(std::chrono::milliseconds(config_.health().logIntervalMs()),[this](){
             auto snapshot=healthService_->snapshot();
             LOG_INFO(infra::health::formatHealthSnapshot(snapshot));
         });

@@ -58,8 +58,12 @@ bool RedisClient::ping(){
         return false;
     }
     try{
-        return impl_->redis->ping()=="PONG";
-
+        if(impl_->redis->ping()=="PONG"){
+            impl_->connected=true;
+            return true;
+        }
+        impl_->connected=false;
+        return false;
     }catch(const std::exception& e){
         impl_->connected=false;
         LOG_WARN(std::string("Redis command failed: ") + e.what());

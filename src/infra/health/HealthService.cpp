@@ -51,8 +51,9 @@ void HealthService::checkSql(HealthSnapshot& snapshot){
         if(stats.total==0){
             snapshot.sqlHealthy=false;
         }
-        if(config_.sqlTimeoutDeltaMode()==true){
+        if(config_.sqlTimeoutDeltaMode()){
             if(hasNewSqlAcquireTimeouts(stats)){
+                snapshot.redisPingChecked=true;
                 snapshot.status=HealthStatus::Degraded;
             }
         }
@@ -111,22 +112,22 @@ void HealthService::decideStatus(HealthSnapshot& snapshot){
 
     if (snapshot.sqlEnabled && !snapshot.sqlHealthy) {
         snapshot.status = HealthStatus::Unhealthy;
-        snapshot.reason = "sql unhealthy";
+        addReason(snapshot,"sql unhealthy");
         return;
     }
 
     if (snapshot.redisEnabled && !snapshot.redisHealthy) {
         snapshot.status = HealthStatus::Degraded;
-        snapshot.reason = "redis unhealthy";
+        addReason(snapshot,"redis unhealthy");
     }
 
-    if (snapshot.sqlStats.acquireTimeouts > 0) {
+    if ( snapshot.sqlAcquireTimeoutIncreased) {
         snapshot.status = HealthStatus::Degraded;
-        snapshot.reason = "sql acquire timeout occurred";
+        addReason(snapshot,"sql acquire timeout occurred");
     }
 }
 
 void HealthService::addReason(HealthSnapshot& snapshot, std::string reason){
-    snapshot.reason=snapshot.reason+reason;
+    snapshot.reason=snapshot.reason+"; "+reason;
 }
 }
