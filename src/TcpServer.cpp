@@ -77,7 +77,9 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 
 TcpServer::~TcpServer(){
     // Ensure remaining connections are cleaned up if server is destroyed.
-    stop();
+    if(!stopping_.load(std::memory_order_acquire)){
+        LOG_WARN("TcpServer destroyed without explicit stop");
+    }
 }
 
 void TcpServer::start(){
@@ -147,8 +149,10 @@ void TcpServer::removeConnectionInBaseLoop(const std::shared_ptr<TcpConnection>&
             conn->connectionDestroyed();
         });
     }
-    imService_->onDisconnect(conn);//通知IM业务连接断开，清理状态
-
+    if(imService_){
+        imService_->onDisconnect(conn);//通知IM业务连接断开，清理状态
+    }
+    tryFinishStopInBaseLoop();//连接被移除后检查是否正在关闭
 }
 
 void TcpServer::onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& msg){
@@ -182,15 +186,10 @@ void TcpServer::stopInBaseLoop(){
     stopping_.store(true,std::memory_order_release);
     //日志打印
     LOG_WARN("TcpServer stopping...");
-    acceptor_.stop();
-    closeAllConnections();
-    //关闭Redis
-    if(redisClient_){
-        redisClient_->close();
-    }
-
-    //停止io线程池
-    iothreadPool_->stop();
+    acceptor_.stop();//停止接收新连接
+    closeAllConnections();//关闭已有连接
+    
+    tryFinishStopInBaseLoop();//若当前没有连接，直接完成关闭，若还有连接，等后续再触发
 }
 
 void TcpServer::closeAllConnections(){
@@ -199,7 +198,50 @@ void TcpServer::closeAllConnections(){
     for(const auto& conn:connections_){
         conns.emplace_back(conn.second);
     }
+    LOG_WARN("Closing all connections, count=" + std::to_string(conns.size()));
     for(auto& conn:conns){
         conn->forceClose();
     }
+}
+
+void TcpServer::setQuitCallback(std::function<void()>cb){
+    quitCallback_=std::move(cb);
+}
+
+void TcpServer::tryFinishStopInBaseLoop(){
+    if(!stopping_.load(std::memory_order_acquire)){
+        return ;
+    }
+    if(!connections_.empty()){
+        return;
+    }
+
+    finishStopInBaseLoop();
+}
+
+void TcpServer::finishStopInBaseLoop(){
+    if(stopped_){//已经结束，防止重复释放
+        return ;
+    }
+    stopped_=true;
+    LOG_WARN("TcpServer finishing stop...");
+
+    if(imService_){//释放业务层资源
+        imService_->shutdowm();
+    }
+
+#ifdef PROJECT_CHAT_ENABLE_REDIS
+    if(redisClient_){//关闭Redis
+        redisClient_->close();
+    }
+#endif
+
+    if(iothreadPool_){//连接全部关闭后执行
+        iothreadPool_->stop();
+    }
+
+    if(quitCallback_){
+        quitCallback_();
+    }
+
 }

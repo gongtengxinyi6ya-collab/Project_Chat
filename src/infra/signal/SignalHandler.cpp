@@ -26,7 +26,9 @@ SignalHandler::SignalHandler(EventLoop* loop)
 SignalHandler::~SignalHandler(){
     if(channel_){
         channel_->disableAll();
-        loop_->removeChannel(eventFd_);
+        if(channel_->inEpoll()){
+            loop_->removeChannel(eventFd_);
+        }
     }
     if(eventFd_>=0){
         ::close(eventFd_);

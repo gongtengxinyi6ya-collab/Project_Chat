@@ -80,6 +80,8 @@ public:
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
 
+    void shutdowm();
+    
     std::optional<Response> guardAuthenticated(const Request& ,const Session&);//登录门禁
     std::optional<Response> guardInGroup(const Request&,const Session&,const std::string&);//房间门禁
     std::optional<Response> getStringField(const Request& req,const std::string&field,std::string&out,bool allowEmpty=false);//统一读取JSON字符型字段

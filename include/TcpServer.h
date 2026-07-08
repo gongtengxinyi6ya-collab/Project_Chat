@@ -4,6 +4,7 @@
 #include <memory>
 #include <atomic>
 #include <unordered_map>
+#include <functional>
 
 #include "config/AppConfig.h"
 #include "storage/RepositoryFactory.h"
@@ -36,6 +37,8 @@ public:
     
     void stop();//线程安全停止入口
     bool isStopping()const {return stopping_.load(std::memory_order_relaxed);}
+
+    void setQuitCallback(std::function<void()> cb);
 private:
     EventLoop* baseloop_;
     Acceptor acceptor_;//监听客户端连接
@@ -58,6 +61,11 @@ private:
     //RedisClient
     std::shared_ptr<infra::redis::RedisClient> redisClient_;
 
+    //
+    std::function<void()> quitCallback_;//关闭完成后通知外部退出baseLoop
+    bool stopped_{false};//关闭流程已经完成
     void stopInBaseLoop();//内部真正执行服务停止逻辑
     void closeAllConnections();//关闭当前所有连接
+    void tryFinishStopInBaseLoop();//判断是否可以进入最终释放阶段
+    void finishStopInBaseLoop();//完成最终释放
 };

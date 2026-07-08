@@ -29,6 +29,10 @@ int main()
 
     EventLoop loop;
     TcpServer server(&loop,config.server().port,config);
+    server.setQuitCallback([&loop](){
+        loop.quit();
+    });
+    
     infra::signal::SignalHandler signalHandler(&loop);
     signalHandler.setSignalCallback([&](int signo){
         LOG_WARN("received signal " + std::to_string(signo) + ", stopping server");

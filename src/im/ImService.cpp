@@ -68,7 +68,10 @@ void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     sessionManager_.unbindConn(key);
     sessionManager_.erase(key);
 }
-
+void im::Imservice::shutdowm(){
+    sessionManager_.clear();
+    repos_.shutdown();
+}
 
 im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& session){
     if(!imConfig_.allowDebugAuth){

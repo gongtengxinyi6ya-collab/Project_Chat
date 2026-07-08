@@ -12,6 +12,7 @@ public:
 
     EventLoop* startLoop();//启动线程，创建EventLoop对象，并返回指向该对象的指针
 
+    void stop();
 private:
     void threadFunc();//线程函数，创建EventLoop对象，执行事件循环
 

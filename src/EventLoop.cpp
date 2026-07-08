@@ -22,7 +22,21 @@ EventLoop:: EventLoop():looping(false),epollfd_(-1),activeEvents_(EPOLL_MAX_EVEN
     timerQueue_=std::make_unique<TimerQueue>(this);
 }
 EventLoop:: ~EventLoop(){
+    if(wakeupChannel_){
+        wakeupChannel_->disableAll();
+        if(wakeupChannel_->inEpoll()){
+            removeChannel(wakeupFd_);
+        }
+    }
 
+    if(wakeupFd_>=0){
+        ::close(wakeupFd_);
+        wakeupFd_=-1;
+    }
+    if(epollfd_>=0){
+        ::close(epollfd_);
+        epollfd_=-1;
+    }
 }
 void EventLoop:: loop(){
     if(looping)

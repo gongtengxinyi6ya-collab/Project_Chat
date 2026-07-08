@@ -36,8 +36,10 @@ void EventLoopThreadPool::stop(){
     if(!started_){
         return;
     }
-    for(auto loop :loops_){
-        loop->quit();
+    for(auto&thread:threads_){
+        if(thread){
+            thread->stop();
+        }
     }
     threads_.clear();
     loops_.clear();

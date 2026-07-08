@@ -126,9 +126,16 @@ void TcpConnection::handleClose(){
         return;
     }
     stopHeartbeat();
-    channel_->disableAll();
-    loop_->removeChannel(fd_);
-    closeCallback_(shared_from_this());
+    if(channel_){
+        channel_->disableAll();
+        if(channel_->inEpoll()){//判断channel存在但未加入epoll
+            loop_->removeChannel(fd_);
+        }
+        
+    }
+    if(closeCallback_){
+        closeCallback_(shared_from_this());
+    }
 }
 
 void TcpConnection::handleError(){
@@ -179,6 +186,15 @@ void TcpConnection::forceClose(){
 }
 void TcpConnection::forceCloseInLoop(){
     if(isClosed()){
+        return ;
+    }
+    if(!channel_){//连接还未创建
+        if(!connected_.exchange(false)){
+            return ;
+        }
+        if(closeCallback_){
+            closeCallback_(shared_from_this());//通知TcpServer移除连接
+        }
         return ;
     }
     handleClose();
@@ -248,7 +264,7 @@ void TcpConnection::connectionEstablished(){
 }
 
 void TcpConnection::connectionDestroyed(){
-    if(connected_.load(std::memory_order_relaxed)&&channel_->inEpoll()){
+    if(channel_&&channel_->inEpoll()){
         channel_->disableAll();
         loop_->removeChannel(fd_);
     }

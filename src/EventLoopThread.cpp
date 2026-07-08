@@ -6,10 +6,18 @@ EventLoopThread:: EventLoopThread(const std::string& name):loop_(nullptr),exitin
 
 }
 EventLoopThread:: ~EventLoopThread(){
+    stop();
+}
+
+void EventLoopThread::stop(){
     exiting_=true;
-    if(loop_!=nullptr){
-        loop_->wakeup();
-        loop_->quit();
+    EventLoop* loop=nullptr;
+    {
+        std::lock_guard lk(mutex_);
+        loop=loop_;
+    }
+    if(loop!=nullptr){
+        loop->quit();
     }
     if(thread_.joinable()){
         thread_.join();
@@ -31,4 +39,8 @@ void EventLoopThread:: threadFunc(){
         cond_.notify_one();
     }
     loop.loop();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        loop_ = nullptr;
+    }
 }
