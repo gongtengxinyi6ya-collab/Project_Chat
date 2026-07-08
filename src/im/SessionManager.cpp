@@ -79,7 +79,9 @@ void im::SessionManager::erase(ConnKey key){
         sessions_.erase(key);
     }
 }
-
+void im::SessionManager::clear(){
+    sessions_.clear();
+}
 size_t im::SessionManager::removeJoinedGroup(const std::string& accountId,const std::string& groupId){
     //根据账号获取所有在线连接
     auto keys=connKeysByAccountId(accountId);
