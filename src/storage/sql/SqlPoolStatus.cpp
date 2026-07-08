@@ -9,7 +9,7 @@ namespace storage{
         <<" idle=" <<stats.idle
         <<" inUse=" <<stats.inUse
         <<" acquireCount=" <<stats.acquireCount
-        <<" acquireTimeoutMs"<<stats.acquireTimeoutMs
+        <<" acquireTimeoutMs="<<stats.acquireTimeoutMs
         <<" acquireTimeouts=" <<stats.acquireTimeouts
         <<" reconnects=" <<stats.reconnects
         <<" replaceFailures=" <<stats.replaceFailures;

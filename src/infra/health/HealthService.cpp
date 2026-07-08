@@ -53,8 +53,7 @@ void HealthService::checkSql(HealthSnapshot& snapshot){
         }
         if(config_.sqlTimeoutDeltaMode()){
             if(hasNewSqlAcquireTimeouts(stats)){
-                snapshot.redisPingChecked=true;
-                snapshot.status=HealthStatus::Degraded;
+                snapshot.sqlAcquireTimeoutIncreased=true;
             }
         }
         else{
@@ -86,10 +85,12 @@ void HealthService::checkRedis(HealthSnapshot& snapshot){
             }
             snapshot.redisPingChecked=true;
         }
-        if(!redisClient->connected()){
-            snapshot.redisHealthy=false;
-            addReason(snapshot,"redis unhealthy");
-            snapshot.status=HealthStatus::Degraded;
+        else{
+            if(!redisClient->connected()){
+                snapshot.redisHealthy=false;
+                addReason(snapshot,"redis unhealthy");
+                snapshot.status=HealthStatus::Degraded;
+            }
         }
     }
 }
@@ -128,6 +129,11 @@ void HealthService::decideStatus(HealthSnapshot& snapshot){
 }
 
 void HealthService::addReason(HealthSnapshot& snapshot, std::string reason){
-    snapshot.reason=snapshot.reason+"; "+reason;
+    if(snapshot.reason.empty()){
+        snapshot.reason=reason;
+    }
+    else{
+        snapshot.reason=snapshot.reason+"; "+reason;
+    }
 }
 }

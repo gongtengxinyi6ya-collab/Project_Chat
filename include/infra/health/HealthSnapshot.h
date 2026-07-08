@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <cstddef>
 #include "storage/sql/SqlPoolStats.h"
 #include "logger/LoggerStats.h"
 /*表示服务当前健康状态，作为HealthService的输出结果*/
