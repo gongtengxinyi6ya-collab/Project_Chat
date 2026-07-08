@@ -3,6 +3,8 @@
 #include "logger/FileSink.h"
 #include "logger/StderrSink.h"
 #include "config/AppConfig.h"
+#include "infra/signal/SignalHandler.h"
+#include "EventLoop.h"
 #include <iostream>
 int main()
 {
@@ -27,6 +29,14 @@ int main()
 
     EventLoop loop;
     TcpServer server(&loop,config.server().port,config);
+    infra::signal::SignalHandler signalHandler(&loop);
+    signalHandler.setSignalCallback([&](int signo){
+        LOG_WARN("received signal " + std::to_string(signo) + ", stopping server");
+        server.stop();
+        loop.quit();
+    });
+    signalHandler.start();
+    
     server.setThreadNum(config.server().ioThreads);
     server.start();
     LOG_INFO("Server started on port " + std::to_string(config.server().port));

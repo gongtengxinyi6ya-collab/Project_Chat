@@ -38,6 +38,8 @@ public:
     void setHighWaterCallback(HighWaterCallback cb);//上层注册高水位事件
     void setLowWaterCallback(LowWaterCallback cb);//上层注册恢复事件
     
+    void forceClose();//对外线程安全接口
+
     EventLoop* getLoop() const;//返回所属的EventLoop，供服务器转发消息时调用
     int fd() const;
     //真实ip获取
@@ -107,4 +109,6 @@ private:
     std::atomic<size_t> pendingBytesEstimate_{0};//跨线程可读的待发送字节估算值，代替baseloop读取outputBuffer_
     void scheduleCloseInLoop();//保证关闭逻辑一定在连接所属ioloop执行
     void updatePendingEstimate();//同步获取outputBuffer可读字节
+
+    void forceCloseInLoop();
 };

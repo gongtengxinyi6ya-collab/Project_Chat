@@ -31,3 +31,15 @@ void EventLoopThreadPool:: setThreadNum(int numThreads){
         return;
     numThreads_=numThreads;
 }
+
+void EventLoopThreadPool::stop(){
+    if(!started_){
+        return;
+    }
+    for(auto loop :loops_){
+        loop->quit();
+    }
+    threads_.clear();
+    loops_.clear();
+    started_=false;
+}

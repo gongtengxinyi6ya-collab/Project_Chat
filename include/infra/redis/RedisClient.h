@@ -18,7 +18,7 @@ public:
     bool connect();//根据配置创建Redis连接
     bool connected()const;//返回最近一次连接是否成功
     bool ping();//实时健康检查
-
+    void close();//释放Redis连接对象
     //基础命令
     std::optional<std::string> get(const std::string&key);//读取字符串key
     bool set(const std::string& key,const std::string&value);//写入普通字符串

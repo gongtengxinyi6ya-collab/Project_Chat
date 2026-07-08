@@ -13,11 +13,11 @@
 #include <thread>
 #include <functional>
 #include <memory>
-#include "Channel.h"
-#include "TimerQueue.h"
-#include "TimerId.h"
-#include "logger/LogMacros.h"
-
+#include <atomic>
+#include "timer/TimerId.h"
+#include "timer/TimerTypes.h"
+class Channel;
+class TimerQueue;
 const int EPOLL_MAX_EVENTS=100;
 
 
@@ -62,7 +62,7 @@ public:
 };
 
     bool looping;
-    bool quit_;
+    std::atomic<bool> quit_{false};
     int epollfd_;//epoll文件描述符
     std::vector<struct epoll_event> activeEvents_;//epoll事件列表
     std::unordered_map<int,Channel*> channels_;

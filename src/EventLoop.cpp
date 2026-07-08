@@ -1,8 +1,11 @@
 #include "EventLoop.h"
 #include "until.h"
+#include "Channel.h"
+#include "timer/TimerQueue.h"
+#include "timer/Timer.h"
+#include "logger/LogMacros.h"
 
-
-EventLoop:: EventLoop():looping(false),quit_(false),epollfd_(-1),activeEvents_(EPOLL_MAX_EVENTS),wakeupFd_(-1),threadId_(std::this_thread::get_id())
+EventLoop:: EventLoop():looping(false),epollfd_(-1),activeEvents_(EPOLL_MAX_EVENTS),wakeupFd_(-1),threadId_(std::this_thread::get_id())
 {
     epollfd_=epoll_create(EPOLL_MAX_EVENTS);
     if(epollfd_==-1){
@@ -27,7 +30,7 @@ void EventLoop:: loop(){
 
     looping=true;
 
-    while(!quit_){
+    while(!quit_.load(std::memory_order_relaxed)){
         int event_cnt=epoll_wait(epollfd_,activeEvents_.data(),EPOLL_MAX_EVENTS,1000);
         if(event_cnt<0)
         {
@@ -62,7 +65,8 @@ void EventLoop:: loop(){
 }
 void EventLoop::quit()
 {
-    quit_=true;
+    quit_.store(true,std::memory_order_release);
+    wakeup();
 }
 
 void EventLoop::addChannel(Channel* channel)

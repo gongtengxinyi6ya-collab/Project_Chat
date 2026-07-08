@@ -29,5 +29,6 @@ public:
     std::shared_ptr<SqlConnectionPool> sqlPool;
     bool valid()const{return userRepo&&groupRepo&&messageRepo;};
     bool hasSqlPool()const{return sqlPool!=nullptr;}
+    void shutdown();
 };
 }

@@ -16,7 +16,16 @@ RedisClient::RedisClient(const RedisConfig&config)
     impl_->config=config;
 }
 
-RedisClient::~RedisClient()=default;
+RedisClient::~RedisClient(){
+    close();
+}
+void RedisClient::close(){
+    if(!impl_){
+        return;
+    }
+    impl_->redis.reset();
+    impl_->connected=false;
+}
 bool RedisClient::connect(){
     if(!impl_->config.enabled()){
         return false;

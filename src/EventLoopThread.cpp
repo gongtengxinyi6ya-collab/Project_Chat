@@ -10,6 +10,8 @@ EventLoopThread:: ~EventLoopThread(){
     if(loop_!=nullptr){
         loop_->wakeup();
         loop_->quit();
+    }
+    if(thread_.joinable()){
         thread_.join();
     }
 }

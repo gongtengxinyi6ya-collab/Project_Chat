@@ -8,15 +8,13 @@
 #include <cstdint>
 #include <utility>
 
-#include "TimerId.h"
-#include "Timer.h"
+#include "timer/TimerId.h"
+#include "timer/TimerTypes.h"
 
 class EventLoop;
 class Channel;
+class Timer;
 
-using TimePoint=std::chrono::steady_clock::time_point;
-using Duration=std::chrono::milliseconds;
-using TimerCallback=std::function<void()>;
 /*管理EventLoop的所有定时器，包括添加，取消，到期触发，重复重排
 用timerfd把最近一次到期时间转为epoll可读事件
 线程归属：在所属EventLoop线程执行

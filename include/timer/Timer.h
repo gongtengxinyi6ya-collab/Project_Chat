@@ -5,11 +5,11 @@
 #include <cstdint>
 #include <cassert>
 #include <atomic>
+#include "timer/TimerTypes.h"
 //负责描述什么时候执行什么，是否重复，如何计算下一次到期
-using TimePoint=std::chrono::steady_clock::time_point;
-using Duration=std::chrono::milliseconds;
+
 class Timer{
-    using TimerCallback=std::function<void()>;
+
 public:
     Timer(TimerCallback cb,TimePoint when,Duration interval);//传入回调函数，到期时间点，重复间隔
     void run() const;//执行回调函数

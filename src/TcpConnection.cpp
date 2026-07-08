@@ -163,6 +163,27 @@ EventLoop* TcpConnection::getLoop() const{
 int TcpConnection::fd() const{
     return fd_;
 }
+void TcpConnection::forceClose(){
+    if(loop_->isInLoopThread()){
+        //当前线程为连接所属ioLoop直接调用
+        forceCloseInLoop();
+    }
+    else{
+        std::weak_ptr<TcpConnection> weakSelf=shared_from_this();
+        loop_->runInLoop([weakSelf](){
+            if(auto self=weakSelf.lock()){
+                self->forceCloseInLoop();
+            }
+        });
+    }
+}
+void TcpConnection::forceCloseInLoop(){
+    if(isClosed()){
+        return ;
+    }
+    handleClose();
+}
+
 
 void TcpConnection::send(const std::string &msg){//
     if(!connected_.load(std::memory_order_relaxed)){//防止对已关闭的fd发送数据，记录日志并返回

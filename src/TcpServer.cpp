@@ -2,6 +2,8 @@
 #include "EventLoopThreadPool.h"
 #include "EventLoop.h"
 #include "TcpConnection.h"
+#include "im/ImService.h"
+#include "logger/LogMacros.h"
 #include "infra/health/HealthService.h"
 #include "infra/health/HealthFormatter.h"
 #ifdef PROJECT_CHAT_ENABLE_REDIS
@@ -9,6 +11,7 @@
 #include "security/rate_limit/RedisRateLimitStore.h"
 #include "security/rate_limit/RateLimiter.h"
 #endif
+#include <vector>
 TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 :baseloop_(loop),acceptor_(baseloop_,port),threadNum_(config.server().ioThreads),started_(false),config_(config){
     iothreadPool_ = std::make_unique<EventLoopThreadPool>(baseloop_);
@@ -74,7 +77,7 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 
 TcpServer::~TcpServer(){
     // Ensure remaining connections are cleaned up if server is destroyed.
-    connections_.clear();
+    stop();
 }
 
 void TcpServer::start(){
@@ -94,6 +97,10 @@ void TcpServer::start(){
 //从Acceptor接收到新连接，在EventLoopThreadPool中选择一个IO线程，创建TcpConnection对象，
 //再投递到baseloop保存到connections_中
 void TcpServer::newConnection(int fd){
+    if(stopping_.load(std::memory_order_relaxed)){
+        ::close(fd);
+        return ;
+    }
     //检测fd重复
     if(connections_.find(fd)!=connections_.end()){
         LOG_ERROR("Duplicate fd "+std::to_string(fd)+" received in newConnection, closing it");
@@ -155,4 +162,44 @@ void TcpServer::setThreadNum(int numThreads){
 void TcpServer::addConnectionInBaseLoop(const std::shared_ptr<TcpConnection>& conn){
     int fd=conn->fd();
     connections_[fd]=std::move(conn);
+}
+
+void TcpServer::stop(){
+    if(baseloop_->isInLoopThread()){
+        stopInBaseLoop();
+    }
+    else{
+        baseloop_->runInLoop([this](){
+            stopInBaseLoop();
+        });
+    }
+}
+
+void TcpServer::stopInBaseLoop(){
+    if(stopping_.load(std::memory_order_relaxed)){
+        return ;
+    }
+    stopping_.store(true,std::memory_order_release);
+    //日志打印
+    LOG_WARN("TcpServer stopping...");
+    acceptor_.stop();
+    closeAllConnections();
+    //关闭Redis
+    if(redisClient_){
+        redisClient_->close();
+    }
+
+    //停止io线程池
+    iothreadPool_->stop();
+}
+
+void TcpServer::closeAllConnections(){
+    std::vector<std::shared_ptr<TcpConnection>> conns;
+    //复制连接防止迭代器失效
+    for(const auto& conn:connections_){
+        conns.emplace_back(conn.second);
+    }
+    for(auto& conn:conns){
+        conn->forceClose();
+    }
 }

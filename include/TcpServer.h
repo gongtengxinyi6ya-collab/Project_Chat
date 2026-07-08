@@ -2,15 +2,17 @@
 #include "Acceptor.h"
 #include <ThreadPool.h>
 #include <memory>
+#include <atomic>
 #include <unordered_map>
-#include "im/ImService.h"
-#include "logger/LogMacros.h"
+
 #include "config/AppConfig.h"
 #include "storage/RepositoryFactory.h"
 class EventLoop;
 class EventLoopThreadPool;
 class TcpConnection;
-
+namespace im{
+    class Imservice;
+}
 namespace infra::health{
     class HealthService;
 }
@@ -32,13 +34,15 @@ public:
     void setThreadNum(int numThreads);
     void addConnectionInBaseLoop(const std::shared_ptr<TcpConnection>& conn);//在主线程中添加连接，供TcpConnection调用
     
+    void stop();//线程安全停止入口
+    bool isStopping()const {return stopping_.load(std::memory_order_relaxed);}
 private:
     EventLoop* baseloop_;
     Acceptor acceptor_;//监听客户端连接
     std::unique_ptr<EventLoopThreadPool> iothreadPool_;//线程池，分发IO线程
     int threadNum_;//IO线程数量
     bool started_;//服务器是否已经启动
-
+    std::atomic<bool> stopping_{false};//标识服务正在关闭
     // 使用 unique_ptr 让连接自动释放，避免手动 delete
     std::unordered_map<int,std::shared_ptr<TcpConnection>> connections_;//管理所有连接，key为fd，value为TcpConnection对象指针
     std::unique_ptr<ThreadPool> threadPool_;//线程池，处理消息转发等耗时操作
@@ -53,4 +57,7 @@ private:
 
     //RedisClient
     std::shared_ptr<infra::redis::RedisClient> redisClient_;
+
+    void stopInBaseLoop();//内部真正执行服务停止逻辑
+    void closeAllConnections();//关闭当前所有连接
 };
