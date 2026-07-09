@@ -1,3 +1,4 @@
+#pragma once
 #include "storage/GroupJoinRequestRepo.h"
 #include <memory>
 namespace storage{
