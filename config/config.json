@@ -80,5 +80,14 @@
   "log_interval_ms": 30000,
   "redis_ping_enabled": true,
   "sql_timeout_delta_mode": true
+},
+"maintenance": {
+  "enabled": true,
+  "interval_ms": 600000,
+  "expired_session_retention_ms": 604800000,
+  "revoked_session_retention_ms": 604800000,
+  "handled_request_retention_ms": 2592000000,
+  "offline_index_retention_ms": 2592000000,
+  "batch_size": 500
 }
 }

@@ -16,6 +16,9 @@ MaintenanceService::MaintenanceService(MaintenanceConfig config, storage::Reposi
 
 }
 
+int64_t MaintenanceService::nowMs()const{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
 MaintenanceStats MaintenanceService::runOnce(){
     bool expected=false;
     if(running_.compare_exchange_strong(expected,true)){
