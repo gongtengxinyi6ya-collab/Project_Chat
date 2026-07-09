@@ -26,6 +26,8 @@ public:
     virtual std::optional<StoredUserSession> findByTokenHash(const std::string& tokenHash)=0;//TOKEN_LOGIN_REQ后调用，根据hash查询session
     virtual RepoResult touchSession(const std::string& tokenHash,int64_t lastSeenAtMs)=0;//token登录成功后更新最近使用时间
     virtual RepoResult revokeSession(const std::string& tokenHash,int64_t revokedAtMs)=0;//注销后软失效token
+    virtual RepoValueResult<size_t> deleteExpiredBefore(int64_t cutoffMs, size_t limit) = 0;//删除长期过期token
+    virtual RepoValueResult<size_t> deleteRevokedBefore(int64_t cutoffMs, size_t limit) = 0;//删除长期已注销token
 };
 
 }

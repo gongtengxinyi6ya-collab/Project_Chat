@@ -6,6 +6,7 @@
 #include <chrono>
 #include <optional>
 
+namespace storage{
 storage::SqlUserSessionRepo::SqlUserSessionRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 }
@@ -104,4 +105,5 @@ storage::RepoResult storage::SqlUserSessionRepo::revokeSession(const std::string
         return RepoResult{.status=RepoStatus::SqlError,.message=result.error};
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to revoke session"};
+}
 }

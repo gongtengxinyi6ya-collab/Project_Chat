@@ -12,6 +12,9 @@ public:
     std::optional<StoredUserSession> findByTokenHash(const std::string& tokenHash)override;//TOKEN_LOGIN_REQ后调用，根据hash查询session
     RepoResult touchSession(const std::string& tokenHash,int64_t lastSeenAtMs)override;//token登录成功后更新最近使用时间
     RepoResult revokeSession(const std::string& tokenHash,int64_t revokedAt)override;//退出登录后删除session
+    RepoValueResult<size_t> deleteExpiredBefore(int64_t cutoffMs, size_t limit)override;//删除长期过期token
+    RepoValueResult<size_t> deleteRevokedBefore(int64_t cutoffMs, size_t limit) override;//删除长期已注销token
+
 private:
     std::shared_ptr<SqlConnectionPool> pool_;
 };
