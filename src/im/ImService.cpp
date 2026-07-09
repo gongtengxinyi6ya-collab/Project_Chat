@@ -68,7 +68,7 @@ void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     sessionManager_.unbindConn(key);
     sessionManager_.erase(key);
 }
-void im::Imservice::shutdowm(){
+void im::Imservice::shutdown(){
     sessionManager_.clear();
     repos_.shutdown();
 }

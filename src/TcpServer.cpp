@@ -111,6 +111,10 @@ void TcpServer::newConnection(int fd){
     }
     EventLoop* ioloop=iothreadPool_->getNextLoop();
     ioloop->runInLoop([this,fd,ioloop](){
+        if(stopping_.load(std::memory_order_acquire)){
+            ::close(fd);
+            return ;
+        }
         auto conn=std::make_shared<TcpConnection>(ioloop,fd,threadPool_.get(),this,config_);
         conn->setMessageCallback([this](std::shared_ptr<TcpConnection> conn,const std::string& msg){
             baseloop_->runInLoop([this,conn,msg](){
@@ -129,6 +133,10 @@ void TcpServer::newConnection(int fd){
             LOG_INFO("connection low water fd="+std::to_string(conn->fd())+" pending="+std::to_string(pending));
         });
         baseloop_->runInLoop([this,conn](){
+            if(stopping_.load(std::memory_order_acquire)){
+                conn->forceClose();
+                return;
+            }
             addConnectionInBaseLoop(conn);
             conn->getLoop()->runInLoop([conn](){//确保connectionEstablished在IO线程中执行，注册事件 
                 conn->connectionEstablished();
@@ -157,6 +165,9 @@ void TcpServer::removeConnectionInBaseLoop(const std::shared_ptr<TcpConnection>&
 
 void TcpServer::onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& msg){
     //转发给IM业务对象处理
+    if(stopping_.load(std::memory_order_acquire)){
+        return;
+    }
     imService_->onMessage(conn,msg);    
 }
 void TcpServer::setThreadNum(int numThreads){
@@ -227,7 +238,7 @@ void TcpServer::finishStopInBaseLoop(){
     LOG_WARN("TcpServer finishing stop...");
 
     if(imService_){//释放业务层资源
-        imService_->shutdowm();
+        imService_->shutdown();
     }
 
 #ifdef PROJECT_CHAT_ENABLE_REDIS
