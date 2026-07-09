@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <storage/RepoResult.h>
+#include <storage/RepoValueResult.h>
 #include "storage/types/MessageTypes.h"
 /*抽象离线消息索引存储
 保存消息用户名，消息ID，群ID，无需保存正文*/

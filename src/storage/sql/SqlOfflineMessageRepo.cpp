@@ -3,12 +3,14 @@
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlErrorMapper.h"
 #include "storage/sql/SqlTransaction.h"
-storage::SqlOfflineMessageRepo::SqlOfflineMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
+
+namespace storage{
+SqlOfflineMessageRepo::SqlOfflineMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
 }
 
-storage::RepoResult storage::SqlOfflineMessageRepo::saveOfflineMessage(const std::string& accountId,uint64_t msgId,const std::string& groupId){
+RepoResult SqlOfflineMessageRepo::saveOfflineMessage(const std::string& accountId,uint64_t msgId,const std::string& groupId){
     if(accountId.empty()||groupId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="Invalid argument"};
     }
@@ -28,7 +30,7 @@ storage::RepoResult storage::SqlOfflineMessageRepo::saveOfflineMessage(const std
     }
     return RepoResult{.status=RepoStatus::Ok,.message="Offline message saved successfully"};
 }
-std::vector<storage::OfflineMessageIndex> storage::SqlOfflineMessageRepo::listOfflineMessage(const std::string& accountId,size_t limit){
+std::vector<OfflineMessageIndex> SqlOfflineMessageRepo::listOfflineMessage(const std::string& accountId,size_t limit){
     if(accountId.empty()){
         return {};
     }
@@ -69,7 +71,7 @@ std::vector<storage::OfflineMessageIndex> storage::SqlOfflineMessageRepo::listOf
     return {};
 }
 
-storage::RepoResult storage::SqlOfflineMessageRepo::ackOfflineMessages(const std::string& accountId,const std::vector<uint64_t>& msgIds){
+RepoResult SqlOfflineMessageRepo::ackOfflineMessages(const std::string& accountId,const std::vector<uint64_t>& msgIds){
     if(accountId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
     }
@@ -96,7 +98,7 @@ storage::RepoResult storage::SqlOfflineMessageRepo::ackOfflineMessages(const std
 
 }
 
-storage::RepoResult storage::SqlOfflineMessageRepo::saveOfflineDirectMessage(const std::string& accountId,uint64_t msgId,const std::string& peerAccountId){
+RepoResult SqlOfflineMessageRepo::saveOfflineDirectMessage(const std::string& accountId,uint64_t msgId,const std::string& peerAccountId){
     if(accountId.empty()||peerAccountId.empty()||msgId==0){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -116,4 +118,28 @@ storage::RepoResult storage::SqlOfflineMessageRepo::saveOfflineDirectMessage(con
         }
     }
     return RepoResult{.status=RepoStatus::Ok,.message="Offline message saved successfully"};
+}
+
+RepoValueResult<size_t> SqlOfflineMessageRepo::deleteCreatedBefore(int64_t cutoffMs, size_t limit){
+    if(cutoffMs<0){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+
+    auto result=conn->executePrepared(R"(
+        DELETE FROM offline_messages
+        WHERE created_at < FROM_UNIXTIME(? / 1000)
+        LIMIT ?
+        )",{cutoffMs,limit});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    if(result.affectedRows==0){
+        return {.status=RepoStatus::Ok};
+    }
+    return {.status=RepoStatus::Ok,.value=result.affectedRows};
+}
 }

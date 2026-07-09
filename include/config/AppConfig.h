@@ -13,6 +13,7 @@
 #include "IdConfig.h"
 #include "RedisConfig.h"
 #include "HealthConfig.h"
+#include "MaintenanceConfig.h"
 /*
 总配置聚合：统一承载服务端/网络/日志/IM配置，提供加载，校验，查询
 */
@@ -33,6 +34,7 @@ public:
     const IdConfig& id()const{return idConfig_;}//获取ID生成器配置
     const RedisConfig& redis()const{return redisConfig_;}
     const HealthConfig& health()const{return healthConfig_;}
+    const MaintenanceConfig& maintenance()const{return maintenance_;}
 private:
     ServerConfig server_;
     NetConfig net_;
@@ -43,4 +45,5 @@ private:
     IdConfig idConfig_;//ID生成器配置
     RedisConfig redisConfig_;//redis配置
     HealthConfig healthConfig_;//健康检查服务配置
+    MaintenanceConfig maintenance_;
 };

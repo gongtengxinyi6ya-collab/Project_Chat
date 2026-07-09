@@ -3,14 +3,15 @@
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlErrorMapper.h"
+
 #include <chrono>
 #include <optional>
 
 namespace storage{
-storage::SqlUserSessionRepo::SqlUserSessionRepo(std::shared_ptr<SqlConnectionPool> pool)
+SqlUserSessionRepo::SqlUserSessionRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 }
-storage::RepoResult storage::SqlUserSessionRepo::createSession(const storage::StoredUserSession& session){
+RepoResult SqlUserSessionRepo::createSession(const storage::StoredUserSession& session){
     if(session.username.empty()||session.tokenHash.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument};
     }
@@ -31,7 +32,7 @@ storage::RepoResult storage::SqlUserSessionRepo::createSession(const storage::St
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to create session"};
 }
-std::optional<storage::StoredUserSession> storage::SqlUserSessionRepo::findByTokenHash(const std::string& tokenHash){
+std::optional<StoredUserSession> SqlUserSessionRepo::findByTokenHash(const std::string& tokenHash){
     if(tokenHash.empty()){
         return std::nullopt;
     }
@@ -72,7 +73,7 @@ std::optional<storage::StoredUserSession> storage::SqlUserSessionRepo::findByTok
     }
     return std::nullopt;
 }
-storage::RepoResult storage::SqlUserSessionRepo::touchSession(const std::string& tokenHash,int64_t lastSeenAtMs){
+RepoResult SqlUserSessionRepo::touchSession(const std::string& tokenHash,int64_t lastSeenAtMs){
     if(tokenHash.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument};
     }
@@ -89,7 +90,7 @@ storage::RepoResult storage::SqlUserSessionRepo::touchSession(const std::string&
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to touch session"};
 }
-storage::RepoResult storage::SqlUserSessionRepo::revokeSession(const std::string& tokenHash,int64_t revokedAt){
+RepoResult SqlUserSessionRepo::revokeSession(const std::string& tokenHash,int64_t revokedAt){
     if(tokenHash.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument};
     }
@@ -106,4 +107,49 @@ storage::RepoResult storage::SqlUserSessionRepo::revokeSession(const std::string
     }
     return RepoResult{.status=RepoStatus::SqlError,.message="Failed to revoke session"};
 }
+
+
+RepoValueResult<size_t> SqlUserSessionRepo::deleteExpiredBefore(int64_t cutoffMs, size_t limit){
+    if(cutoffMs<0){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+
+    auto result=conn->executePrepared(R"(
+        DELETE FROM user_sessions
+        WHERE expire_at_ms < ?
+        LIMIT ?
+        )",{cutoffMs,limit});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    return {.status=RepoStatus::Ok,.value=result.affectedRows};
+}
+
+RepoValueResult<size_t> SqlUserSessionRepo::deleteRevokedBefore(int64_t cutoffMs, size_t limit){
+    if(cutoffMs<0){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+
+    auto result=conn->executePrepared(R"(
+        DELETE FROM user_sessions
+        WHERE revoked=1
+        AND revoked_at_ms IS NOT NULL
+        AND revoked_at_ms < ?
+        LIMIT ?
+        )",{cutoffMs,limit});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    return {.status=RepoStatus::Ok,.value=result.affectedRows};
+}
+
+
 }

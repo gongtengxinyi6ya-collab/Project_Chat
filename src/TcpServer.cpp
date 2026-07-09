@@ -6,6 +6,7 @@
 #include "logger/LogMacros.h"
 #include "infra/health/HealthService.h"
 #include "infra/health/HealthFormatter.h"
+#include "infra/maintenance/MaintenanceService.h"
 #ifdef PROJECT_CHAT_ENABLE_REDIS
 #include "infra/redis/RedisClient.h"
 #include "security/rate_limit/RedisRateLimitStore.h"
@@ -39,6 +40,7 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     healthService_=std::make_unique<infra::health::HealthService>();
     healthService_->setConfig(config_.health());
     auto repos=storage::RepositoryFactory::create(config_);
+    auto maintenanceRepos=repos;//复制一份给维护任务
     if(repos.hasSqlPool()){
         healthService_->setSqlPool(repos.sqlPool);
     }
@@ -48,6 +50,10 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     healthService_->setOnlineConnectionProvider([this](){
         return connections_.size();
     });
+
+    if(config_.maintenance().enabled){
+        maintenanceService_=std::make_unique<infra::maintenance::MaintenanceService>(config_.maintenance(),maintenanceRepos);
+    }
     //
     #ifdef PROJECT_CHAT_ENABLE_REDIS
     if (config_.redis().enabled()) {
@@ -93,6 +99,20 @@ void TcpServer::start(){
         baseloop_->runEvery(std::chrono::milliseconds(config_.health().logIntervalMs()),[this](){
             auto snapshot=healthService_->snapshot();
             LOG_INFO(infra::health::formatHealthSnapshot(snapshot));
+        });
+    }
+    //接入定时任务
+    if(maintenanceService_&&config_.maintenance().enabled){
+        baseloop_->runEvery(std::chrono::milliseconds(config_.maintenance().intervalMs),[this]{
+            threadPool_->submit([this]{
+                auto stats=maintenanceService_->runOnce();
+                if(!stats.ok){
+                    LOG_WARN("maintenance failed: " + stats.error);
+                }
+                 else if (stats.totalDeleted() > 0) {
+                    LOG_INFO("maintenance deleted rows=" + std::to_string(stats.totalDeleted()));
+                }
+            });
         });
     }
 }

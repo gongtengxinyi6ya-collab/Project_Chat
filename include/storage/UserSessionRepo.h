@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include "storage/RepoResult.h"
-
+#include "storage/RepoValueResult.h"
 /*持久化登录token于用户之间的关系*/
 
 namespace storage{

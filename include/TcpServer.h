@@ -20,6 +20,9 @@ namespace infra::health{
 namespace infra::redis{
     class RedisClient;
 }
+namespace infra::maintenance {
+    class MaintenanceService;
+}
 //管理所有客户端连接，创建TcpConnection,删除/关闭连接，处理聊天逻辑
 //在主线程中监听新连接，分发到IO线程处理，IO线程中创建TcpConnection对象，保存到connections_中
 class TcpServer{
@@ -68,4 +71,7 @@ private:
     void closeAllConnections();//关闭当前所有连接
     void tryFinishStopInBaseLoop();//判断是否可以进入最终释放阶段
     void finishStopInBaseLoop();//完成最终释放
+
+    //后台清理服务
+    std::unique_ptr<infra::maintenance::MaintenanceService> maintenanceService_;
 };

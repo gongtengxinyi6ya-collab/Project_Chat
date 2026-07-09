@@ -4,13 +4,15 @@
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlTransaction.h"
 #include "storage/sql/SqlErrorMapper.h"
-storage::SqlFriendRequestRepo::SqlFriendRequestRepo(std::shared_ptr<SqlConnectionPool> pool)
+
+
+namespace storage{
+
+SqlFriendRequestRepo::SqlFriendRequestRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
 }
-
-
-storage::RepoValueResult<uint64_t> storage::SqlFriendRequestRepo::createPendingRequest(const std::string& requester,const std::string& receiver,int64_t nowMs){
+RepoValueResult<uint64_t> SqlFriendRequestRepo::createPendingRequest(const std::string& requester,const std::string& receiver,int64_t nowMs){
     if(requester.empty()||receiver.empty()){
         return {.status=RepoStatus::InvalidArgument,.message="Requester or Receiver is empty"};
     }
@@ -36,7 +38,7 @@ storage::RepoValueResult<uint64_t> storage::SqlFriendRequestRepo::createPendingR
 
 }
 
-storage::RepoValueResult<std::vector<storage::FriendRequest>>  storage::SqlFriendRequestRepo::listPendingIncoming(const std::string&receiver){
+RepoValueResult<std::vector<FriendRequest>>  SqlFriendRequestRepo::listPendingIncoming(const std::string&receiver){
     if(receiver.empty()){
         return {.status=RepoStatus::InvalidArgument,.message="Receiver accountId is empty"};
     }
@@ -88,7 +90,7 @@ storage::RepoValueResult<std::vector<storage::FriendRequest>>  storage::SqlFrien
     return {.status=RepoStatus::Ok,.value=friendRequests};
 }
 
-storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::findById(SqlConnection& conn, uint64_t requestId){
+RepoValueResult<FriendRequest> SqlFriendRequestRepo::findById(SqlConnection& conn, uint64_t requestId){
     if(requestId==0){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -136,7 +138,7 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     return {.status=RepoStatus::Ok,.value=friendRequest};
 
 }
-storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::rejectPending(uint64_t requestId,const std::string&receiver,int64_t nowMs){
+RepoValueResult<FriendRequest> SqlFriendRequestRepo::rejectPending(uint64_t requestId,const std::string&receiver,int64_t nowMs){
     if(requestId==0||receiver.empty()){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -185,7 +187,7 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
         return {.status=RepoStatus::Internal,.message=e.what()};
     }
 }
-storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::acceptPendingAndCreateFriendPair(uint64_t requestId,const std::string& receiver,int64_t nowMs){
+RepoValueResult<FriendRequest> SqlFriendRequestRepo::acceptPendingAndCreateFriendPair(uint64_t requestId,const std::string& receiver,int64_t nowMs){
     if(requestId==0||receiver.empty()){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -250,4 +252,27 @@ storage::RepoValueResult<storage::FriendRequest> storage::SqlFriendRequestRepo::
     }catch(const std::exception& e){
         return {.status=RepoStatus::SqlError,.message=e.what()};
     }
+}
+
+RepoValueResult<size_t> SqlFriendRequestRepo::deleteHandledBefore(int64_t cutoffMs, size_t limit){
+    if(cutoffMs<0){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+
+    auto result=conn->executePrepared(R"(
+        DELETE FROM friend_requests
+        WHERE status <> 0
+        AND handled_at_ms IS NOT NULL
+        AND handled_at_ms < ?
+        LIMIT ?
+        )",{cutoffMs,limit});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    return {.status=RepoStatus::Ok,.value=result.affectedRows};
+}
 }

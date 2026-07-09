@@ -6,11 +6,12 @@
 #include "storage/sql/SqlErrorMapper.h"
 #include <stdexcept>
 
-storage::SqlGroupJoinRequestRepo::SqlGroupJoinRequestRepo(std::shared_ptr<SqlConnectionPool> pool)
+namespace storage{
+SqlGroupJoinRequestRepo::SqlGroupJoinRequestRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
 }
-storage::RepoValueResult<storage::GroupJoinApplyResult> storage::SqlGroupJoinRequestRepo::submit(const std::string& groupId,const std::string& applicantAccountId,const std::string& requestMessage,int64_t nowMs){
+RepoValueResult<GroupJoinApplyResult> SqlGroupJoinRequestRepo::submit(const std::string& groupId,const std::string& applicantAccountId,const std::string& requestMessage,int64_t nowMs){
     if(groupId.empty()||applicantAccountId.empty()){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -115,7 +116,7 @@ storage::RepoValueResult<storage::GroupJoinApplyResult> storage::SqlGroupJoinReq
     }
     
 }
-storage::RepoValueResult<std::vector<storage::GroupJoinRequestRecord>> storage::SqlGroupJoinRequestRepo::listPending(const std::string& groupId,size_t limit){
+RepoValueResult<std::vector<GroupJoinRequestRecord>> SqlGroupJoinRequestRepo::listPending(const std::string& groupId,size_t limit){
     if(groupId.empty()||limit==0){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -159,7 +160,7 @@ storage::RepoValueResult<std::vector<storage::GroupJoinRequestRecord>> storage::
     }
     return {.status=RepoStatus::Ok,.value=records};
 }
-storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRequestRepo::review(const std::string&groupId,const std::string&applicantAccountId,const std::string& reviewAccountId,bool approve,size_t maxGroupMembers,int64_t nowMs){
+RepoValueResult<GroupJoinReviewResult> SqlGroupJoinRequestRepo::review(const std::string&groupId,const std::string&applicantAccountId,const std::string& reviewAccountId,bool approve,size_t maxGroupMembers,int64_t nowMs){
     if(groupId.empty()||applicantAccountId.empty()||reviewAccountId.empty()){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -334,4 +335,26 @@ storage::RepoValueResult<storage::GroupJoinReviewResult> storage::SqlGroupJoinRe
         return {.status=RepoStatus::SqlError,.message=e.what()};
     }
 }
-    
+
+RepoValueResult<size_t> SqlGroupJoinRequestRepo::deleteHandledBefore(int64_t cutoffMs, size_t limit){
+    if(cutoffMs<0){
+        return {.status=RepoStatus::InvalidArgument};
+    }
+    auto conn=pool_->acquire();
+    if(!conn||conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
+    }
+
+    auto result=conn->executePrepared(R"(
+        DELETE FROM group_join_requests
+        WHERE status <> 0
+        AND reviewed_at_ms > 0
+        AND reviewed_at_ms < ?
+        LIMIT ?
+        )",{cutoffMs,limit});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    return {.status=RepoStatus::Ok,.value=result.affectedRows};
+}
+}
