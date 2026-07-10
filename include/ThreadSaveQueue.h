@@ -3,7 +3,21 @@
 #include <queue>
 #include <condition_variable>
 #include <memory>
+/*线程安全队列，负责保护内部容器，非阻塞入队，阻塞出队
+有界容量，关闭后拒绝新元素
+唤醒正在等待的消费者
+Drain/Discard队列内容*/
 
+enum class QueuePushResult : uint8_t {//入队结果
+    Ok,//入队成功
+    Full,//达到容量上限
+    Closed//队列关闭
+};
+
+enum class QueueCloseMode : uint8_t {
+    Drain,//关闭后保留已有元素，允许消费者取完
+    Discard//关闭后直接清空尚未消费的元素
+};
 template <typename T>
 
 class ThreadSafeQueue {
@@ -23,6 +37,9 @@ private:
     mutable std::mutex mutex_;
     std::queue<T> queue_;
     std::condition_variable condVar_;
+
+    size_t capaccity_{0};//当为0时表示无界队列
+    bool closed_{false};//
 };
 
 

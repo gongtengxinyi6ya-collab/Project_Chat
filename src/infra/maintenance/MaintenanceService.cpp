@@ -46,14 +46,14 @@ MaintenanceStats MaintenanceService::runOnce(){
         try{
             return fn();
         }catch(const std::exception& e){
-            if(!name.empty()){
+            if(!stats.error.empty()){
                 stats.error+="; ";
             }
             success=false;
             stats.error+=std::string(name)+" failed:"+e.what();
             return 0;
         }catch(...){
-            if(!name.empty()){
+            if(!stats.error.empty()){
                 stats.error+="; ";
             }
             success=false;
@@ -87,6 +87,7 @@ MaintenanceStats MaintenanceService::runOnce(){
     {
         std::lock_guard lk(snapshotMutex_);
         snapshot_.running=false;
+        snapshot_.hasRun=true;
         snapshot_.lastRunOk=stats.ok;
         snapshot_.totalRuns++;
         if(stats.ok){
@@ -97,7 +98,7 @@ MaintenanceStats MaintenanceService::runOnce(){
             snapshot_.failedRuns++;
         }
         snapshot_.lastRunAtMs=stats.startedAtMs;
-        snapshot_.lastDurationMs=stats.startedAtMs=stats.finishedAtMs;
+        snapshot_.lastDurationMs=static_cast<uint64_t>(stats.startedAtMs-stats.finishedAtMs);
         snapshot_.lastDeleted=stats.totalDeleted();
         snapshot_.lastError=stats.error;
     }
@@ -110,7 +111,7 @@ MaintenanceStats MaintenanceService::runOnce(){
         }
         auto cutoff=nowMs-config_.expiredSessionRetentionMs;
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
-        size_t totalclean;
+        size_t totalclean{0};
         while(maxBatchesPerRun){
         auto result=repos_.userSessionRepo->deleteExpiredBefore(cutoff,config_.batchSize);
         if(!result.ok()){
@@ -135,7 +136,7 @@ MaintenanceStats MaintenanceService::runOnce(){
         }
         auto cutoff=nowMs-config_.revokedSessionRetentionMs;
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
-        size_t totalclean;
+        size_t totalclean{0};
         while(maxBatchesPerRun){
         auto result=repos_.userSessionRepo->deleteRevokedBefore(cutoff,config_.batchSize);
         if(!result.ok()){
@@ -158,7 +159,7 @@ MaintenanceStats MaintenanceService::runOnce(){
         }
         auto cutoff=nowMs-config_.handledRequestRetentionMs;
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
-        size_t totalclean;
+        size_t totalclean{0};
         while(maxBatchesPerRun){
         auto result=repos_.friendRequestRepo->deleteHandledBefore(cutoff,config_.batchSize);
         if(!result.ok()){
@@ -181,7 +182,7 @@ MaintenanceStats MaintenanceService::runOnce(){
         }
         auto cutoff=nowMs-config_.handledRequestRetentionMs;
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
-        size_t totalclean;
+        size_t totalclean{0};
         while(maxBatchesPerRun){
         auto result=repos_.groupJoinRequestRepo->deleteHandledBefore(cutoff,config_.batchSize);
         if(!result.ok()){
@@ -204,7 +205,7 @@ MaintenanceStats MaintenanceService::runOnce(){
         }
         auto cutoff=nowMs-config_.offlineIndexRetentionMs;
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
-        size_t totalclean;
+        size_t totalclean{0};
         while(maxBatchesPerRun){
         auto result=repos_.offlineMessageRepo->deleteCreatedBefore(cutoff,config_.batchSize);
         if(!result.ok()){

@@ -96,20 +96,20 @@ void TcpServer::start(){
     iothreadPool_->start();
     acceptor_.listen();
     if(config_.health().enabled()){
-        if(stopping_.load(std::memory_order_acquire)){
-            return ;
-        }
         healthTimerId_=baseloop_->runEvery(std::chrono::milliseconds(config_.health().logIntervalMs()),[this](){
+            if(stopping_.load(std::memory_order_acquire)){
+                return ;
+            }
             auto snapshot=healthService_->snapshot();
             LOG_INFO(infra::health::formatHealthSnapshot(snapshot));
         });
     }
     //接入定时任务
     if(maintenanceService_&&config_.maintenance().enabled){
-        if(stopping_.load(std::memory_order_acquire)){
-            return ;
-        }
         maintenanceTimerId_=baseloop_->runEvery(std::chrono::milliseconds(config_.maintenance().intervalMs),[this]{
+            if(stopping_.load(std::memory_order_acquire)){
+                return ;
+            }
             threadPool_->submit([this]{
                 auto stats=maintenanceService_->runOnce();
                 if(!stats.ok){
@@ -221,10 +221,14 @@ void TcpServer::stopInBaseLoop(){
         return ;
     }
     stopping_.store(true,std::memory_order_release);
-    baseloop_->cancel(healthTimerId_);
-    baseloop_->cancel(maintenanceTimerId_);
-    healthTimerId_=TimerId{};
-    maintenanceTimerId_=TimerId{};
+    if(healthTimerId_.valid()){
+        baseloop_->cancel(healthTimerId_);
+        healthTimerId_=TimerId{};
+    }
+    if(maintenanceTimerId_.valid()){
+        baseloop_->cancel(maintenanceTimerId_);
+        maintenanceTimerId_=TimerId{};
+    }
     //日志打印
     LOG_WARN("TcpServer stopping...");
     acceptor_.stop();//停止接收新连接
