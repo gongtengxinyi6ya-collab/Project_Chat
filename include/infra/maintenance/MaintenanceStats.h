@@ -20,4 +20,21 @@ struct MaintenanceStats {
     friendRequestsDeleted+groupJoinRequestsDeleted+offlineIndexesDeleted;}//总删除数量之和
 };
 
+struct MaintenanceSnapshot {//维护服务从启动到当前的累计运行状态
+    bool running{false};
+    bool hasRun{false};
+    bool lastRunOk{true};
+
+    uint64_t totalRuns{0};
+    uint64_t successRuns{0};
+    uint64_t failedRuns{0};
+    uint64_t skippedRuns{0};
+
+    int64_t lastRunAtMs{0};
+    int64_t lastSuccessAtMs{0};
+    uint64_t lastDurationMs{0};
+    size_t lastDeleted{0};
+
+    std::string lastError{};
+};
 }

@@ -2,6 +2,7 @@
 #include <string>
 #include <cstdint>
 #include <atomic>
+#include <mutex>
 #include "storage/RepositoryBundle.h"
 #include "config/MaintenanceConfig.h"
 #include "infra/maintenance/MaintenanceStats.h"
@@ -13,7 +14,7 @@ public:
     MaintenanceService(MaintenanceConfig config, storage::RepositoryBundle repos);
 
     MaintenanceStats runOnce();
-
+    MaintenanceSnapshot snapshot() const;
 private:
     MaintenanceConfig config_;
     storage::RepositoryBundle repos_;
@@ -21,6 +22,9 @@ private:
     std::atomic_bool running_{false};//正在执行
     std::atomic<int64_t> lastRunAtMs_{0};//上次执行时间
     std::atomic<int64_t> lastSuccessAtMs_{0};//上次成功执行时间
+
+    mutable std::mutex snapshotMutex_;
+    MaintenanceSnapshot snapshot_;
 
     int64_t nowMs() const;
 

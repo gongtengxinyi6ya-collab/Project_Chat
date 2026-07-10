@@ -265,9 +265,10 @@ RepoValueResult<size_t> SqlFriendRequestRepo::deleteHandledBefore(int64_t cutoff
 
     auto result=conn->executePrepared(R"(
         DELETE FROM friend_requests
-        WHERE status <> 0
+        WHERE status IN (1,2)
         AND handled_at_ms IS NOT NULL
         AND handled_at_ms < ?
+        ORDER BY handled_at_ms ASC
         LIMIT ?
         )",{cutoffMs,limit});
     if(!result.ok()){

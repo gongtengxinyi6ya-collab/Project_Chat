@@ -25,6 +25,9 @@ void HealthService::setRedisClient(std::weak_ptr<infra::redis::RedisClient> redi
 void HealthService::setOnlineConnectionProvider(std::function<size_t()> provider){
     onlineConnectionProvider_=std::move(provider);
 }
+void HealthService::setMaintenanceProvider(std::function<infra::maintenance::MaintenanceSnapshot()> provider){
+    
+}
 HealthSnapshot HealthService::snapshot(){
     HealthSnapshot snapshot;
     checkSql(snapshot);

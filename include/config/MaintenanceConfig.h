@@ -15,4 +15,5 @@ public:
     int64_t handledRequestRetentionMs{30LL * 24 * 3600 * 1000};//申请保留时间
     int64_t offlineIndexRetentionMs{30LL * 24 * 3600 * 1000};//离线消息索引保留时间
     size_t batchSize{500};//每次清除行数
+    size_t maxBatchesPerRun{20};////清除循环轮次
 };

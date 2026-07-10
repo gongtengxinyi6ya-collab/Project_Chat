@@ -88,6 +88,7 @@
   "revoked_session_retention_ms": 604800000,
   "handled_request_retention_ms": 2592000000,
   "offline_index_retention_ms": 2592000000,
-  "batch_size": 500
+  "batch_size": 500,
+  "max_batches_per_run": 20
 }
 }

@@ -10,7 +10,7 @@ MaintenanceConfig MaintenanceConfig::fromJson(const nlohmann::json& j){
     config.handledRequestRetentionMs=ConfigParseHelper::getOrDefault(j,"handled_request_retention_ms",config.handledRequestRetentionMs);
     config.offlineIndexRetentionMs=ConfigParseHelper::getOrDefault(j,"offline_index_retention_ms",config.offlineIndexRetentionMs);
     config.batchSize=ConfigParseHelper::getOrDefault(j,"batch_size",config.batchSize);
-    
+    config.maxBatchesPerRun=ConfigParseHelper::getOrDefault(j,"max_batches_per_run",config.maxBatchesPerRun);
     return config;
 }
 
@@ -31,4 +31,5 @@ void MaintenanceConfig::validateOrThrow()const{
                 std::to_string(batchSize) +
                 ", expected [1, 10000]");
         }
+    ConfigParseHelper::checkRange("max_batches_per_run",maxBatchesPerRun,1,100);
 }

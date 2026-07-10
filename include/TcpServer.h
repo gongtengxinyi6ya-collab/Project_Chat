@@ -8,6 +8,7 @@
 
 #include "config/AppConfig.h"
 #include "storage/RepositoryFactory.h"
+#include "timer/TimerId.h"
 class EventLoop;
 class EventLoopThreadPool;
 class TcpConnection;
@@ -60,7 +61,8 @@ private:
     AppConfig config_;//服务器配置，传递给TcpConnection使用
 
     std::unique_ptr<infra::health::HealthService> healthService_;//健康检查
-
+    TimerId healthTimerId_;
+    
     //RedisClient
     std::shared_ptr<infra::redis::RedisClient> redisClient_;
 
@@ -74,4 +76,6 @@ private:
 
     //后台清理服务
     std::unique_ptr<infra::maintenance::MaintenanceService> maintenanceService_;
+    
+    TimerId maintenanceTimerId_;
 };

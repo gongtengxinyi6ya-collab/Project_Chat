@@ -4,6 +4,7 @@
 #include <cstddef>
 #include "storage/sql/SqlPoolStats.h"
 #include "logger/LoggerStats.h"
+#include "infra/maintenance/MaintenanceStats.h"
 /*表示服务当前健康状态，作为HealthService的输出结果*/
 
 namespace infra::health {
@@ -28,6 +29,9 @@ struct HealthSnapshot {
 
     size_t onlineConnections{0};//当前在线TCP连接数
     uint64_t uptimeMs{0};//服务启动后的运行时间
+
+    bool maintenanceEnabled{false};
+    infra::maintenance::MaintenanceSnapshot maintenance;
 
     LoggerStats loggerStats{};//日志状态
     std::string reason{};//健康状态降级原因

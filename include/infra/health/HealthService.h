@@ -25,7 +25,7 @@ public:
     void setSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool);//注入SQL连接池
     void setRedisClient(std::weak_ptr<infra::redis::RedisClient> redisClient);//注入Redis客户端
     void setOnlineConnectionProvider(std::function<size_t()> provider);//注入在线连接获取函数
-
+    void setMaintenanceProvider(std::function<infra::maintenance::MaintenanceSnapshot()> provider);
     HealthSnapshot snapshot();//生成完整健康快照
 
 private:
@@ -43,6 +43,7 @@ private:
     void checkRedis(HealthSnapshot& snapshot);//检查Redis客户端状态
     void fillRuntimeStats(HealthSnapshot& snapshot);//填充运行时信息
     void fillLoggerStats(HealthSnapshot& snapshot);
+    
     void decideStatus(HealthSnapshot& snapshot);//根据状态计算总健康状态
 
     bool hasNewSqlAcquireTimeouts(const storage::SqlConnectionPoolStats& stats);

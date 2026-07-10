@@ -246,3 +246,19 @@ CREATE TABLE IF NOT EXISTS message_receipts (
     KEY idx_account_read (account_id, read_at_ms),
     KEY idx_msg_id (msg_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE user_sessions
+    ADD INDEX idx_user_sessions_revoked_cleanup
+    (revoked, revoked_at_ms);
+
+ALTER TABLE friend_requests
+    ADD INDEX idx_friend_requests_cleanup
+    (status, handled_at_ms);
+
+ALTER TABLE group_join_requests
+    ADD INDEX idx_group_join_requests_cleanup
+    (status, reviewed_at_ms);
+
+ALTER TABLE offline_messages
+    ADD INDEX idx_offline_messages_cleanup
+    (created_at);
