@@ -125,7 +125,7 @@ RepoValueResult<size_t> SqlOfflineMessageRepo::deleteCreatedBefore(int64_t cutof
         return {.status=RepoStatus::InvalidArgument};
     }
     auto conn=pool_->acquire();
-    if(!conn||conn->connected()){
+    if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
     }
 
@@ -137,9 +137,7 @@ RepoValueResult<size_t> SqlOfflineMessageRepo::deleteCreatedBefore(int64_t cutof
     if(!result.ok()){
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
-    if(result.affectedRows==0){
-        return {.status=RepoStatus::Ok};
-    }
+    
     return {.status=RepoStatus::Ok,.value=result.affectedRows};
 }
 }

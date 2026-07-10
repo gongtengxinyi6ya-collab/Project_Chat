@@ -114,7 +114,7 @@ RepoValueResult<size_t> SqlUserSessionRepo::deleteExpiredBefore(int64_t cutoffMs
         return {.status=RepoStatus::InvalidArgument};
     }
     auto conn=pool_->acquire();
-    if(!conn||conn->connected()){
+    if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
     }
 
@@ -134,7 +134,7 @@ RepoValueResult<size_t> SqlUserSessionRepo::deleteRevokedBefore(int64_t cutoffMs
         return {.status=RepoStatus::InvalidArgument};
     }
     auto conn=pool_->acquire();
-    if(!conn||conn->connected()){
+    if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
     }
 

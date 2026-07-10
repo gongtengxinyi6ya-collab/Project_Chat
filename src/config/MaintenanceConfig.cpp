@@ -20,7 +20,7 @@ void MaintenanceConfig::validateOrThrow()const{
     constexpr int64_t HOUR   = 60LL * MINUTE;
     constexpr int64_t DAY    = 24LL * HOUR;
 
-    ConfigParseHelper::checkRange("interval_ms",intervalMs,0,24LL*HOUR);
+    ConfigParseHelper::checkRange("interval_ms",intervalMs,1000,24LL*HOUR);
     ConfigParseHelper::checkRange("expired_session_retention_ms",expiredSessionRetentionMs,1LL*HOUR,90LL*DAY);
     ConfigParseHelper::checkRange("revoked_session_retention_ms",revokedSessionRetentionMs,1LL*DAY,180LL*DAY);
     ConfigParseHelper::checkRange("handled_request_retention_ms",handledRequestRetentionMs,1LL*DAY,180LL*DAY);

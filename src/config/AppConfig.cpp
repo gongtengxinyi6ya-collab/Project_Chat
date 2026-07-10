@@ -61,6 +61,7 @@ std::string AppConfig::dumpSummary() const{
       <<"Storage(type="<<storageConfig_.type()<<",fallbackToMemory="<<storageConfig_.fallbackToMemory()<<"); "
       <<"Id(snowflakeNodeId="<<idConfig_.snowflakeNodeId<<",snowflakeEpochMs="<<idConfig_.snowflakeEpochMs<<")"
       <<"Redis(enabled="<<redisConfig_.enabled()<<",host="<<redisConfig_.host()<<",port="<<redisConfig_.port()<<",db="<<redisConfig_.db()<<",poolSize="<<redisConfig_.poolSize()<<"); "
-      <<"Health(enable="<<healthConfig_.enabled()<<",logIntervalMs="<<healthConfig_.logIntervalMs()<<",redisPingEnabled="<<healthConfig_.redisPingEnabled()<<",sqlTimeoutDeltaMode="<<healthConfig_.sqlTimeoutDeltaMode()<<");";
+      <<"Health(enable="<<healthConfig_.enabled()<<",logIntervalMs="<<healthConfig_.logIntervalMs()<<",redisPingEnabled="<<healthConfig_.redisPingEnabled()<<",sqlTimeoutDeltaMode="<<healthConfig_.sqlTimeoutDeltaMode()<<");"
+      <<"Maintenance(enable="<<maintenance_.enabled<<",intervalMs="<<maintenance_.intervalMs<<",expiredSessionRetentionMs="<<maintenance_.expiredSessionRetentionMs<<",revokedSessionRetentionMs="<<maintenance_.revokedSessionRetentionMs<<",handledRequestRetentionMs="<<maintenance_.handledRequestRetentionMs<<",offlineIndexRetentionMs="<<maintenance_.offlineIndexRetentionMs<<",batchSize="<<maintenance_.batchSize<<");";
     return ss.str();
 }

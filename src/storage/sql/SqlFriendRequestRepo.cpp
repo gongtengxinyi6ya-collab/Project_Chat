@@ -259,7 +259,7 @@ RepoValueResult<size_t> SqlFriendRequestRepo::deleteHandledBefore(int64_t cutoff
         return {.status=RepoStatus::InvalidArgument};
     }
     auto conn=pool_->acquire();
-    if(!conn||conn->connected()){
+    if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
     }
 

@@ -21,7 +21,7 @@ int64_t MaintenanceService::nowMs()const{
 }
 MaintenanceStats MaintenanceService::runOnce(){
     bool expected=false;
-    if(running_.compare_exchange_strong(expected,true)){
+    if(!running_.compare_exchange_strong(expected,true)){
         return {.ok=true};
     }
     MaintenanceStats stats;
@@ -76,6 +76,7 @@ MaintenanceStats MaintenanceService::runOnce(){
     if(success){
         lastSuccessAtMs_.store(nowMs(),std::memory_order_relaxed);
     }
+    stats.ok=success;
     return stats;
 }
 

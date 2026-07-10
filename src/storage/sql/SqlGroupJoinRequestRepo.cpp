@@ -341,7 +341,7 @@ RepoValueResult<size_t> SqlGroupJoinRequestRepo::deleteHandledBefore(int64_t cut
         return {.status=RepoStatus::InvalidArgument};
     }
     auto conn=pool_->acquire();
-    if(!conn||conn->connected()){
+    if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
     }
 
