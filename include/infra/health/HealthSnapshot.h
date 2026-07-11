@@ -30,8 +30,11 @@ struct HealthSnapshot {
     size_t onlineConnections{0};//当前在线TCP连接数
     uint64_t uptimeMs{0};//服务启动后的运行时间
 
-    bool maintenanceEnabled{false};
-    infra::maintenance::MaintenanceSnapshot maintenance;
+    bool maintenanceEnabled{false};//是否启用维护任务
+    bool maintenanceHealthy{true};//维护子系统总体是否正常
+    bool maintenanceStale{false};//维护任务是否长期没有成功执行
+    bool maintenanceRunningTooLong{false};//当前一轮是否执行时间异常
+    infra::maintenance::MaintenanceSnapshot maintenance;//原始维护快照
 
     LoggerStats loggerStats{};//日志状态
     std::string reason{};//健康状态降级原因

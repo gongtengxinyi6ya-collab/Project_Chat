@@ -19,13 +19,14 @@ namespace infra::health {
 
 class HealthService {
 public:
+    using MaintenanceProvider =std::function<infra::maintenance::MaintenanceSnapshot()>;
     HealthService();
     explicit HealthService(const HealthConfig& config);
     void setConfig(const HealthConfig& config);
     void setSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool);//注入SQL连接池
     void setRedisClient(std::weak_ptr<infra::redis::RedisClient> redisClient);//注入Redis客户端
     void setOnlineConnectionProvider(std::function<size_t()> provider);//注入在线连接获取函数
-    void setMaintenanceProvider(std::function<infra::maintenance::MaintenanceSnapshot()> provider);
+    void setMaintenanceProvider(MaintenanceProvider provider);
     HealthSnapshot snapshot();//生成完整健康快照
 
 private:
@@ -36,7 +37,7 @@ private:
     std::weak_ptr<infra::redis::RedisClient> redisClient_;//指向Redis客户端
 
     std::function<size_t()> onlineConnectionProvider_;//获取当前在线连接数
-    std::function<infra::maintenance::MaintenanceSnapshot()> maintenanceProvider_;
+    MaintenanceProvider maintenanceProvider_;
     uint64_t lastSqlAcquireTimeouts_{0};
 
     void checkSql(HealthSnapshot& snapshot);//读取SQL pool状态
