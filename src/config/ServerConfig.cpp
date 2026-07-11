@@ -9,7 +9,7 @@ ServerConfig ServerConfig::fromJson(const nlohmann::json&j){
     servercongig.ioThreads=ConfigParseHelper::getOrDefault(j,"io_threads",servercongig.ioThreads);
     servercongig.backlog=ConfigParseHelper::getOrDefault(j,"backlog",servercongig.backlog);
     servercongig.backgroundThreads=ConfigParseHelper::getOrDefault(j,"background_threads",servercongig.backgroundThreads);
-    servercongig.backgroundThreads=ConfigParseHelper::getOrDefault(j,"background_queue_capacity",servercongig.backgroundQueueCapacity);
+    servercongig.backgroundQueueCapacity=ConfigParseHelper::getOrDefault(j,"background_queue_capacity",servercongig.backgroundQueueCapacity);
     
     return servercongig;
 }

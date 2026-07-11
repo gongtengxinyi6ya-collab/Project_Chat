@@ -5,7 +5,7 @@
 namespace infra::thread{
 
 ThreadPool::ThreadPool(size_t threadCount,size_t queueCapacity)
-:taskQueue_(ThreadSafeQueue<Task>(queueCapacity))
+:taskQueue_(queueCapacity)
 {
     if(threadCount<=0){
         throw std::invalid_argument("threadCount invalid");
@@ -43,7 +43,7 @@ TaskSubmitResult ThreadPool::submit(Task task){
         rejectedFull_.fetch_add(1,std::memory_order_relaxed);
     }
     else if(submitResult==TaskSubmitResult::Stopping){
-        rejectedFull_.fetch_add(1,std::memory_order_relaxed);
+        rejectedStopped_.fetch_add(1,std::memory_order_relaxed);
     }
     return submitResult;
    
@@ -58,9 +58,11 @@ void ThreadPool::workerThread(){
             activeTasks_.fetch_sub(1,std::memory_order_relaxed);
             completedTasks_.fetch_add(1,std::memory_order_relaxed);
         }catch(const std::exception& e){
+            activeTasks_.fetch_sub(1,std::memory_order_relaxed);
             failedTasks_.fetch_add(1,std::memory_order_relaxed);
             LOG_ERROR("Failed to complete the task:"+std::string(e.what()));
         }catch(...){
+            activeTasks_.fetch_sub(1,std::memory_order_relaxed);
             failedTasks_.fetch_add(1,std::memory_order_relaxed);
             LOG_ERROR("Failed to complete the task");
         }
@@ -68,14 +70,26 @@ void ThreadPool::workerThread(){
 }
 
 void ThreadPool::stop(ThreadPoolStopMode mode){
-    if(state_.load(std::memory_order_acquire)==ThreadPoolState::Stopped){
-        return;
+    {
+        std::unique_lock lk(stopMutex_);
+        //加锁后重新读取状态
+        auto state=state_.load(std::memory_order_acquire);
+        if(state==ThreadPoolState::Stopped){
+            //已经停止
+            return ;
+        }
+        if(state==ThreadPoolState::Stopping){
+            //其他线程正在停止等待完成
+            stoppedCv_.wait(lk,[this]{
+                return state_.load(std::memory_order_acquire)==ThreadPoolState::Stopped;
+            });
+        }
+        if(state==ThreadPoolState::Running){
+            //当前线程负责执行停止，修改状态
+            state_.store(ThreadPoolState::Stopping,std::memory_order_release);
+        }
+        
     }
-    std::unique_lock lk(stopMutex_);
-    stoppedCv_.wait(lk,[this]{
-        return state_.load(std::memory_order_acquire)==ThreadPoolState::Stopping;
-    });
-    state_.store(ThreadPoolState::Stopping,std::memory_order_release);
     if(mode==ThreadPoolStopMode::Drain){
         taskQueue_.close(QueueCloseMode::Drain);
     }
@@ -87,8 +101,10 @@ void ThreadPool::stop(ThreadPoolStopMode mode){
             thread.join();
         }
     }
-    state_.store(ThreadPoolState::Stopped,std::memory_order_release);
-    stoppedCv_.notify_one();
+    {
+        state_.store(ThreadPoolState::Stopped,std::memory_order_release);
+    }
+    stoppedCv_.notify_all();
     return ;
 
 }

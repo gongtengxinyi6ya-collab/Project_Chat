@@ -51,6 +51,8 @@ inline TaskSubmitResult taskResultFromqueuePushResult(QueuePushResult value){
             return TaskSubmitResult::QueueFull;
         case QueuePushResult::Closed:
             return TaskSubmitResult::Stopping;
+        default :
+            return TaskSubmitResult::Stopping;
     }
 } 
 }

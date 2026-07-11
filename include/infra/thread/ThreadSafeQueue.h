@@ -3,6 +3,8 @@
 #include <queue>
 #include <condition_variable>
 #include <cstdint>
+#include <utility>
+#include <stddef.h>
 #include "infra/thread/TheadType.h"
 /*线程安全队列，负责保护内部容器，非阻塞入队，阻塞出队
 有界容量，关闭后拒绝新元素
@@ -127,7 +129,6 @@ bool ThreadSafeQueue<T>::closed() const{
 
 template <typename T>
 size_t ThreadSafeQueue<T>::capacity() const noexcept{
-    std::lock_guard lk(mutex_);
     return capacity_;
 }
 

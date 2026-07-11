@@ -38,7 +38,7 @@ private:
     //排序集合
     std::set<Entry> timers_;//负责按expiration排序，begin()最早到期
      
-    bool callingExpiredTimers_;//判断是否出土handleRead()的“执行到期回调”阶段
+    bool callingExpiredTimers_{false};//判断是否出土handleRead()的“执行到期回调”阶段
     std::unordered_set<uint64_t> cancelingTimers_;//执行期被cancel的timer集合
     std::unordered_set<uint64_t> pendingCancel_;//解决timer还未入队就cancel的竞态
     std::unordered_map<uint64_t,std::unique_ptr<Timer>> timersOwned_;//作为仓库所有权

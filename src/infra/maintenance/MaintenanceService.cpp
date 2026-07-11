@@ -98,7 +98,7 @@ MaintenanceStats MaintenanceService::runOnce(){
             snapshot_.failedRuns++;
         }
         snapshot_.lastRunAtMs=stats.startedAtMs;
-        snapshot_.lastDurationMs=static_cast<uint64_t>(stats.startedAtMs-stats.finishedAtMs);
+        snapshot_.lastDurationMs=static_cast<uint64_t>(stats.finishedAtMs-stats.startedAtMs);
         snapshot_.lastDeleted=stats.totalDeleted();
         snapshot_.lastError=stats.error;
     }

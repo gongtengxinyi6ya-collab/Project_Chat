@@ -4,6 +4,9 @@
 #include <vector>
 #include <functional>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
+#include <stddef.h>
 #include "infra/thread/ThreadSafeQueue.h"
 #include "infra/thread/TheadType.h"
 /*线程池负责：
@@ -35,7 +38,7 @@ private:
     ThreadSafeQueue<Task> taskQueue_;//任务队列
     std::vector<std::thread> threads_;//工作线程
 
-    std::atomic<ThreadPoolState> state_{ThreadPoolState::Stopped};
+    std::atomic<ThreadPoolState> state_{ThreadPoolState::Running};
     std::atomic<size_t> activeTasks_{0};//正在执行任务数量
 
     std::atomic<uint64_t> submittedTasks_{0};
