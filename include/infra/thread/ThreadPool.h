@@ -8,7 +8,7 @@
 #include <condition_variable>
 #include <stddef.h>
 #include "infra/thread/ThreadSafeQueue.h"
-#include "infra/thread/TheadTypes.h"
+#include "infra/thread/ThreadTypes.h"
 /*线程池负责：
 创建工作线程
 调用队列阻塞等待

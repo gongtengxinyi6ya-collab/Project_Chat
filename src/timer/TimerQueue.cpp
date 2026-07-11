@@ -121,8 +121,9 @@ void TimerQueue::handleRead(){
             if(timer->canceled()){
                 //执行期间被取消
                 timersOwned_.erase(exp.second);
+                continue;
             }
-            if(timer->repeat()){//重复timer
+            else if(timer->repeat()){//重复timer
                 timer->restart(now);
                 auto newExp=timer->expiration();
                 timers_.emplace(newExp,timer->sequence());

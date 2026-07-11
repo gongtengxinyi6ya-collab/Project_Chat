@@ -140,10 +140,12 @@ void HealthService::fillMaintenanceStats(HealthSnapshot& snapshot){
         snapshot.maintenanceHealthy=false;
     }
     //判断长期没有成功
-    if(maintenanceSnapshot.lastSuccessAtMs>0){
+    const int64_t nowMs=currentEpochMs();
+    if(maintenanceSnapshot.lastSuccessAtMs>0&&maintenanceIntervalMs_>0){
         const uint64_t maintenanceThresholdMs =3ULL * static_cast<uint64_t>(maintenanceIntervalMs_);
-        if((currentEpochMs()-maintenanceSnapshot.lastSuccessAtMs)>maintenanceThresholdMs){
-            snapshot.maintenanceStale=true;
+        if(nowMs>=maintenanceSnapshot.lastSuccessAtMs){
+            const auto elapsedMs = static_cast<uint64_t>(nowMs - maintenanceSnapshot.lastSuccessAtMs);
+            snapshot.maintenanceStale =elapsedMs > maintenanceThresholdMs;
         }
     }
     //判断运行时间过长
@@ -177,7 +179,9 @@ void HealthService::decideStatus(HealthSnapshot& snapshot){
 
     //维护任务异常
     if(snapshot.maintenanceEnabled&&!snapshot.maintenanceHealthy){
-        addReason(snapshot,"maintenance last run failed");
+        if(snapshot.maintenance.hasRun&&!snapshot.maintenance.lastRunOk){
+            addReason(snapshot,"maintenance last run failed");
+    }
         snapshot.status=HealthStatus::Degraded;
     }
     if(snapshot.maintenanceStale){

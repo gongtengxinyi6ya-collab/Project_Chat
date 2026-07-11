@@ -8,38 +8,39 @@ namespace infra::health{
     oss << "status=" << healthStatusToString(snapshot.status)
         << ", sqlEnabled=" << snapshot.sqlEnabled
         << ", sqlHealthy=" << snapshot.sqlHealthy
-        <<",SqlStats: "<<storage::formatSqlPoolStats(snapshot.sqlStats)
+        <<", SqlStats: "<<storage::formatSqlPoolStats(snapshot.sqlStats)
         << ", redisEnabled=" << snapshot.redisEnabled
         << ", redisHealthy=" << snapshot.redisHealthy
-        <<",redisPingChecked="<<snapshot.redisPingChecked
+        <<", redisPingChecked="<<snapshot.redisPingChecked
         << ", onlineConnections=" << snapshot.onlineConnections
         << ", uptimeMs=" << snapshot.uptimeMs
-        <<",logAsyncEnabled="<<snapshot.loggerStats.asyncEnabled
-        <<",logAsyncRunning="<<snapshot.loggerStats.asyncRunning
-        <<",logWritten="<<snapshot.loggerStats.written
-        <<",logDropped="<<snapshot.loggerStats.dropped
-        <<",logQueueSize="<<snapshot.loggerStats.queueSize
-        <<",maintenanceEnabled="<<snapshot.maintenanceEnabled;
+        <<", logAsyncEnabled="<<snapshot.loggerStats.asyncEnabled
+        <<", logAsyncRunning="<<snapshot.loggerStats.asyncRunning
+        <<", logWritten="<<snapshot.loggerStats.written
+        <<", logDropped="<<snapshot.loggerStats.dropped
+        <<", logQueueSize="<<snapshot.loggerStats.queueSize
+        <<", maintenanceEnabled="<<snapshot.maintenanceEnabled;
 
     if (!snapshot.reason.empty()) {
         oss << ", reason=" << snapshot.reason;
     }
     if(snapshot.maintenanceEnabled){
         oss
-        <<"maintenanceHealthy="<<snapshot.maintenanceHealthy
-        <<"maintenanceRunning="<<snapshot.maintenance.running
-        <<"maintenanceHasRun="<<snapshot.maintenance.hasRun
-        <<"maintenanceLastRunOk="<<snapshot.maintenance.lastRunOk
-        <<"maintenanceLastRunAtMs="<<snapshot.maintenance.lastRunAtMs
-        <<"maintenanceLastSuccessAtMs="<<snapshot.maintenance.lastSuccessAtMs
-        <<"maintenanceLastDurationMs="<<snapshot.maintenance.lastDurationMs
-        <<"maintenanceLastDeleted="<<snapshot.maintenance.lastDeleted
-        <<"maintenanceTotalRuns="<<snapshot.maintenance.totalRuns
-        <<"maintenanceSuccessRuns="<<snapshot.maintenance.successRuns
-        <<"maintenanceFailedRuns="<<snapshot.maintenance.failedRuns
-        <<"maintenanceSkippedRuns="<<snapshot.maintenance.skippedRuns
-        <<"maintenanceStale="<<snapshot.maintenanceStale
-        <<"maintenanceRunningTooLong="<<snapshot.maintenanceRunningTooLong;
+        <<", maintenanceHealthy="<<snapshot.maintenanceHealthy
+        <<", maintenanceRunning="<<snapshot.maintenance.running
+        <<", maintenanceHasRun="<<snapshot.maintenance.hasRun
+        <<", maintenanceLastRunOk="<<snapshot.maintenance.lastRunOk
+        <<", maintenanceLastRunAtMs="<<snapshot.maintenance.lastRunAtMs
+        <<", maintenanceLastSuccessAtMs="<<snapshot.maintenance.lastSuccessAtMs
+        <<", maintenanceLastDurationMs="<<snapshot.maintenance.lastDurationMs
+        <<", maintenanceLastDeleted="<<snapshot.maintenance.lastDeleted
+        <<", maintenanceTotalRuns="<<snapshot.maintenance.totalRuns
+        <<", maintenanceSuccessRuns="<<snapshot.maintenance.successRuns
+        <<", maintenanceFailedRuns="<<snapshot.maintenance.failedRuns
+        <<", maintenanceSkippedRuns="<<snapshot.maintenance.skippedRuns
+        <<", maintenanceStale="<<snapshot.maintenanceStale
+        <<", maintenanceRunningTooLong="<<snapshot.maintenanceRunningTooLong
+        <<", lastError="<<snapshot.maintenance.lastError;
     }
     return oss.str();
 }

@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <utility>
 #include <stddef.h>
-#include "infra/thread/TheadTypes.h"
+#include "infra/thread/ThreadTypes.h"
 /*线程安全队列，负责保护内部容器，非阻塞入队，阻塞出队
 有界容量，关闭后拒绝新元素
 唤醒正在等待的消费者
