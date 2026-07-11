@@ -25,8 +25,11 @@ void HealthService::setRedisClient(std::weak_ptr<infra::redis::RedisClient> redi
 void HealthService::setOnlineConnectionProvider(std::function<size_t()> provider){
     onlineConnectionProvider_=std::move(provider);
 }
-void HealthService::setMaintenanceProvider(std::function<infra::maintenance::MaintenanceSnapshot()> provider){
+void HealthService::setMaintenanceProvider(std::function<infra::maintenance::MaintenanceSnapshot()> provider,int64_t expectedIntervalMs){
     maintenanceProvider_=std::move(provider);
+    if(expectedIntervalMs>0){
+        maintenanceIntervalMs_=expectedIntervalMs;
+    }
 }
 HealthSnapshot HealthService::snapshot(){
     HealthSnapshot snapshot;
@@ -34,6 +37,7 @@ HealthSnapshot HealthService::snapshot(){
     checkRedis(snapshot);
     fillRuntimeStats(snapshot);
     fillLoggerStats(snapshot);
+    fillMaintenanceStats(snapshot);
     decideStatus(snapshot);
     return snapshot;
 }
@@ -97,6 +101,10 @@ void HealthService::checkRedis(HealthSnapshot& snapshot){
         }
     }
 }
+
+int64_t HealthService::currentEpochMs() const{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
 void HealthService::fillRuntimeStats(HealthSnapshot& snapshot){
     auto now=std::chrono::steady_clock::now();
     snapshot.uptimeMs=std::chrono::duration_cast<std::chrono::milliseconds>(now-startedAt_).count();
@@ -110,6 +118,42 @@ void HealthService::fillLoggerStats(HealthSnapshot& snapshot){
     if(stats.dropped>0){
         addReason(snapshot,"Logger dropped");
     }
+}
+
+void HealthService::fillMaintenanceStats(HealthSnapshot& snapshot){
+    if(!maintenanceProvider_){
+        snapshot.maintenanceEnabled=false;
+        snapshot.maintenanceHealthy=true;
+        return;
+    }
+
+    snapshot.maintenanceEnabled=true;
+    auto maintenanceSnapshot=maintenanceProvider_();
+    snapshot.maintenance=maintenanceSnapshot;
+    //判断从未运行
+    if(!maintenanceSnapshot.hasRun){
+        if(snapshot.uptimeMs>2*maintenanceIntervalMs_){//服务运行时间超过两个维护周期
+            snapshot.maintenanceStale=true;
+        }
+    }
+    //判断最近执行失败
+    if(maintenanceSnapshot.hasRun&&!maintenanceSnapshot.lastRunOk){
+        snapshot.maintenanceHealthy=false;
+    }
+    //判断长期没有成功
+    if(maintenanceSnapshot.lastSuccessAtMs>0){
+        if((currentEpochMs()-maintenanceSnapshot.lastSuccessAtMs)>3*maintenanceIntervalMs_){
+            snapshot.maintenanceStale=true;
+        }
+    }
+    //判断运行时间过长
+    if(maintenanceSnapshot.running){
+        if((currentEpochMs()-maintenanceSnapshot.lastRunAtMs)>2*maintenanceIntervalMs_){
+            snapshot.maintenanceRunningTooLong=true;
+        }
+    }
+    snapshot.maintenanceHealthy= !snapshot.maintenanceStale &&!snapshot.maintenanceRunningTooLong && (!snapshot.maintenance.hasRun || snapshot.maintenance.lastRunOk);
+
 }
 void HealthService::decideStatus(HealthSnapshot& snapshot){
     snapshot.status = HealthStatus::Healthy;
