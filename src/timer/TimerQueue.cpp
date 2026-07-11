@@ -118,15 +118,18 @@ void TimerQueue::handleRead(){
         else if(timersOwned_.count(exp.second)){
             //若timer存在
             auto timer=timersOwned_[exp.second].get();
-            if(timer->repeat()&&(!timer->canceled())){
+            if(timer->canceled()){
+                //执行期间被取消
+                timersOwned_.erase(exp.second);
+            }
+            if(timer->repeat()){//重复timer
                 timer->restart(now);
                 auto newExp=timer->expiration();
-                timers_.insert({newExp,timer->sequence()});
-
+                timers_.emplace(newExp,timer->sequence());
             }
-        }
-        else{
-            timersOwned_.erase(exp.second);
+            else{
+                timersOwned_.erase(exp.second);
+            }
         }
         
     }   

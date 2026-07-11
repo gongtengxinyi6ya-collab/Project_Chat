@@ -15,13 +15,13 @@ public:
 
     MaintenanceStats runOnce();
     MaintenanceSnapshot snapshot() const;
+    void requestStop() noexcept;
 private:
     MaintenanceConfig config_;
     storage::RepositoryBundle repos_;
 
     std::atomic_bool running_{false};//正在执行
-    std::atomic<int64_t> lastRunAtMs_{0};//上次执行时间
-    std::atomic<int64_t> lastSuccessAtMs_{0};//上次成功执行时间
+    std::atomic_bool stopRequested_{false};
 
     mutable std::mutex snapshotMutex_;
     MaintenanceSnapshot snapshot_;

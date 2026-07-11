@@ -54,6 +54,12 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 
     if(config_.maintenance().enabled){
         maintenanceService_=std::make_unique<infra::maintenance::MaintenanceService>(config_.maintenance(),maintenanceRepos);
+        healthService_->setMaintenanceProvider([this](){
+            if(!maintenanceService_){
+                return infra::maintenance::MaintenanceSnapshot{};
+            }
+            return maintenanceService_->snapshot();
+        },config_.maintenance().intervalMs);
     }
     //
     #ifdef PROJECT_CHAT_ENABLE_REDIS
@@ -232,6 +238,9 @@ void TcpServer::stopInBaseLoop(){
     if(maintenanceTimerId_.valid()){
         baseloop_->cancel(maintenanceTimerId_);
         maintenanceTimerId_=TimerId{};
+    }
+    if(maintenanceService_){
+        maintenanceService_->requestStop();
     }
     //日志打印
     LOG_WARN("TcpServer stopping...");

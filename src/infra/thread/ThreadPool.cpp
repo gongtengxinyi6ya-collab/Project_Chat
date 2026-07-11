@@ -15,7 +15,7 @@ ThreadPool::ThreadPool(size_t threadCount,size_t queueCapacity)
             threads_.emplace_back(&ThreadPool::workerThread,this);
         }catch(const std::exception& e){
             stop(ThreadPoolStopMode::Discard);
-            throw std::runtime_error(e.what());
+            throw;
         }
     }
     state_.store(ThreadPoolState::Running,std::memory_order_release);
@@ -83,6 +83,7 @@ void ThreadPool::stop(ThreadPoolStopMode mode){
             stoppedCv_.wait(lk,[this]{
                 return state_.load(std::memory_order_acquire)==ThreadPoolState::Stopped;
             });
+            return;
         }
         if(state==ThreadPoolState::Running){
             //当前线程负责执行停止，修改状态
@@ -102,6 +103,7 @@ void ThreadPool::stop(ThreadPoolStopMode mode){
         }
     }
     {
+        std::lock_guard lk(stopMutex_);
         state_.store(ThreadPoolState::Stopped,std::memory_order_release);
     }
     stoppedCv_.notify_all();

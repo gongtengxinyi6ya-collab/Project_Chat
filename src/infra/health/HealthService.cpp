@@ -33,9 +33,10 @@ void HealthService::setMaintenanceProvider(std::function<infra::maintenance::Mai
 }
 HealthSnapshot HealthService::snapshot(){
     HealthSnapshot snapshot;
+    fillRuntimeStats(snapshot);
     checkSql(snapshot);
     checkRedis(snapshot);
-    fillRuntimeStats(snapshot);
+
     fillLoggerStats(snapshot);
     fillMaintenanceStats(snapshot);
     decideStatus(snapshot);
@@ -65,7 +66,7 @@ void HealthService::checkSql(HealthSnapshot& snapshot){
         }
         else{
             if(stats.acquireTimeouts>0){
-                snapshot.status=HealthStatus::Degraded;
+                snapshot.sqlAcquireTimeoutIncreased=true;
             }
         }
     }
@@ -88,15 +89,13 @@ void HealthService::checkRedis(HealthSnapshot& snapshot){
         if(config_.redisPingEnabled()){
             if(!redisClient->ping()){
                 snapshot.redisHealthy=false;
-                addReason(snapshot,"redis unhealthy");
             }
             snapshot.redisPingChecked=true;
         }
         else{
             if(!redisClient->connected()){
                 snapshot.redisHealthy=false;
-                addReason(snapshot,"redis unhealthy");
-                snapshot.status=HealthStatus::Degraded;
+    
             }
         }
     }
@@ -115,9 +114,6 @@ void HealthService::fillRuntimeStats(HealthSnapshot& snapshot){
 void HealthService::fillLoggerStats(HealthSnapshot& snapshot){
     auto stats=Logger::instance().stats();
     snapshot.loggerStats=stats;
-    if(stats.dropped>0){
-        addReason(snapshot,"Logger dropped");
-    }
 }
 
 void HealthService::fillMaintenanceStats(HealthSnapshot& snapshot){
@@ -158,20 +154,38 @@ void HealthService::fillMaintenanceStats(HealthSnapshot& snapshot){
 void HealthService::decideStatus(HealthSnapshot& snapshot){
     snapshot.status = HealthStatus::Healthy;
 
-    if (snapshot.sqlEnabled && !snapshot.sqlHealthy) {
+    if (snapshot.sqlEnabled && !snapshot.sqlHealthy) {//SQL不健康
         snapshot.status = HealthStatus::Unhealthy;
         addReason(snapshot,"sql unhealthy");
         return;
     }
 
-    if (snapshot.redisEnabled && !snapshot.redisHealthy) {
+    if (snapshot.redisEnabled && !snapshot.redisHealthy) {//Redis不健康
         snapshot.status = HealthStatus::Degraded;
         addReason(snapshot,"redis unhealthy");
     }
 
-    if ( snapshot.sqlAcquireTimeoutIncreased) {
+    if ( snapshot.sqlAcquireTimeoutIncreased) {//SQL获取连接超时
         snapshot.status = HealthStatus::Degraded;
         addReason(snapshot,"sql acquire timeout occurred");
+    }
+
+    //维护任务异常
+    if(snapshot.maintenanceEnabled&&!snapshot.maintenanceHealthy){
+        addReason(snapshot,"maintenance last run failed");
+        snapshot.status=HealthStatus::Degraded;
+    }
+    if(snapshot.maintenanceStale){
+        addReason(snapshot,"maintenance stale");
+        snapshot.status=HealthStatus::Degraded;
+    }
+    if(snapshot.maintenanceRunningTooLong){
+        addReason(snapshot,"maintenance running too long");
+        snapshot.status=HealthStatus::Degraded;
+    }
+
+    if(snapshot.loggerStats.dropped>0){
+        addReason(snapshot,"logger dropped");
     }
 }
 

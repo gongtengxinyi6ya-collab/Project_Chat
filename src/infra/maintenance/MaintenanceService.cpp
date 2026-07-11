@@ -26,17 +26,22 @@ MaintenanceSnapshot MaintenanceService::snapshot() const{
     snapshot.running=running_.load(std::memory_order_acquire);
     return snapshot;
 }
+void MaintenanceService::requestStop() noexcept{
+    stopRequested_.store(true,std::memory_order_release);
+}
 MaintenanceStats MaintenanceService::runOnce(){
     bool expected=false;
     if(!running_.compare_exchange_strong(expected,true)){
+        std::lock_guard lk(snapshotMutex_);
+        snapshot_.skippedRuns++;
         return {.ok=true};
     }
     MaintenanceStats stats;
     stats.startedAtMs=nowMs();
 
-    struct RunningGrard{//保护running_函数执行完后置为false
+    struct Runninguard{//保护running_函数执行完后置为false
         std::atomic<bool>& running;
-        ~RunningGrard(){
+        ~Runninguard(){
             running.store(false,std::memory_order_release);
         }
     }guard{running_};
@@ -79,10 +84,7 @@ MaintenanceStats MaintenanceService::runOnce(){
     });
     
     stats.finishedAtMs=nowMs();
-    lastRunAtMs_.store(stats.finishedAtMs,std::memory_order_relaxed);
-    if(success){
-        lastSuccessAtMs_.store(stats.finishedAtMs,std::memory_order_relaxed);
-    }
+    
     stats.ok=success;
     {
         std::lock_guard lk(snapshotMutex_);
@@ -113,19 +115,22 @@ MaintenanceStats MaintenanceService::runOnce(){
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
         size_t totalclean{0};
         while(maxBatchesPerRun){
-        auto result=repos_.userSessionRepo->deleteExpiredBefore(cutoff,config_.batchSize);
-        if(!result.ok()){
-            throw std::runtime_error(result.message);
+            if (stopRequested_.load(std::memory_order_acquire)) {
+                break;
+            }
+            auto result=repos_.userSessionRepo->deleteExpiredBefore(cutoff,config_.batchSize);
+            if(!result.ok()){
+                throw std::runtime_error(result.message);
+            }
+            if(!result.value.has_value()){
+                throw std::runtime_error("returned no value");
+            }
+            totalclean+=result.value.value();
+            maxBatchesPerRun--;
+            if(result.value.value()<config_.batchSize){
+                break;
+            }
         }
-        if(!result.value.has_value()){
-            throw std::runtime_error("returned no value");
-        }
-        totalclean+=result.value.value();
-        maxBatchesPerRun--;
-        if(result.value.value()<config_.batchSize){
-            break;
-        }
-    }
         return totalclean;
 
         
@@ -138,19 +143,22 @@ MaintenanceStats MaintenanceService::runOnce(){
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
         size_t totalclean{0};
         while(maxBatchesPerRun){
-        auto result=repos_.userSessionRepo->deleteRevokedBefore(cutoff,config_.batchSize);
-        if(!result.ok()){
-            throw std::runtime_error(result.message);
+            if (stopRequested_.load(std::memory_order_acquire)) {
+                break;
+            }
+            auto result=repos_.userSessionRepo->deleteRevokedBefore(cutoff,config_.batchSize);
+            if(!result.ok()){
+                throw std::runtime_error(result.message);
+            }
+            if(!result.value.has_value()){
+                throw std::runtime_error("returned no value");
+            }
+            totalclean+=result.value.value();
+            maxBatchesPerRun--;
+            if(result.value.value()<config_.batchSize){
+                break;
+            }
         }
-        if(!result.value.has_value()){
-            throw std::runtime_error("returned no value");
-        }
-        totalclean+=result.value.value();
-        maxBatchesPerRun--;
-        if(result.value.value()<config_.batchSize){
-            break;
-        }
-    }
         return totalclean;
 }
     size_t MaintenanceService::cleanupHandledFriendRequests(int64_t nowMs){
@@ -161,19 +169,22 @@ MaintenanceStats MaintenanceService::runOnce(){
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
         size_t totalclean{0};
         while(maxBatchesPerRun){
-        auto result=repos_.friendRequestRepo->deleteHandledBefore(cutoff,config_.batchSize);
-        if(!result.ok()){
-            throw std::runtime_error(result.message);
+            if (stopRequested_.load(std::memory_order_acquire)) {
+                break;
+            }
+            auto result=repos_.friendRequestRepo->deleteHandledBefore(cutoff,config_.batchSize);
+            if(!result.ok()){
+                throw std::runtime_error(result.message);
+            }
+            if(!result.value.has_value()){
+                throw std::runtime_error("returned no value");
+            }
+            totalclean+=result.value.value();
+            maxBatchesPerRun--;
+            if(result.value.value()<config_.batchSize){
+                break;
+            }
         }
-        if(!result.value.has_value()){
-            throw std::runtime_error("returned no value");
-        }
-        totalclean+=result.value.value();
-        maxBatchesPerRun--;
-        if(result.value.value()<config_.batchSize){
-            break;
-        }
-    }
         return totalclean;
 }
     size_t MaintenanceService::cleanupHandledGroupJoinRequests(int64_t nowMs){
@@ -184,19 +195,22 @@ MaintenanceStats MaintenanceService::runOnce(){
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
         size_t totalclean{0};
         while(maxBatchesPerRun){
-        auto result=repos_.groupJoinRequestRepo->deleteHandledBefore(cutoff,config_.batchSize);
-        if(!result.ok()){
-            throw std::runtime_error(result.message);
+            if (stopRequested_.load(std::memory_order_acquire)) {
+                break;
+            }
+            auto result=repos_.groupJoinRequestRepo->deleteHandledBefore(cutoff,config_.batchSize);
+            if(!result.ok()){
+                throw std::runtime_error(result.message);
+            }
+            if(!result.value.has_value()){
+                throw std::runtime_error("returned no value");
+            }
+            totalclean+=result.value.value();
+            maxBatchesPerRun--;
+            if(result.value.value()<config_.batchSize){
+                break;
+            }
         }
-        if(!result.value.has_value()){
-            throw std::runtime_error("returned no value");
-        }
-        totalclean+=result.value.value();
-        maxBatchesPerRun--;
-        if(result.value.value()<config_.batchSize){
-            break;
-        }
-    }
         return totalclean;
     }
     size_t MaintenanceService::cleanupOfflineIndexes(int64_t nowMs){
@@ -207,19 +221,22 @@ MaintenanceStats MaintenanceService::runOnce(){
         auto maxBatchesPerRun=config_.maxBatchesPerRun;
         size_t totalclean{0};
         while(maxBatchesPerRun){
-        auto result=repos_.offlineMessageRepo->deleteCreatedBefore(cutoff,config_.batchSize);
-        if(!result.ok()){
-            throw std::runtime_error(result.message);
+            if (stopRequested_.load(std::memory_order_acquire)) {
+                break;
+            }
+            auto result=repos_.offlineMessageRepo->deleteCreatedBefore(cutoff,config_.batchSize);
+            if(!result.ok()){
+                throw std::runtime_error(result.message);
+            }
+            if(!result.value.has_value()){
+                throw std::runtime_error("returned no value");
+            }
+            totalclean+=result.value.value();
+            maxBatchesPerRun--;
+            if(result.value.value()<config_.batchSize){
+                break;
+            }
         }
-        if(!result.value.has_value()){
-            throw std::runtime_error("returned no value");
-        }
-        totalclean+=result.value.value();
-        maxBatchesPerRun--;
-        if(result.value.value()<config_.batchSize){
-            break;
-        }
-    }
         return totalclean;
 }
 }
