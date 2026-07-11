@@ -1,6 +1,5 @@
 #pragma once
 #include "Acceptor.h"
-#include "infra/thread/ThreadPool.h"
 #include <memory>
 #include <atomic>
 #include <unordered_map>
@@ -9,6 +8,7 @@
 #include "config/AppConfig.h"
 #include "storage/RepositoryFactory.h"
 #include "timer/TimerId.h"
+
 class EventLoop;
 class EventLoopThreadPool;
 class TcpConnection;
@@ -23,6 +23,9 @@ namespace infra::redis{
 }
 namespace infra::maintenance {
     class MaintenanceService;
+}
+namespace infra::thread{
+    class ThreadPool;
 }
 //管理所有客户端连接，创建TcpConnection,删除/关闭连接，处理聊天逻辑
 //在主线程中监听新连接，分发到IO线程处理，IO线程中创建TcpConnection对象，保存到connections_中
@@ -52,7 +55,7 @@ private:
     std::atomic<bool> stopping_{false};//标识服务正在关闭
     // 使用 unique_ptr 让连接自动释放，避免手动 delete
     std::unordered_map<int,std::shared_ptr<TcpConnection>> connections_;//管理所有连接，key为fd，value为TcpConnection对象指针
-    std::unique_ptr<ThreadPool> threadPool_;//线程池，处理消息转发等耗时操作
+    std::unique_ptr<infra::thread::ThreadPool> threadPool_;//线程池，处理消息转发等耗时操作
 
     //IM系统
     std::unique_ptr<im::Imservice> imService_;//IM业务对象，处理消息逻辑

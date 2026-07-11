@@ -14,7 +14,7 @@ option(ENABLE_REDIS "Enable Redis cache backend" ON)
 # =========================
 # 库（核心代码）
 # =========================
-file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/security/*.cpp src/auth/*.cpp src/id/*.cpp src/infra/health/*.cpp src/infra/signal/*.cpp src/timer/*.cpp src/infra/maintenance/*.cpp)
+file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/security/*.cpp src/auth/*.cpp src/id/*.cpp src/infra/health/*.cpp src/infra/signal/*.cpp src/timer/*.cpp src/infra/maintenance/*.cpp src/infra/thread/*.cpp)
 file(GLOB RATE_LIMIT_SRC_FILES
     src/security/rate_limit/RateLimiter.cpp
 )

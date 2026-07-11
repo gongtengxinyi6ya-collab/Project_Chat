@@ -90,7 +90,7 @@ bool ThreadSafeQueue<T>::tryPop(T& value){
 }
 
 template <typename T>
-void ThreadSafeQueue<T>::close(QueueCloseMode mode = QueueCloseMode::Drain){
+void ThreadSafeQueue<T>::close(QueueCloseMode mode){
     {
         std::lock_guard lk(mutex_);
         if(closed_){

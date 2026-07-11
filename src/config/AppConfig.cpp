@@ -53,7 +53,7 @@ void AppConfig::validateOrThrow() const{
 }
 std::string AppConfig::dumpSummary() const{
     std::stringstream ss;
-    ss<<"Server(host="<<server_.host<<",port="<<server_.port<<",ioThreads="<<server_.ioThreads<<",backlog="<<server_.backlog<<"); "
+    ss<<"Server(host="<<server_.host<<",port="<<server_.port<<",ioThreads="<<server_.ioThreads<<",backlog="<<server_.backlog<<",backgroundThreads="<<server_.backgroundThreads<<",backgroundQueueCapacity="<<server_.backgroundQueueCapacity<<"); "
       <<"Net(heartBeatMs="<<net_.heartBeatMs<<",maxFrameLen="<<net_.maxFrameLen<<"); "
       <<"Log(level="<<logLevelToString(log_.level)<<",toConsole="<<log_.toConsole<<",toFile="<<log_.toFile<<",filePath="<<log_.filePath<<",jsonFormat="<<log_.jsonFormat<<"); "
       <<"IM(requireGroupIdForSend="<<im_.requireGroupIdForSend<<",maxGroupNameLen="<<im_.maxGroupNameLen<<",maxMessageLen="<<im_.maxMessageLen<<");"

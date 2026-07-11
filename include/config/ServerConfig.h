@@ -17,4 +17,6 @@ public:
     uint16_t port{8080};//默认端口8080
     int ioThreads{4};//默认IO线程数4，通常设置为CPU核心数的2倍，但不超过1000
     int backlog{1024};//默认监听队列长度1024，过小可能导致连接被拒绝，过大可能占用过多资源
+    size_t backgroundThreads{2};//后台线程数量
+    size_t backgroundQueueCapacity{1024};//队列容量
 };

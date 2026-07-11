@@ -36,7 +36,7 @@ private:
     std::weak_ptr<infra::redis::RedisClient> redisClient_;//指向Redis客户端
 
     std::function<size_t()> onlineConnectionProvider_;//获取当前在线连接数
-
+    std::function<infra::maintenance::MaintenanceSnapshot()> maintenanceProvider_;
     uint64_t lastSqlAcquireTimeouts_{0};
 
     void checkSql(HealthSnapshot& snapshot);//读取SQL pool状态

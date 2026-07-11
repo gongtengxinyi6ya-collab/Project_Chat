@@ -24,7 +24,7 @@ class TcpConnection
     using HighWaterCallback=std::function<void(const std::shared_ptr<TcpConnection>&,size_t)>;//高水位回调
     using LowWaterCallback=std::function<void(const std::shared_ptr<TcpConnection>&,size_t)>;//低水位回调
 public:
-    TcpConnection(EventLoop* loop,int fd,ThreadPool* threadPool,TcpServer* server,const AppConfig& config);
+    TcpConnection(EventLoop* loop,int fd,TcpServer* server,const AppConfig& config);
     ~TcpConnection();
     void handleRead();//读取客户端数据；
     void handleWrite();//发送outputBuffer数据
@@ -69,7 +69,6 @@ private:
     EventLoop* loop_;//
     int fd_;//客户端socket
 
-    ThreadPool* threadPool_;//线程池，处理消息转发等耗时操作
     TcpServer* server_;//服务器对象指针，调用服务器的消息转发函数
     std::unique_ptr<Channel> channel_;//事件监听
     bool fdClosed_{false};//fd是否已关闭，防止重复关闭和发送数据

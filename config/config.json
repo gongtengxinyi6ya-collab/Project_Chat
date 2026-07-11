@@ -4,7 +4,9 @@
     "host": "0.0.0.0",
     "port": 8080,
     "io_threads": 4,
-    "backlog": 1024
+    "backlog": 1024,
+    "background_threads": 2,
+    "background_queue_capacity": 1024
   },
   "net": {
     "heartbeat_ms": 30000,

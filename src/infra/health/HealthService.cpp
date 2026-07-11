@@ -26,7 +26,7 @@ void HealthService::setOnlineConnectionProvider(std::function<size_t()> provider
     onlineConnectionProvider_=std::move(provider);
 }
 void HealthService::setMaintenanceProvider(std::function<infra::maintenance::MaintenanceSnapshot()> provider){
-    
+    maintenanceProvider_=std::move(provider);
 }
 HealthSnapshot HealthService::snapshot(){
     HealthSnapshot snapshot;

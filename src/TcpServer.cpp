@@ -7,6 +7,7 @@
 #include "infra/health/HealthService.h"
 #include "infra/health/HealthFormatter.h"
 #include "infra/maintenance/MaintenanceService.h"
+#include "infra/thread/ThreadPool.h"
 #ifdef PROJECT_CHAT_ENABLE_REDIS
 #include "infra/redis/RedisClient.h"
 #include "security/rate_limit/RedisRateLimitStore.h"
@@ -19,7 +20,7 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     acceptor_.setNewConnectionCallback([this](int fd){
         newConnection(fd);
     });
-    threadPool_ = std::make_unique<ThreadPool>();
+    threadPool_ = std::make_unique<infra::thread::ThreadPool>(config_.server().backgroundThreads,config_.server().backgroundQueueCapacity);
     imService_ = std::make_unique<im::Imservice>(1,config_.im(),config_.id());
     imService_->setSendToConnKey([this](im::Imservice::ConnKey key,const std::string& payload){
             auto it=connections_.find(key);
@@ -110,7 +111,7 @@ void TcpServer::start(){
             if(stopping_.load(std::memory_order_acquire)){
                 return ;
             }
-            threadPool_->submit([this]{
+            auto result=threadPool_->submit([this]{
                 auto stats=maintenanceService_->runOnce();
                 if(!stats.ok){
                     LOG_WARN("maintenance failed: " + stats.error);
@@ -119,6 +120,9 @@ void TcpServer::start(){
                     LOG_INFO("maintenance deleted rows=" + std::to_string(stats.totalDeleted()));
                 }
             });
+            if(result==infra::thread::TaskSubmitResult::QueueFull){
+                LOG_WARN("TaskQueue full");
+            }
         });
     }
 }
@@ -141,7 +145,7 @@ void TcpServer::newConnection(int fd){
             ::close(fd);
             return ;
         }
-        auto conn=std::make_shared<TcpConnection>(ioloop,fd,threadPool_.get(),this,config_);
+        auto conn=std::make_shared<TcpConnection>(ioloop,fd,this,config_);
         conn->setMessageCallback([this](std::shared_ptr<TcpConnection> conn,const std::string& msg){
             baseloop_->runInLoop([this,conn,msg](){
                 onMessage(conn,msg);
@@ -270,6 +274,7 @@ void TcpServer::finishStopInBaseLoop(){
     }
     stopped_=true;
     LOG_WARN("TcpServer finishing stop...");
+    threadPool_->stop(infra::thread::ThreadPoolStopMode::Drain);
 
     if(imService_){//释放业务层资源
         imService_->shutdown();
