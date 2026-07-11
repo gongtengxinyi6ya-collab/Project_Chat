@@ -127,24 +127,29 @@ void HealthService::fillMaintenanceStats(HealthSnapshot& snapshot){
     auto maintenanceSnapshot=maintenanceProvider_();
     snapshot.maintenance=maintenanceSnapshot;
     //判断从未运行
+    
     if(!maintenanceSnapshot.hasRun){
-        if(snapshot.uptimeMs>2*maintenanceIntervalMs_){//服务运行时间超过两个维护周期
+        const uint64_t maintenanceThresholdMs =2ULL * static_cast<uint64_t>(maintenanceIntervalMs_);
+        if(snapshot.uptimeMs>maintenanceThresholdMs){//服务运行时间超过两个维护周期
             snapshot.maintenanceStale=true;
         }
     }
     //判断最近执行失败
+    
     if(maintenanceSnapshot.hasRun&&!maintenanceSnapshot.lastRunOk){
         snapshot.maintenanceHealthy=false;
     }
     //判断长期没有成功
     if(maintenanceSnapshot.lastSuccessAtMs>0){
-        if((currentEpochMs()-maintenanceSnapshot.lastSuccessAtMs)>3*maintenanceIntervalMs_){
+        const uint64_t maintenanceThresholdMs =3ULL * static_cast<uint64_t>(maintenanceIntervalMs_);
+        if((currentEpochMs()-maintenanceSnapshot.lastSuccessAtMs)>maintenanceThresholdMs){
             snapshot.maintenanceStale=true;
         }
     }
     //判断运行时间过长
     if(maintenanceSnapshot.running){
-        if((currentEpochMs()-maintenanceSnapshot.lastRunAtMs)>2*maintenanceIntervalMs_){
+        const uint64_t maintenanceThresholdMs =2ULL * static_cast<uint64_t>(maintenanceIntervalMs_);
+        if((currentEpochMs()-maintenanceSnapshot.lastRunAtMs)>maintenanceThresholdMs){
             snapshot.maintenanceRunningTooLong=true;
         }
     }
