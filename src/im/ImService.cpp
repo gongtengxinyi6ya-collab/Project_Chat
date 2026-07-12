@@ -1224,6 +1224,8 @@ im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)co
             return im::ErrorCode::JOIN_REQUEST_NOT_FOUND;
         case storage::RepoStatus::GroupNotFound:
             return im::ErrorCode::NO_SUCH_GROUP;
+        case storage::RepoStatus::Conflict:
+            return im::ErrorCode::Conflict;
         case storage::RepoStatus::Internal:
             return im::ErrorCode::INTERNAL;
     }
