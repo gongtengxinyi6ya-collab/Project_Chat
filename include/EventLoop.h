@@ -28,9 +28,10 @@ class EventLoop{
     ~EventLoop();
     void loop();
     void quit();
-    void addChannel(Channel* channel);
-    void updateChannel(Channel* channel);
-    void removeChannel(int fd);
+    
+    bool updateChannel(Channel* channel)noexcept;
+    bool removeChannel(Channel* channel)noexcept;
+    void assertInLoopThread() const;
 
     bool isInLoopThread() const;//判断是否在IO线程中
     template<class F>

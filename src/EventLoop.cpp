@@ -4,7 +4,8 @@
 #include "timer/TimerQueue.h"
 #include "timer/Timer.h"
 #include "logger/LogMacros.h"
-
+#include <system_error>
+#include <stdexcept>
 EventLoop:: EventLoop():looping(false),epollfd_(-1),activeEvents_(EPOLL_MAX_EVENTS),wakeupFd_(-1),threadId_(std::this_thread::get_id())
 {
     epollfd_=epoll_create(EPOLL_MAX_EVENTS);
@@ -17,15 +18,17 @@ EventLoop:: EventLoop():looping(false),epollfd_(-1),activeEvents_(EPOLL_MAX_EVEN
     }
     wakeupChannel_=std::make_unique<Channel>(this,wakeupFd_);
     wakeupChannel_->setReadCallback(std::bind(&EventLoop::handleWakeup,this));
-    wakeupChannel_->enableReading();
-    this->addChannel(wakeupChannel_.get());
+    if(!wakeupChannel_->enableReading()){
+        throw std::runtime_error("Channel:Failed to enableReading");
+    }
+    
     timerQueue_=std::make_unique<TimerQueue>(this);
 }
 EventLoop:: ~EventLoop(){
     if(wakeupChannel_){
         wakeupChannel_->disableAll();
         if(wakeupChannel_->inEpoll()){
-            removeChannel(wakeupFd_);
+            removeChannel(wakeupChannel_.get());
         }
     }
 
@@ -83,53 +86,47 @@ void EventLoop::quit()
     wakeup();
 }
 
-void EventLoop::addChannel(Channel* channel)
-{
-    int fd=channel->fd();
-    if(!channel->inEpoll()){//新添加的fd
-        //新添加的fd
-        struct epoll_event ev;
-        ev.data.fd=fd;
-        ev.events=EPOLLIN|EPOLLET;//默认关注读事件，边缘触发
-        if(epoll_ctl(epollfd_,EPOLL_CTL_ADD,fd,&ev)==-1){
-            throw std::runtime_error("epoll_ctl add failed");
-        }
-        channel->setInEpoll(true);
-        channels_[fd]=channel;
-    }
-    else{
-        //已存在的fd，修改事件
-        struct epoll_event ev;
-        ev.data.fd=fd;
-        ev.events=EPOLLIN|EPOLLET;//默认关注读事件，边缘触发
-        if(epoll_ctl(epollfd_,EPOLL_CTL_MOD,fd,&ev)==-1){
-            throw std::runtime_error("epoll_ctl mod failed");
-        }
-    }
 
-}
-
-void EventLoop::removeChannel(int fd)
+bool EventLoop::removeChannel(Channel* channel)noexcept
 {
+    assertInLoopThread();
+    if(!channel){
+        return false;
+    }
+    auto fd=channel->fd();
     auto it=channels_.find(fd);
     if(it!=channels_.end()){
-        if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,fd,nullptr)==-1){
-            throw std::runtime_error("epoll_ctl del failed");
+        if(it->second!=channel){
+            return false;
+        }
+        if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,it->first,nullptr)==-1){
+            const int savedErrno = errno;
+            const std::error_code ec(savedErrno, std::system_category());
+            LOG_ERROR("epoll_ctl del: fd: "+std::to_string(it->first)+"errno: "+ec.message());
+            return false;
         }
         channels_[fd]->setInEpoll(false);
         channels_.erase(it);
     }
+    return true;
 }
 
-void EventLoop::updateChannel(Channel* channel)
+bool EventLoop::updateChannel(Channel* channel)noexcept
 {
+    assertInLoopThread();
+    if(!channel){
+        return false;
+    }
     int fd=channel->fd();
     if(channel->inEpoll()){//已存在的fd，修改事件
         struct epoll_event ev;
         ev.data.fd=fd;
         ev.events=channel->events()|EPOLLET;//关注channel关注的事件，边缘触发
         if(epoll_ctl(epollfd_,EPOLL_CTL_MOD,fd,&ev)==-1){
-            throw std::runtime_error("epoll_ctl mod failed");
+            const int savedErrno = errno;
+            const std::error_code ec(savedErrno, std::system_category());
+            LOG_WARN("epoll_ctl add: fd: "+std::to_string(fd)+", events: "+std::to_string(ev.events)+"errno: "+ec.message());
+            return false;
         }
     }
     else{
@@ -138,13 +135,22 @@ void EventLoop::updateChannel(Channel* channel)
         ev.data.fd=fd;
         ev.events=channel->events()|EPOLLET;//关注channel关注的事件，边缘触发
         if(epoll_ctl(epollfd_,EPOLL_CTL_ADD,fd,&ev)==-1){
-            throw std::runtime_error("epoll_ctl add failed");
+            const int savedErrno = errno;
+            const std::error_code ec(savedErrno, std::system_category());
+            LOG_WARN("epoll_ctl mod: fd: "+std::to_string(fd)+", events: "+std::to_string(ev.events)+"errno: "+ec.message());
+            return false;
         }
         channel->setInEpoll(true);
         channels_[fd]=channel;
     }
+    return true;
 }
-
+void EventLoop::assertInLoopThread() const{
+    if(!isInLoopThread()){
+        LOG_FATAL("EventLoop thread violation");
+        std::terminate();
+    }
+}
 bool EventLoop::isInLoopThread() const{
     return threadId_==std::this_thread::get_id();
 }

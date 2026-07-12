@@ -48,6 +48,9 @@ public:
     void setQuitCallback(std::function<void()> cb);
 private:
     EventLoop* baseloop_;
+    //配置
+    AppConfig config_;//服务器配置，传递给TcpConnection使用
+    
     Acceptor acceptor_;//监听客户端连接
     std::unique_ptr<EventLoopThreadPool> iothreadPool_;//线程池，分发IO线程
     int threadNum_;//IO线程数量
@@ -60,8 +63,6 @@ private:
     //IM系统
     std::unique_ptr<im::Imservice> imService_;//IM业务对象，处理消息逻辑
     
-    //配置
-    AppConfig config_;//服务器配置，传递给TcpConnection使用
 
     std::unique_ptr<infra::health::HealthService> healthService_;//健康检查
     TimerId healthTimerId_;

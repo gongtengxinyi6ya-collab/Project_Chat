@@ -53,7 +53,9 @@ void SignalHandler::start(){
     if(::sigaction(SIGTERM,&sa,nullptr)<0){
         throw std::runtime_error("sigaction SIGTERM failed");
     }
-    channel_->enableReading();
+    if(channel_&&!channel_->enableReading()){
+        throw std::runtime_error("Failed to enableReading");
+    }
     
 }
 void SignalHandler::handleRead(){

@@ -18,4 +18,6 @@ public:
     uint32_t connLowWaterMark{512*1024};//连接背压低水位，单位字节，恢复正常状态的阈值，建议设置为高水位的一半
     uint32_t connHardLimit{10*1024*1024};//连接背压硬限制，单位字节，超过则强制断开连接，建议设置为高水位的10倍
     uint32_t maxOverloadDropCount{1000};//过载丢弃次数上限，超过该次数可以考虑关闭连接或触发更严重的限流措施
+    bool tcpNoDelay{true};
+    bool keepAlive{true};
 };

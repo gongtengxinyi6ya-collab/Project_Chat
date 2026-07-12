@@ -15,13 +15,16 @@ public:
     void setWriteCallback(EventCallback cb);//写回调
     void setCloseCallback(EventCallback cb);
     void setErrorCallback(EventCallback cb);
-    void handleEvent();
+    void handleEvent()noexcept;
 
     void setRevents(int revent);//设置实际事件
-    void enableReading();//开启读事件
-    void enableWriting();//开启写事件
-    void disableWritng();//关闭写事件
-    void disableAll();//关闭所有事件
+
+    bool enableReading()noexcept;//开启读事件
+    bool enableWriting()noexcept;//开启写事件
+    bool disableWriting()noexcept;//关闭写事件
+    void disableAll()noexcept;//关闭所有事件
+    bool remove()noexcept;
+
     int events() const;
     bool inEpoll() const;
     void setInEpoll(bool inEpoll);

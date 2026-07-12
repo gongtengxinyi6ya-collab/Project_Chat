@@ -10,7 +10,9 @@ TimerQueue::TimerQueue(EventLoop* loop){
     timerfd_=timerfd_create(CLOCK_MONOTONIC,TFD_NONBLOCK | TFD_CLOEXEC);
     timerfdChannel_=std::make_unique<Channel>(loop_,timerfd_);
     timerfdChannel_->setReadCallback(std::bind(&TimerQueue::handleRead,this));
-    timerfdChannel_->enableReading();
+    if(!timerfdChannel_->enableReading()){
+        throw std::runtime_error("Faile to enbaleReading");
+    }
 }
 TimerQueue::~TimerQueue(){
     ::close(timerfd_);

@@ -15,7 +15,7 @@
 #endif
 #include <vector>
 TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
-:baseloop_(loop),acceptor_(baseloop_,port),threadNum_(config.server().ioThreads),started_(false),config_(config){
+:baseloop_(loop),config_(config),acceptor_(baseloop_,config_.server().host,port,config_.server().backlog,config_.net().tcpNoDelay,config_.net().keepAlive),threadNum_(config.server().ioThreads),started_(false){
     iothreadPool_ = std::make_unique<EventLoopThreadPool>(baseloop_);
     acceptor_.setNewConnectionCallback([this](int fd){
         newConnection(fd);

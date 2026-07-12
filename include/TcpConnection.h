@@ -33,6 +33,7 @@ public:
     void sendInLoop(const std::string& msg);//在IO线程中发送数据，真正执行发送逻辑，发送失败则保存到outputBuffer_中，并注册写事件，等待下一次发送机会
     void handleClose();//处理客户端关闭
     void handleError();//socket错误处理
+    void handleError(int socketError);
     void setCloseCallback(CloseCallback cb);
     void setMessageCallback(MessageCallback cb);
     void setHighWaterCallback(HighWaterCallback cb);//上层注册高水位事件

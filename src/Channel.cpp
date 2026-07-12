@@ -27,38 +27,71 @@ void Channel::setCloseCallback(EventCallback cb)
 void Channel::setErrorCallback(EventCallback cb){
     errorCallback_=std::move(cb);
 }
-void Channel::handleEvent(){
-    if(revents_&EPOLLIN){
-        readCallback_();
+void Channel::handleEvent()noexcept{
+    if(revents_&EPOLLHUP&&!(revents_&EPOLLIN)){
+        if(closeCallback_){
+            closeCallback_();
+            return;
+        }
     }
-    if(revents_&EPOLLOUT)
-        writeCallback_();
-    if(revents_&EPOLLHUP)
-        closeCallback_();
-    if(revents_&EPOLLERR)
-        errorCallback_();
+    if(revents_&EPOLLERR){
+        if(errorCallback_){
+            errorCallback_();
+            return;
+        }
+    }
+    if(revents_&EPOLLIN){
+        if(readCallback_){
+            readCallback_();
+        }
+    }
+    if(revents_&EPOLLOUT){
+        if(writeCallback_){
+            writeCallback_();
+        }
+    }
 }
 
 void Channel::setRevents(int revent){
     revents_=std::move(revent);
 }
-void Channel::enableReading(){
+bool Channel::enableReading()noexcept{
     events_|=EPOLLIN;
-    loop_->updateChannel(this);
+    return loop_->updateChannel(this);
 }
 
-void Channel::enableWriting(){
+bool Channel::enableWriting()noexcept{
+    if((events_&EPOLLOUT)!=0){//已经监听EPOLLOUT，直接返回
+        return true;
+    }
     events_|=EPOLLOUT;
-    loop_->updateChannel(this);
+    if (!loop_->updateChannel(this)) {
+        events_ &= ~EPOLLOUT;
+        return false;
+    }
+
+    return true;
 }
 
-void Channel::disableWritng(){
+bool Channel::disableWriting()noexcept{
+    if((events_&EPOLLOUT)==0){//本来没有监听
+        return true;
+    }
     events_&=~EPOLLOUT;
-    loop_->updateChannel(this);
+    if (!loop_->updateChannel(this)) {
+        events_ |= EPOLLOUT;
+        return false;
+    }
+
+    return true;
 }
 
-void Channel::disableAll(){
+void Channel::disableAll()noexcept{
     events_=0;
+    remove();
+}
+bool Channel::remove()noexcept{
+    return loop_->removeChannel(this);
 }
 
 int Channel::events() const{

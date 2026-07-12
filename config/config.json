@@ -16,7 +16,9 @@
     "conn_high_water_mark": 1048576,
     "conn_low_water_mark": 524288,
     "conn_hard_limit": 10485760,
-    "max_overload_drop_count": 1000
+    "max_overload_drop_count": 1000,
+    "tcp_no_delay": true,
+    "keep_alive": true
   },
   "log": {
     "level": "INFO",

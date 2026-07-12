@@ -10,6 +10,8 @@ NetConfig NetConfig::fromJson(const nlohmann::json& j){
     netConfig.connLowWaterMark=ConfigParseHelper::getOrDefault(j,"conn_low_water_mark",netConfig.connLowWaterMark);
     netConfig.connHardLimit=ConfigParseHelper::getOrDefault(j,"conn_hard_limit",netConfig.connHardLimit);
     netConfig.maxOverloadDropCount=ConfigParseHelper::getOrDefault(j,"max_overload_drop_count",netConfig.maxOverloadDropCount);
+    netConfig.tcpNoDelay=ConfigParseHelper::getOrDefault(j,"tcp_no_delay",netConfig.tcpNoDelay);
+    netConfig.keepAlive=ConfigParseHelper::getOrDefault(j,"keep_alive",netConfig.keepAlive);
     return netConfig;
 }
 
@@ -42,6 +44,14 @@ void NetConfig::applyEnvOverrides(){
     auto envMaxOverloadDropCount=ConfigParseHelper::getEnv("CHAT_MAX_OVERLOAD_DROP_COUNT");
     if(envMaxOverloadDropCount.has_value()){
         maxOverloadDropCount=ConfigParseHelper::parseEnvUInt(envMaxOverloadDropCount.value(),"CHAT_MAX_OVERLOAD_DROP_COUNT");
+    }
+    auto envTcpNoDelay=ConfigParseHelper::getEnv("CHAT_TCP_NO_DELAY");
+    if(envTcpNoDelay){
+        tcpNoDelay=ConfigParseHelper::parseEnvBool(envTcpNoDelay.value(),"CHAT_TCP_NO_DELAY");
+    }
+    auto envKeepAlive=ConfigParseHelper::getEnv("CHAT_KEEP_ALIVE");
+    if(envKeepAlive){
+        keepAlive=ConfigParseHelper::parseEnvBool(envKeepAlive.value(),"CHAT_KEEP_ALIVE");
     }
 }
 void NetConfig::validateOrThrow() const{

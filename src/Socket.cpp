@@ -1,61 +1,85 @@
 #include "Socket.h"
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <iostream>
+#include <cerrno>
+#include <stdexcept>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 
+#include "logger/LogMacros.h"
 Socket::Socket(){
-    listenfd_=socket(AF_INET,SOCK_STREAM,0);
+    listenfd_=::socket(AF_INET,SOCK_STREAM|SOCK_NONBLOCK|SOCK_CLOEXEC,IPPROTO_TCP);
     if(listenfd_<0)
         throw::std::runtime_error("socket() failed");
-    setNonBlocking(listenfd_);
-
 }
 
 Socket::~Socket(){
     close(listenfd_);
 }
 //绑定端口
-void Socket::bind(int port){
+void Socket::bind(const std::string& host,uint16_t port){
+    if(host.empty()||port<0){
+        return;
+    }
     int opt=1;
     if(::setsockopt(listenfd_,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt))<0)
     {//允许服务器重启时重新绑定端口
         throw std::runtime_error("setsockopt filed");
     }
-    sockaddr_in m_addr;
-    memset(&m_addr,0,sizeof(m_addr));
-    m_addr.sin_family=AF_INET;
-    m_addr.sin_addr.s_addr=htonl(INADDR_ANY);
-    m_addr.sin_port=htons(port);
-    if(::bind(listenfd_,(sockaddr*)&m_addr,sizeof(m_addr))==-1){
+    sockaddr_in addr;
+    memset(&addr,0,sizeof(addr));
+    addr.sin_family=AF_INET;
+    if(host=="0.0.0.0"){
+        addr.sin_addr.s_addr=htonl(INADDR_ANY);
+    }
+    else{
+        if(inet_pton(AF_INET,host.c_str(),&addr.sin_addr)!=1){
+            throw std::runtime_error("invalid IP address");
+        }
+    }
+    addr.sin_port=htons(port);
+    if(::bind(listenfd_,(sockaddr*)&addr,sizeof(addr))==-1){
         LOG_SYSERR("bind() failed");
         throw::std::runtime_error("bind() failed");
     }
 }
 //监听
-void Socket::listen()
-{
-    if(::listen(listenfd_,10)<0){
+void Socket::listen(int backlog)
+{   if(backlog<0){
+    return;
+}
+    if(::listen(listenfd_,backlog)<0){
         throw::std::runtime_error("listen() failed");
     }
 }
 
 //接收客户端连接
-int Socket::accept(){
+int Socket::accept(int* savedErrno){
     sockaddr_in client_addr;
     memset(&client_addr,0,sizeof(client_addr));
     socklen_t len=sizeof(client_addr);
-    int clientfd_=::accept(listenfd_,(sockaddr*)&client_addr,&len);
-    if(clientfd_<0){
-        // EAGAIN / EWOULDBLOCK is expected when using non-blocking sockets
-        // and there are no more pending connections on the listen socket.
-        if(errno==EAGAIN||errno==EWOULDBLOCK)
-            return -1;
-
+    int clientfd=::accept4(listenfd_,(sockaddr*)&client_addr,&len,SOCK_NONBLOCK|SOCK_CLOEXEC);
+    if(clientfd<0){
         LOG_SYSERR("accept() failed");
-        throw std::runtime_error("accept() failed");
+        *savedErrno=errno;
+        return -1;
     }
-    return clientfd_;
+    return clientfd;
 
 }
 
-int Socket::fd(){
+//TCP选项方法
+bool Socket::setTcpNoDelay(int fd, bool enabled) noexcept{
+    const int value=enabled?1:0;
+    return setsockopt(fd,IPPROTO_TCP,TCP_NODELAY,&value,sizeof(value))==0;
+}
+bool  Socket::setKeepAlive(int fd, bool enabled) noexcept{
+    const int value=enabled?1:0;
+    return setsockopt(fd,SOL_SOCKET,SO_KEEPALIVE,&value,sizeof(value))==0;
+}
+int Socket::fd()const{
     return listenfd_;
 }
 
