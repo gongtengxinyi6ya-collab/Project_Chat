@@ -20,7 +20,10 @@ Socket::~Socket(){
 }
 //绑定端口
 void Socket::bind(const std::string& host,uint16_t port){
-    if(host.empty()||port<0){
+    if(host.empty()){
+        return;
+    }
+    if(port<0){
         return;
     }
     int opt=1;
@@ -47,16 +50,17 @@ void Socket::bind(const std::string& host,uint16_t port){
 }
 //监听
 void Socket::listen(int backlog)
-{   if(backlog<0){
-    return;
-}
+{   
+    if(backlog<0){
+        return;
+    }
     if(::listen(listenfd_,backlog)<0){
         throw::std::runtime_error("listen() failed");
     }
 }
 
 //接收客户端连接
-int Socket::accept(int* savedErrno){
+int Socket::accept(int* savedErrno)noexcept{
     sockaddr_in client_addr;
     memset(&client_addr,0,sizeof(client_addr));
     socklen_t len=sizeof(client_addr);
@@ -79,7 +83,7 @@ bool  Socket::setKeepAlive(int fd, bool enabled) noexcept{
     const int value=enabled?1:0;
     return setsockopt(fd,SOL_SOCKET,SO_KEEPALIVE,&value,sizeof(value))==0;
 }
-int Socket::fd()const{
+int Socket::fd()const noexcept{
     return listenfd_;
 }
 

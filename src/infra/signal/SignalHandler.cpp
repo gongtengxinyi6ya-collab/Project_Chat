@@ -27,7 +27,7 @@ SignalHandler::~SignalHandler(){
     if(channel_){
         channel_->disableAll();
         if(channel_->inEpoll()){
-            loop_->removeChannel(eventFd_);
+            loop_->removeChannel(channel_.get());
         }
     }
     if(eventFd_>=0){

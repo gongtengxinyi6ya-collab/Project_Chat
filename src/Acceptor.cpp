@@ -7,7 +7,7 @@
 #include <fcntl.h>
 #include "logger/LogMacros.h"
 Acceptor::Acceptor(EventLoop* loop,std::string host,uint16_t port ,int backlog ,bool tcpNoDelay,bool keepAlive)
-:loop_(loop),host_(host),port_(port),backlog_(backlog_),tcpNoDelay_(tcpNoDelay),keepAlive_(keepAlive)
+:loop_(loop),host_(host),port_(port),backlog_(backlog),tcpNoDelay_(tcpNoDelay),keepAlive_(keepAlive)
 {   
     if(!loop_){
         throw std::invalid_argument("loop invalid");
@@ -26,16 +26,25 @@ Acceptor::~Acceptor(){
         idleFd_=-1;
     }
 }
+
+bool Acceptor::configureClientSocket(int fd) noexcept{
+    if (fd < 0) {
+        return false;
+    }
+    const bool noDelayOk =Socket::setTcpNoDelay(fd, tcpNoDelay_);
+    const bool keepAliveOk =Socket::setKeepAlive(fd, keepAlive_);
+    return noDelayOk && keepAliveOk;
+}
 void Acceptor::handleRead(){
     while(true){
         int savedErrno{0};
         int clientFd=listenSocket_.accept(&savedErrno);
 
         if(clientFd>=0){
-            configureClientSocket(clientFd);
-            listenSocket_.setTcpNoDelay(clientFd,tcpNoDelay_);
-            listenSocket_.setKeepAlive(clientFd,keepAlive_);
-
+            if(!configureClientSocket(clientFd)){
+                LOG_WARN("Failed to set ClientSocket config");
+            }
+            
             if(newConnectionCallback_){
                 newConnectionCallback_(clientFd);
             }

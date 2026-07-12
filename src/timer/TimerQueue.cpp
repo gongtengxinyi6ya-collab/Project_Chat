@@ -4,7 +4,8 @@
 #include "timer/Timer.h"
 #include "EventLoop.h"
 #include "Channel.h"
-
+#include "logger/LogMacros.h"
+#include <system_error>
 TimerQueue::TimerQueue(EventLoop* loop){
     loop_=loop;
     timerfd_=timerfd_create(CLOCK_MONOTONIC,TFD_NONBLOCK | TFD_CLOEXEC);
@@ -15,6 +16,12 @@ TimerQueue::TimerQueue(EventLoop* loop){
     }
 }
 TimerQueue::~TimerQueue(){
+    loop_->assertInLoopThread();
+    timerfdChannel_->disableAll();
+    if(timerfdChannel_->inEpoll()){
+        timerfdChannel_->remove();
+    }
+    timerfdChannel_.reset();
     ::close(timerfd_);
     timers_.clear();
     cancelingTimers_.clear();
@@ -29,6 +36,10 @@ TimerId TimerQueue::addTimer(TimerCallback cb,TimePoint when,Duration interval){
         addTimerInLoop(std::move(timer));
     }
     else{
+        {
+            std::lock_guard lk(pendingMutex_);
+            pendingAddSequences_.insert(sequence);
+        }
         loop_->runInLoop([this,timer=std::move(timer)]()mutable{
             addTimerInLoop(std::move(timer));
         });
@@ -37,9 +48,14 @@ TimerId TimerQueue::addTimer(TimerCallback cb,TimePoint when,Duration interval){
 }
 
 void TimerQueue::addTimerInLoop(std::unique_ptr<Timer> timer){
-    if(pendingCancel_.count({timer->sequence()})){
-        //如果这个timer还未入队就被cancel了，直接忽略
-        pendingCancel_.erase({timer->sequence()});
+    {
+        std::lock_guard lk(pendingMutex_);
+        pendingAddSequences_.erase(timer->sequence());
+    }
+
+    if(pendingCancel_.contains(timer->sequence())){
+        //如果这个timer还未入队就被cancel了，移除
+        pendingCancel_.erase(timer->sequence());
         return;
     }
     //判断是否早于当前最早到期
@@ -47,12 +63,11 @@ void TimerQueue::addTimerInLoop(std::unique_ptr<Timer> timer){
     auto sequence=timer->sequence();
     auto expiration=timer->expiration();
     timers_.insert({expiration,sequence});
-    timersOwned_[sequence]=std::move(timer);
+    timersOwned_.emplace(sequence,std::move(timer));
     if(earliestChanged){
         resetTimerfd(expiration);
     }
 }
-
 void TimerQueue::cancel(TimerId id){
     if(loop_->isInLoopThread()){
         cancelInLoop(id);
@@ -65,28 +80,64 @@ void TimerQueue::cancel(TimerId id){
 }
 
 void TimerQueue::cancelInLoop(TimerId id){
-    //先在timersOwned_中查找，如果找不到说明这个timer还未入队，加入pendingCancel_等待addTimerInLoop处理
+    //查找timer
     auto it=timersOwned_.find(id.sequence());
-    if(it!=timersOwned_.end()){//找到了，说明这个timer已经入队了，需要从timers_中删除
+    if(it!=timersOwned_.end()){//找到timer
         auto expiration=it->second->expiration();
-        auto sequence=id.sequence();
-        timers_.erase({expiration,id.sequence()});
-        timersOwned_.erase(it);
-        //如果正在执行到期回调，加入cancelingTimers_等待handleRead处理，否则直接删除
-        if(callingExpiredTimers_){//防止作为respeat在回调后被reset
+        auto sequence=it->second->sequence();
+        if(callingExpiredTimers_&&activeExpiredTimers_.contains(sequence)){
+            //属于本轮到期集合
+            loop_->cancel(id);
             cancelingTimers_.insert(sequence);
         }
+        else{//不是本轮到期timer
+            auto earistTimerid=timers_.begin();
+            timers_.erase({expiration,sequence});//删除排序项
+            timersOwned_.erase(it);//删除所有权
+            if(sequence==earistTimerid->second){//删除的是最早timer
+                resetTimerfd(expiration);
+            }
+        }
+        
     }
-    else{
-        pendingCancel_.insert(id.sequence());
-        return;
+    else{//未找到timer
+        {
+            std::lock_guard lk(pendingMutex_);
+            if(!pendingAddSequences_.contains(id.sequence())){
+                return ;//不存在直接忽略
+            }
+        }
+        pendingCancel_.insert(id.sequence());//timer等待添加
     }
 
 }
 
 void TimerQueue::handleRead(){
-    uint64_t howmany;
-    ::read(timerfd_,&howmany,sizeof(howmany));//清空timerfd的可读事件
+    //timerfd读取
+    uint64_t expirationCount{0};
+    while(true){
+        const ssize_t n=::read(timerfd_,&expirationCount,sizeof(expirationCount));//清空timerfd的可读事件
+        if(n==static_cast<ssize_t>(sizeof(expirationCount))){//成功读取8字节
+            break;
+        }
+        if(n<0){//错误处理
+            const int savedErrno = errno;
+            if(savedErrno==EINTR){//重试
+                continue;
+            }
+            else if(savedErrno==EAGAIN){
+                return;
+            }
+            else{
+                const std::error_code ec(savedErrno, std::system_category());
+                LOG_ERROR("Failed to read timerfd,errno: "+ec.message());
+                return;
+            }
+        }
+        LOG_ERROR("Unexpected timerfd read size");
+        return;
+    }
+
     TimePoint now=std::chrono::steady_clock::now();
     auto expire=getExpired(now);//取出所有到期的timer
     callingExpiredTimers_=true;
@@ -141,8 +192,7 @@ void TimerQueue::handleRead(){
         resetTimerfd(timers_.begin()->first);//begin()最早到期
     }
     else{
-
-        resetTimerfd(TimePoint::max());//没有定时器了，设置为无效值
+        disarmTimerfd();//没有定时器
     }
 }
 
@@ -154,17 +204,33 @@ std::vector<std::pair<TimePoint,uint64_t>> TimerQueue::getExpired(TimePoint now)
     return expire;
 }
 
-void TimerQueue::resetTimerfd(TimePoint nextExpire){
-    auto delta=nextExpire-std::chrono::steady_clock::now();
+bool TimerQueue::resetTimerfd(TimePoint nextExpire)noexcept{
+    auto delta=nextExpire-std::chrono::steady_clock::now();//计算与当前的差
     if(delta<std::chrono::milliseconds(1)){
         delta=std::chrono::milliseconds(1);//最小1ms，防止过短时间导致系统调用失败
     }
-    itimerspec newValue;
+    itimerspec newValue{};
     //it_value:第一次触发时间，把delta转为秒和纳秒
     newValue.it_value.tv_sec=std::chrono::duration_cast<std::chrono::seconds>(delta).count();
     newValue.it_value.tv_nsec=std::chrono::duration_cast<std::chrono::nanoseconds>(delta).count()%1000000000;
     //周期触发间隔，此处=0只触发一次
     newValue.it_interval.tv_sec=0;
     newValue.it_interval.tv_nsec=0;
-    ::timerfd_settime(timerfd_,0,&newValue,nullptr);
+    if(::timerfd_settime(timerfd_,0,&newValue,nullptr)==-1){
+        const int savedErrno=errno;
+        const std::error_code ec(savedErrno, std::system_category());
+        LOG_ERROR("timerfd_settime failed: "+ec.message());
+        return false;
+    }
+    return true;
+}
+
+bool TimerQueue::disarmTimerfd() noexcept{
+    itimerspec newValue{};
+    if(::timerfd_settime(timerfd_,0,&newValue,nullptr)==-1){
+        const int savedErrno=errno;
+        LOG_ERROR("timerfd_settime failed: "+std::string(std::strerror(savedErrno)));
+        return false;
+    }
+    return true;
 }

@@ -11,6 +11,7 @@ public:
 
     bool valid() const{return sequence_!=0;};//判断是否为有效定时器句柄
     uint64_t sequence()const {return sequence_;};
+    EventLoop* ownerLoop()const noexcept{return loop_;}//用于cancel时检查Timer是否属于当前evetLoop
 
 private:
     uint64_t sequence_;//唯一标识一个Timer

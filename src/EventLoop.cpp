@@ -25,6 +25,7 @@ EventLoop:: EventLoop():looping(false),epollfd_(-1),activeEvents_(EPOLL_MAX_EVEN
     timerQueue_=std::make_unique<TimerQueue>(this);
 }
 EventLoop:: ~EventLoop(){
+    timerQueue_.reset();
     if(wakeupChannel_){
         wakeupChannel_->disableAll();
         if(wakeupChannel_->inEpoll()){

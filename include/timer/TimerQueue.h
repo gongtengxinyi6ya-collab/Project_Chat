@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <cstdint>
 #include <utility>
+#include <mutex>
 
 #include "timer/TimerId.h"
 #include "timer/TimerTypes.h"
@@ -30,7 +31,8 @@ public:
     void cancelInLoop(TimerId timerId);//在所属EventLoop线程执行，取消定时器
     void handleRead();//timerfd可读事件回调，执行到期回调，重排下次到期时间
     std::vector<Entry> getExpired(TimePoint now);//批量取出所有到期timer
-    void resetTimerfd(TimePoint nextExpire);//重置timerfd的到期时间为nextExpire
+    bool resetTimerfd(TimePoint nextExpire)noexcept;//重置timerfd的到期时间为nextExpire
+    bool disarmTimerfd() noexcept;
 private:
     EventLoop* loop_;//所属loop
     int timerfd_;//timerfd_create返回的fd
@@ -39,7 +41,13 @@ private:
     std::set<Entry> timers_;//负责按expiration排序，begin()最早到期
      
     bool callingExpiredTimers_{false};//判断是否出土handleRead()的“执行到期回调”阶段
+    
+    std::unordered_set<uint64_t> activeExpiredTimers_;//本轮已经到期、正在或即将执行回调的Timer
     std::unordered_set<uint64_t> cancelingTimers_;//执行期被cancel的timer集合
-    std::unordered_set<uint64_t> pendingCancel_;//解决timer还未入队就cancel的竞态
+    std::unordered_set<uint64_t> pendingCancel_;//添加任务执行前就收到取消请求的Timer
+
+    mutable std::mutex pendingMutex_;
+    std::unordered_set<uint64_t> pendingAddSequences_;//跨线程提交但尚未真正加入队列的Timer
+
     std::unordered_map<uint64_t,std::unique_ptr<Timer>> timersOwned_;//作为仓库所有权
 };
