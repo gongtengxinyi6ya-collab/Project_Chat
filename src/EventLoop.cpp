@@ -8,7 +8,7 @@
 #include <stdexcept>
 EventLoop:: EventLoop():looping(false),epollfd_(-1),activeEvents_(EPOLL_MAX_EVENTS),wakeupFd_(-1),threadId_(std::this_thread::get_id())
 {
-    epollfd_=epoll_create(EPOLL_MAX_EVENTS);
+    epollfd_=epoll_create1(EPOLL_CLOEXEC);
     if(epollfd_==-1){
         throw std::runtime_error("epoll_create failed");    
     }
@@ -102,6 +102,12 @@ bool EventLoop::removeChannel(Channel* channel)noexcept
         }
         if(epoll_ctl(epollfd_,EPOLL_CTL_DEL,it->first,nullptr)==-1){
             const int savedErrno = errno;
+            if(savedErrno==ENOENT){
+                //内核无该fd，按幂等删除处理
+                channel->setInEpoll(false);
+                channels_.erase(fd);
+                return true;
+            }
             const std::error_code ec(savedErrno, std::system_category());
             LOG_ERROR("epoll_ctl del: fd: "+std::to_string(it->first)+"errno: "+ec.message());
             return false;
@@ -137,12 +143,7 @@ bool EventLoop::updateChannel(Channel* channel)noexcept
         ev.events=channel->events()|EPOLLET;//关注channel关注的事件，边缘触发
         if(epoll_ctl(epollfd_,EPOLL_CTL_ADD,fd,&ev)==-1){
             const int savedErrno = errno;
-            if(savedErrno==ENOENT){
-                //内核无该fd，按幂等删除处理
-                channel->setInEpoll(false);
-                channels_.erase(fd);
-                return true;
-            }
+        
             const std::error_code ec(savedErrno, std::system_category());
             LOG_WARN("epoll_ctl add: fd: "+std::to_string(fd)+", events: "+std::to_string(ev.events)+"errno: "+ec.message());
             return false;
@@ -185,7 +186,13 @@ void EventLoop::doPendingFunctors(){
         functors.swap(pendingFunctors_);
     }
     for(const auto& func:functors){
-        func->call();
+        try{
+            func->call();
+        }catch (const std::exception& e) {
+            LOG_ERROR("Failed to call func"+std::string(e.what()));
+        } catch (...) {
+            LOG_ERROR("Failed to call func");
+        }
     }
 
 }

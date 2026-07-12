@@ -9,6 +9,11 @@
 TimerQueue::TimerQueue(EventLoop* loop){
     loop_=loop;
     timerfd_=timerfd_create(CLOCK_MONOTONIC,TFD_NONBLOCK | TFD_CLOEXEC);
+    if(timerfd_<0){
+        int savedErrno=errno;
+        const std::error_code ec(savedErrno, std::system_category());
+        throw std::runtime_error("Failed to create timerfd , errno="+ec.message());
+    }
     timerfdChannel_=std::make_unique<Channel>(loop_,timerfd_);
     timerfdChannel_->setReadCallback(std::bind(&TimerQueue::handleRead,this));
     if(!timerfdChannel_->enableReading()){
@@ -94,7 +99,7 @@ void TimerQueue::cancelInLoop(TimerId id){
             cancelingTimers_.insert(sequence);
         }
         else{//不是本轮到期timer
-            bool wasEarliest=sequence==timers_.begin()->second?true:false;
+            bool wasEarliest=!timers_.empty()&&sequence==timers_.begin()->second;
             timers_.erase({expiration,sequence});//删除排序项
             timersOwned_.erase(it);//删除所有权
             if(wasEarliest){//删除的是最早timer

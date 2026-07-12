@@ -19,7 +19,16 @@ Acceptor::Acceptor(EventLoop* loop,std::string host,uint16_t port ,int backlog ,
 }
 Acceptor::~Acceptor(){
     if(listening_){
-        stop();
+        if(loop_->isInLoopThread()){
+            if(channel_){
+                channel_->disableAll();
+                loop_->removeChannel(channel_.get());
+                listening_=false;
+            }
+        }
+        else{
+            LOG_ERROR("acceptor is listening");
+        }
     }
     if(idleFd_>=0){
         ::close(idleFd_);

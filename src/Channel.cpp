@@ -45,6 +45,7 @@ void Channel::handleEvent()noexcept{
     };
     if(revents_&EPOLLHUP&&!(revents_&EPOLLIN)){
         invokeSafely("close",closeCallback_);
+        return;
     }
     if (revents_ & EPOLLERR) {
         invokeSafely("error", errorCallback_);
@@ -52,11 +53,14 @@ void Channel::handleEvent()noexcept{
     }
     if (revents_ & EPOLLIN) {
         if (!invokeSafely("read", readCallback_)) {
+            invokeSafely("error",errorCallback_);
             return;
         }
     }
     if (revents_ & EPOLLOUT) {
-        invokeSafely("write", writeCallback_);
+        if(!invokeSafely("write", writeCallback_)){
+            invokeSafely("error",errorCallback_);
+        }
     }
 }
 

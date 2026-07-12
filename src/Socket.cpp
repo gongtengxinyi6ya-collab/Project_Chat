@@ -51,7 +51,7 @@ void Socket::bind(const std::string& host,uint16_t port){
 //监听
 void Socket::listen(int backlog)
 {   
-    if(backlog<0){
+    if(backlog<=0){
         throw std::invalid_argument("backlog invaild");
     }
     if(::listen(listenfd_,backlog)<0){
