@@ -1,5 +1,6 @@
 #include "Channel.h"
 #include "EventLoop.h"
+#include "logger/LogMacros.h"
 Channel::Channel(EventLoop* loop,int fd):fd_(fd),events_(0),revents_(0),inEpoll_(false),loop_(loop)
 {
 
@@ -28,27 +29,34 @@ void Channel::setErrorCallback(EventCallback cb){
     errorCallback_=std::move(cb);
 }
 void Channel::handleEvent()noexcept{
+    auto invokeSafely=[this](const char* callbackName,const std::function<void()>& callback)noexcept->bool{
+        if(!callback){
+            return true;
+        }
+        try{
+            callback();
+            return true;
+        }catch (const std::exception& e) {
+            LOG_ERROR(std::string("Channel callback threw exception, fd=") +std::to_string(fd_) +", callback=" + callbackName +", error=" + e.what() );
+        } catch (...) {
+            LOG_ERROR(std::string("Channel callback threw unknown exception, fd=") +std::to_string(fd_) +", callback=" + callbackName);
+        }
+        return false;
+    };
     if(revents_&EPOLLHUP&&!(revents_&EPOLLIN)){
-        if(closeCallback_){
-            closeCallback_();
+        invokeSafely("close",closeCallback_);
+    }
+    if (revents_ & EPOLLERR) {
+        invokeSafely("error", errorCallback_);
+        return;
+    }
+    if (revents_ & EPOLLIN) {
+        if (!invokeSafely("read", readCallback_)) {
             return;
         }
     }
-    if(revents_&EPOLLERR){
-        if(errorCallback_){
-            errorCallback_();
-            return;
-        }
-    }
-    if(revents_&EPOLLIN){
-        if(readCallback_){
-            readCallback_();
-        }
-    }
-    if(revents_&EPOLLOUT){
-        if(writeCallback_){
-            writeCallback_();
-        }
+    if (revents_ & EPOLLOUT) {
+        invokeSafely("write", writeCallback_);
     }
 }
 
@@ -88,7 +96,6 @@ bool Channel::disableWriting()noexcept{
 
 void Channel::disableAll()noexcept{
     events_=0;
-    remove();
 }
 bool Channel::remove()noexcept{
     return loop_->removeChannel(this);

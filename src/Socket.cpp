@@ -21,10 +21,10 @@ Socket::~Socket(){
 //绑定端口
 void Socket::bind(const std::string& host,uint16_t port){
     if(host.empty()){
-        return;
+        throw std::invalid_argument("host invaild");
     }
-    if(port<0){
-        return;
+    if(port==0){
+        throw std::invalid_argument("port invaild");
     }
     int opt=1;
     if(::setsockopt(listenfd_,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt))<0)
@@ -52,7 +52,7 @@ void Socket::bind(const std::string& host,uint16_t port){
 void Socket::listen(int backlog)
 {   
     if(backlog<0){
-        return;
+        throw std::invalid_argument("backlog invaild");
     }
     if(::listen(listenfd_,backlog)<0){
         throw::std::runtime_error("listen() failed");
@@ -66,8 +66,9 @@ int Socket::accept(int* savedErrno)noexcept{
     socklen_t len=sizeof(client_addr);
     int clientfd=::accept4(listenfd_,(sockaddr*)&client_addr,&len,SOCK_NONBLOCK|SOCK_CLOEXEC);
     if(clientfd<0){
-        LOG_SYSERR("accept() failed");
-        *savedErrno=errno;
+        if(savedErrno){
+            *savedErrno=errno;
+        }
         return -1;
     }
     return clientfd;

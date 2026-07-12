@@ -69,6 +69,9 @@ void TimerQueue::addTimerInLoop(std::unique_ptr<Timer> timer){
     }
 }
 void TimerQueue::cancel(TimerId id){
+    if(!id.valid()||!(id.ownerLoop()==loop_)){
+        return;
+    }
     if(loop_->isInLoopThread()){
         cancelInLoop(id);
     }
@@ -87,15 +90,20 @@ void TimerQueue::cancelInLoop(TimerId id){
         auto sequence=it->second->sequence();
         if(callingExpiredTimers_&&activeExpiredTimers_.contains(sequence)){
             //属于本轮到期集合
-            loop_->cancel(id);
+            it->second->cancel();
             cancelingTimers_.insert(sequence);
         }
         else{//不是本轮到期timer
-            auto earistTimerid=timers_.begin();
+            bool wasEarliest=sequence==timers_.begin()->second?true:false;
             timers_.erase({expiration,sequence});//删除排序项
             timersOwned_.erase(it);//删除所有权
-            if(sequence==earistTimerid->second){//删除的是最早timer
-                resetTimerfd(expiration);
+            if(wasEarliest){//删除的是最早timer
+                if(timers_.empty()){
+                    disarmTimerfd();
+                }
+                else{
+                    resetTimerfd(timers_.begin()->first);
+                }
             }
         }
         
@@ -140,24 +148,41 @@ void TimerQueue::handleRead(){
 
     TimePoint now=std::chrono::steady_clock::now();
     auto expire=getExpired(now);//取出所有到期的timer
+    for(const auto& exp:expire){
+        activeExpiredTimers_.insert(exp.second);
+    }
     callingExpiredTimers_=true;
     cancelingTimers_.clear();
-
-    //执行回调阶段
-    for(auto &exp:expire){
-        auto it=timersOwned_.find(exp.second);
-        if(it==timersOwned_.end()){
-            //timersOwnded_里找不到该sequendce，说明已经被删掉，跳过
-            continue;
-        }
-        else{
-            auto timer=it->second.get();
-            if(!timer->canceled()){
-                timer->run();
+    {
+        struct Guard{
+            bool& callingExpiredTimers;
+            ~Guard(){
+                callingExpiredTimers=false;
+            }
+        }guard{callingExpiredTimers_};
+        //执行回调阶段
+        for(auto &exp:expire){
+            auto it=timersOwned_.find(exp.second);
+            if(it==timersOwned_.end()){
+                //timersOwnded_里找不到该sequendce，说明已经被删掉，跳过
+                continue;
+            }
+            else{
+                auto timer=it->second.get();
+                if(timer->canceled()){
+                    continue;
+                }
+                try{
+                    timer->run();
+                }catch (const std::exception& e) {
+                    LOG_ERROR(
+                        "Timer callback threw exception, sequence="+std::to_string(timer->sequence())+std::string(e.what()));
+                } catch (...) {
+                    LOG_ERROR( "Timer callback threw unknown exception, sequence="+ std::to_string(timer->sequence()));
+                }
             }
         }
     }
-    callingExpiredTimers_=false;
 
     //重启/清理阶段
     for(auto& exp:expire){
@@ -194,6 +219,9 @@ void TimerQueue::handleRead(){
     else{
         disarmTimerfd();//没有定时器
     }
+    //清空
+    activeExpiredTimers_.clear();
+    cancelingTimers_.clear();
 }
 
 std::vector<std::pair<TimePoint,uint64_t>> TimerQueue::getExpired(TimePoint now){

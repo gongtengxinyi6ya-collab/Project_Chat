@@ -117,6 +117,7 @@ void TcpConnection::handleWrite(){
                 //带明确errno
                 int safeErrno=errno;
                 handleError(safeErrno);
+                return ;
             }
             else{
                 const int savedErrno = errno;
@@ -285,7 +286,6 @@ void TcpConnection::connectionEstablished(){
 
     if(channel_&&!channel_->enableReading()){//开启读事件
         handleClose();
-        server_->removeConnectionInBaseLoop(shared_from_this());
         return;
     }
     startHeartbeat();//启动心跳检测

@@ -126,7 +126,7 @@ bool EventLoop::updateChannel(Channel* channel)noexcept
         if(epoll_ctl(epollfd_,EPOLL_CTL_MOD,fd,&ev)==-1){
             const int savedErrno = errno;
             const std::error_code ec(savedErrno, std::system_category());
-            LOG_WARN("epoll_ctl add: fd: "+std::to_string(fd)+", events: "+std::to_string(ev.events)+"errno: "+ec.message());
+            LOG_WARN("epoll_ctl mod: fd: "+std::to_string(fd)+", events: "+std::to_string(ev.events)+"errno: "+ec.message());
             return false;
         }
     }
@@ -137,8 +137,14 @@ bool EventLoop::updateChannel(Channel* channel)noexcept
         ev.events=channel->events()|EPOLLET;//关注channel关注的事件，边缘触发
         if(epoll_ctl(epollfd_,EPOLL_CTL_ADD,fd,&ev)==-1){
             const int savedErrno = errno;
+            if(savedErrno==ENOENT){
+                //内核无该fd，按幂等删除处理
+                channel->setInEpoll(false);
+                channels_.erase(fd);
+                return true;
+            }
             const std::error_code ec(savedErrno, std::system_category());
-            LOG_WARN("epoll_ctl mod: fd: "+std::to_string(fd)+", events: "+std::to_string(ev.events)+"errno: "+ec.message());
+            LOG_WARN("epoll_ctl add: fd: "+std::to_string(fd)+", events: "+std::to_string(ev.events)+"errno: "+ec.message());
             return false;
         }
         channel->setInEpoll(true);

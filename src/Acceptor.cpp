@@ -12,7 +12,7 @@ Acceptor::Acceptor(EventLoop* loop,std::string host,uint16_t port ,int backlog ,
     if(!loop_){
         throw std::invalid_argument("loop invalid");
     }
-    idleFd_=::open("dev/null",O_RDONLY|O_CLOEXEC);
+    idleFd_=::open("/dev/null",O_RDONLY|O_CLOEXEC);
     if(idleFd_<0){
         throw std::runtime_error("failed to open /dev/null");
     }

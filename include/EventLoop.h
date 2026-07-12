@@ -89,7 +89,6 @@ void EventLoop::runInLoop(F&& func){
     }
     else{
         queueInLoop(std::forward<F>(func));
-        wakeup();
     }
 }
 
