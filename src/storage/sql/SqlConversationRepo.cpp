@@ -94,36 +94,8 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the dataBase"};
     }
-    try{
-        //开启事务
-        SqlTransaction transation(*conn);
-        //遍历所有群成员
-        const std::string sql1=R"(
-            INSERT INTO conversations (
-            owner_account_id,
-            conversation_type,
-            target_id,
-            last_msg_id,
-            last_preview,
-            last_sender_account_id,
-            last_sender_username,
-            last_ts_ms,
-            unread_count,
-            last_read_msg_id,
-            last_read_at_ms)
-            VALUES (?, 2, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                last_msg_id = VALUES(last_msg_id),
-                last_preview = VALUES(last_preview),
-                last_sender_account_id = VALUES(last_sender_account_id),
-                last_sender_username = VALUES(last_sender_username),
-                last_ts_ms = VALUES(last_ts_ms),
-                unread_count = 0,
-                last_read_msg_id = GREATEST(conversations.last_read_msg_id,VALUES(last_read_msg_id)),
-                last_read_at_ms = GREATEST(conversations.last_read_at_ms,VALUES(last_read_at_ms))
-            )";
-        const std::string sql2=R"(
-            INSERT INTO conversations(
+    
+    std::string sql=R"(        INSERT INTO conversations (
             owner_account_id,
             conversation_type,
             target_id,
@@ -135,36 +107,82 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
             unread_count,
             last_read_msg_id,
             last_read_at_ms
-            )
-            VALUES (?, 2, ?, ?, ?, ?, ?, ?, 1,0,0)
-            ON DUPLICATE KEY UPDATE
-                last_msg_id = VALUES(last_msg_id),
-                last_preview = VALUES(last_preview),
-                last_sender_account_id = VALUES(last_sender_account_id),
-                last_sender_username = VALUES(last_sender_username),
-                last_ts_ms = VALUES(last_ts_ms),
-                unread_count = conversations.unread_count+VALUES(unread_count)
-                )";
-        for(const auto& memberAccountId:memberAccountIds){
-            if(memberAccountId==senderAccountId){
-                auto result=conn->executePrepared(sql1,{memberAccountId,groupId,msgId,finalPreview,senderAccountId,senderUsername,serverTsMs,msgId,serverTsMs});
-                if(!result.ok()){
-                    return {.status=RepoStatus::SqlError,.message=result.error};
-                }
-            }
-            else{
-                auto result=conn->executePrepared(sql2,{memberAccountId,groupId,msgId,finalPreview,senderAccountId,senderUsername,serverTsMs});
-                if(!result.ok()){
-                    return {.status=RepoStatus::SqlError,.message=result.error};
-                }
-            }
+        )
+        VALUES
+        
+        )";
+    //动态拼接VALUES占位符
+    std::vector<storage::SqlParam> params;
+    for(const auto &accountId:memberAccountIds){
+        bool first=true;
+        if(first){
+            sql+=",";
+            first=false;
+        }
+        sql+="(?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        params.emplace_back(accountId);
+        params.emplace_back(groupId);
+        params.emplace_back(accountId);
+        params.emplace_back(finalPreview);
+        params.emplace_back(senderAccountId);
+        params.emplace_back(senderUsername);
+        params.emplace_back(serverTsMs);
+    
+        if(accountId==senderAccountId){//发送者
+            params.emplace_back(0);
+            params.emplace_back(msgId);
+            params.emplace_back(serverTsMs);
+        }
+        else{
+            params.emplace_back(1);
+            params.emplace_back(0);
+            params.emplace_back(0);
+        }
     }
-    //事务提交
-        transation.commit();
-        return {.status=RepoStatus::Ok};
-    }catch(const std::exception&e){
-        return {.status=RepoStatus::Internal,.message=e.what()};
+    sql+=R"(
+    ON DUPLICATE KEY UPDATE
+        unread_count =
+            IF(
+                VALUES(last_msg_id) <= conversations.last_msg_id,
+                conversations.unread_count,
+                IF(
+                    VALUES(unread_count) = 0,
+                    0,
+                    conversations.unread_count + VALUES(unread_count)
+                )
+            ),
+        last_preview =
+            IF(
+                VALUES(last_msg_id) >= conversations.last_msg_id,
+                VALUES(last_preview),
+                conversations.last_preview
+            ),
+        last_sender_account_id =
+            IF(
+                VALUES(last_msg_id) >= conversations.last_msg_id,
+                VALUES(last_sender_account_id),
+                conversations.last_sender_account_id
+            ),
+        last_sender_username =
+            IF(
+                VALUES(last_msg_id) >= conversations.last_msg_id,
+                VALUES(last_sender_username),
+                conversations.last_sender_username
+            ),
+        last_ts_ms =
+            GREATEST(conversations.last_ts_ms, VALUES(last_ts_ms)),
+        last_read_msg_id =
+            GREATEST(conversations.last_read_msg_id, VALUES(last_read_msg_id)),
+        last_read_at_ms =
+            GREATEST(conversations.last_read_at_ms, VALUES(last_read_at_ms)),
+        last_msg_id =
+            GREATEST(conversations.last_msg_id, VALUES(last_msg_id))
+    )";
+    auto result=conn->executePrepared(sql,params);
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
     }
+    return {.status=RepoStatus::Ok};
 }
 std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConversations(const std::string& ownerAccountId,size_t limit){
     if(ownerAccountId.empty()){

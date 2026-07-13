@@ -22,6 +22,8 @@ AppConfig AppConfig::loadFromFile(const std::string& path){
         config.redisConfig_=RedisConfig::fromJson(j.value("redis",nlohmann::json::object()));
         config.healthConfig_=HealthConfig::fromJson(j.value("health",nlohmann::json::object()));
         config.maintenance_=MaintenanceConfig::fromJson(j.value("maintenance",nlohmann::json::object()));
+        config.messageAsync_=MessageAsyncConfig::fromJson(j.value("message_async",nlohmann::json::object()));
+        
         return config;
     }catch(const nlohmann::json::exception& e){
         throw std::runtime_error("Failed to parse config file: "+std::string(e.what()));
@@ -38,6 +40,7 @@ void AppConfig::applyEnvOverrides(){
     idConfig_.applyEnvOverrides();
     redisConfig_.loadFromEnv();
     healthConfig_.loadFromEnv();
+    messageAsync_.applyEnvOverrides();
 }
 void AppConfig::validateOrThrow() const{
     server_.validateOrThrow();
@@ -50,6 +53,7 @@ void AppConfig::validateOrThrow() const{
     redisConfig_.validateOrThrow();
     healthConfig_.validateOrThrow();
     maintenance_.validateOrThrow();
+    messageAsync_.validateOrThrow();
 }
 std::string AppConfig::dumpSummary() const{
     std::stringstream ss;

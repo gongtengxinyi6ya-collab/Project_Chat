@@ -153,7 +153,12 @@ void TcpServer::newConnection(int fd){
         }
         auto conn=std::make_shared<TcpConnection>(ioloop,fd,this,config_);
         conn->setMessageCallback([this](std::shared_ptr<TcpConnection> conn,const std::string& msg){
-            baseloop_->runInLoop([this,conn,msg](){
+            std::weak_ptr<TcpConnection> weakConn=conn;
+            baseloop_->runInLoop([this,weakConn,msg](){
+                auto conn=weakConn.lock();
+                if(!conn||conn->isClosed()||stopping_.load(std::memory_order_acquire)){
+                    return;
+                }
                 onMessage(conn,msg);
             });
         });
@@ -200,10 +205,12 @@ void TcpServer::removeConnectionInBaseLoop(const std::shared_ptr<TcpConnection>&
 }
 
 void TcpServer::onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& msg){
-    //转发给IM业务对象处理
-    if(stopping_.load(std::memory_order_acquire)){
-        return;
+    if(!conn||conn->isClosed()||stopping_.load(std::memory_order_acquire))
+    {
+        return ;
     }
+    //转发给IM业务对象处理
+    
     imService_->onMessage(conn,msg);    
 }
 void TcpServer::setThreadNum(int numThreads){

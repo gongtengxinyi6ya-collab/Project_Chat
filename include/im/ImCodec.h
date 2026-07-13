@@ -39,4 +39,19 @@ struct HistoryQueryParseResult {
     MessageAckParseResult parseMessageAck(const Request& req,size_t maxBatchSize);//从JSON请求中解析msgIds和offlineIds
     std::optional<im::Response> parseUint64ArrayField(const Request&req,const std::string&field,std::vector<uint64_t>& out,size_t maxBatchSize);
     HistoryQueryParseResult parseHistoryQuery(const Request&req,size_t defaultLimit,size_t maxLimit);//统一解析历史消息请求
+
+
+
+enum class DispatchMode : std::uint8_t {//消息响应模式
+    Immediate,//立即响应
+    Deferred//延迟响应
+};
+
+struct DispatchResult {//分发结果
+    DispatchMode mode{DispatchMode::Immediate};
+    std::optional<Response> response;
+};
+static DispatchResult immediate(Response response);//现有同步handle
+static DispatchResult deferred();//异步任务入队成功，本次onMessage不发送响应
+bool shouldRespond()noexcept;//
 }
