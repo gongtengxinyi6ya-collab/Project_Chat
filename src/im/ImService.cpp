@@ -1009,6 +1009,7 @@ LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
         case im::ErrorCode::INVITE_REQUIRES_FRIEND:
         case im::ErrorCode::GROUP_MEMBER_LIMIT_REACHED:
         case im::ErrorCode::JOIN_REQUEST_NOT_FOUND:
+        case im::ErrorCode::RATE_LIMITED:
             return LogLevel::WARN;
         case im::ErrorCode::INTERNAL:
             return LogLevel::ERROR;

@@ -6,15 +6,26 @@
 #include <netinet/in.h>
 #include <signal.h>
 #include <sys/socket.h>
+#include <poll.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
-#include <string>
+#include <limits>
 #include <optional>
+#include <sstream>
+#include <string>
 #include <thread>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include "logger/LogMacros.h"
 #include "im/ImMessage.h"
@@ -83,7 +94,7 @@ public:
         body["groupName"]=groupName;
         return body.dump();
     }
-    std::string buildJoinReq(ClientState& state,std::string groupId){
+    std::string buildJoinReq(ClientState& state,std::string groupId,std::string message="request to join group"){
         nlohmann::json body;
         body["ver"]=1;
         body["type"]=im::msgTypeToInt(im::MsgType::JOIN_GROUP_REQ);
@@ -92,6 +103,19 @@ public:
         body["to"]="";
         body["seq"]=state.allocSeq();
         body["groupId"]=groupId;
+        body["message"]=message;
+        return body.dump();
+    }
+    std::string buildApplyGroupJoinReq(ClientState& state,const std::string& groupId,const std::string& message){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::APPLY_GROUP_JOIN_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["groupId"]=groupId;
+        body["message"]=message;
         return body.dump();
     }
     std::string buildLeaveReq(ClientState& state,std::optional<std::string> groupId){
@@ -375,8 +399,14 @@ std::optional<std::string> tryParseCommandLine(const std::string line,ClientStat
             std::cerr<<"Please authenticate first using /login <accountId> <password>"<<std::endl;
             return std::nullopt;
         }
-        std::string groupId=line.substr(7);
-        return builder.buildJoinReq(state,groupId);
+        std::string arguments=line.substr(7);
+        size_t firstSpace=arguments.find(' ');
+        if(firstSpace==std::string::npos){
+            return builder.buildJoinReq(state,arguments);
+        }
+        std::string groupId=arguments.substr(0,firstSpace);
+        std::string message=arguments.substr(firstSpace+1);
+        return builder.buildJoinReq(state,groupId,message);
     }
     if(line=="/gleave"){
         if(state.accountId.empty()){
@@ -594,6 +624,18 @@ void printPretty(const std::string& payload,ClientState& state){
                         state.groupIds.insert(json["data"]["groupId"]);
                     }
                 }
+                break;
+            }
+            case im::MsgType::APPLY_GROUP_JOIN_RESP:{
+                if(!json.value("ok",false)){
+                    std::cout<<"GROUP_JOIN_APPLY_RESP: failed msg: "<<json.value("msg","")<<std::endl;
+                    break;
+                }
+                const auto& data=json["data"];
+                std::cout<<"GROUP_JOIN_APPLY_RESP: success groupId="<<data.value("groupId","")
+                         <<" submitted="<<data.value("submitted",false)
+                         <<" alreadyPending="<<data.value("alreadyPending",false)
+                         <<" alreadyIn="<<data.value("alreadyIn",false)<<std::endl;
                 break;
             }
             case im::MsgType::LEAVE_GROUP_RESP:{
@@ -905,6 +947,463 @@ static bool sendAllFramed(int fd, const std::string& payload) {
     return true;
 }
 
+struct BatchRegisterOptions {
+    std::string host{"127.0.0.1"};
+    int port{8080};
+    int count{0};
+    std::string usernamePrefix;
+    std::string password;
+    std::string groupId;
+    std::string applicationMessage{"load test account application"};
+    std::string outputPath{"tools/load_test_accounts.json"};
+    int intervalMs{6500};
+    int timeoutMs{5000};
+    int maxRateLimitRetries{3};
+};
+
+static void printBatchRegisterUsage(const char* program) {
+    std::cout
+        << "Usage:\n"
+        << "  " << program << " --batch-register [options]\n\n"
+        << "Required options:\n"
+        << "  --count N                    Number of accounts to register\n"
+        << "  --username-prefix PREFIX     Generated username prefix\n"
+        << "  --group-id ID                Group to apply to join\n"
+        << "  --password PASSWORD          Shared password for generated accounts\n\n"
+        << "Optional options:\n"
+        << "  --host HOST                  Default 127.0.0.1\n"
+        << "  --port PORT                  Default 8080\n"
+        << "  --output PATH                Default tools/load_test_accounts.json\n"
+        << "  --interval-ms N              Delay between registrations, default 6500\n"
+        << "  --timeout-ms N               Per-request timeout, default 5000\n"
+        << "  --max-rate-limit-retries N   Default 3\n"
+        << "  --application-message TEXT   Join application message\n\n"
+        << "If --password is omitted, PROJECT_CHAT_BENCH_PASSWORD is used.\n";
+}
+
+static bool parsePositiveInt(const std::string& value, int& output, bool allowZero=false) {
+    try {
+        size_t consumed=0;
+        long parsed=std::stol(value,&consumed);
+        if(consumed!=value.size()||parsed>(std::numeric_limits<int>::max())||
+           (allowZero ? parsed<0 : parsed<=0)){
+            return false;
+        }
+        output=static_cast<int>(parsed);
+        return true;
+    }
+    catch(const std::exception&){
+        return false;
+    }
+}
+
+static std::optional<BatchRegisterOptions> parseBatchRegisterOptions(int argc,char** argv) {
+    BatchRegisterOptions options;
+    for(int index=2;index<argc;++index){
+        std::string option=argv[index];
+        if(option=="--help"){
+            printBatchRegisterUsage(argv[0]);
+            return std::nullopt;
+        }
+        if(index+1>=argc){
+            std::cerr<<"missing value for "<<option<<std::endl;
+            return std::nullopt;
+        }
+        std::string value=argv[++index];
+        if(option=="--host"){
+            options.host=std::move(value);
+        }
+        else if(option=="--port"){
+            if(!parsePositiveInt(value,options.port)||options.port>65535){
+                std::cerr<<"invalid --port\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--count"){
+            if(!parsePositiveInt(value,options.count)){
+                std::cerr<<"invalid --count\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--username-prefix"){
+            options.usernamePrefix=std::move(value);
+        }
+        else if(option=="--password"){
+            options.password=std::move(value);
+        }
+        else if(option=="--group-id"){
+            options.groupId=std::move(value);
+        }
+        else if(option=="--output"){
+            options.outputPath=std::move(value);
+        }
+        else if(option=="--interval-ms"){
+            if(!parsePositiveInt(value,options.intervalMs,true)){
+                std::cerr<<"invalid --interval-ms\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--timeout-ms"){
+            if(!parsePositiveInt(value,options.timeoutMs)){
+                std::cerr<<"invalid --timeout-ms\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--max-rate-limit-retries"){
+            if(!parsePositiveInt(value,options.maxRateLimitRetries,true)){
+                std::cerr<<"invalid --max-rate-limit-retries\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--application-message"){
+            options.applicationMessage=std::move(value);
+        }
+        else{
+            std::cerr<<"unknown batch option: "<<option<<std::endl;
+            return std::nullopt;
+        }
+    }
+
+    if(options.password.empty()){
+        if(const char* password=std::getenv("PROJECT_CHAT_BENCH_PASSWORD")){
+            options.password=password;
+        }
+    }
+    if(options.count<=0||options.usernamePrefix.empty()||options.password.empty()||
+       options.groupId.empty()||options.outputPath.empty()){
+        std::cerr<<"--count, --username-prefix, --password and --group-id are required\n";
+        printBatchRegisterUsage(argv[0]);
+        return std::nullopt;
+    }
+    if(options.intervalMs<6000){
+        std::cerr<<"warning: interval below 6000 ms may trigger the default 10 registrations/minute IP limit\n";
+    }
+    return options;
+}
+
+class BatchConnection {
+public:
+    BatchConnection()=default;
+    ~BatchConnection(){
+        close();
+    }
+    BatchConnection(const BatchConnection&)=delete;
+    BatchConnection& operator=(const BatchConnection&)=delete;
+
+    bool connectTo(const std::string& host,int port){
+        close();
+        fd_=::socket(AF_INET,SOCK_STREAM,0);
+        if(fd_<0){
+            lastError_="socket failed: "+std::string(std::strerror(errno));
+            return false;
+        }
+        sockaddr_in address{};
+        address.sin_family=AF_INET;
+        address.sin_port=htons(static_cast<uint16_t>(port));
+        if(::inet_pton(AF_INET,host.c_str(),&address.sin_addr)!=1){
+            lastError_="invalid IPv4 address: "+host;
+            close();
+            return false;
+        }
+        if(::connect(fd_,reinterpret_cast<sockaddr*>(&address),sizeof(address))<0){
+            lastError_="connect failed: "+std::string(std::strerror(errno));
+            close();
+            return false;
+        }
+        return true;
+    }
+
+    std::optional<nlohmann::json> request(const std::string& payload,int timeoutMs){
+        nlohmann::json requestDocument;
+        try{
+            requestDocument=nlohmann::json::parse(payload);
+        }
+        catch(const std::exception& e){
+            lastError_="invalid request JSON: "+std::string(e.what());
+            return std::nullopt;
+        }
+        const uint64_t requestId=requestDocument.value("req_id",uint64_t{0});
+        if(fd_<0||!sendAllFramed(fd_,payload)){
+            lastError_="failed to send framed request";
+            return std::nullopt;
+        }
+
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(timeoutMs);
+        while(std::chrono::steady_clock::now()<deadline){
+            while(input_.readableBytes()>=4){
+                const uint32_t length=input_.peekUInt32();
+                if(length==0||length>kMaxFrameLen){
+                    lastError_="invalid response frame length: "+std::to_string(length);
+                    return std::nullopt;
+                }
+                if(input_.readableBytes()<4+length){
+                    break;
+                }
+                input_.retrieveUInt32();
+                std::string frame=input_.retrieveAsString(length);
+                if(frame=="PING"){
+                    if(!sendAllFramed(fd_,"PONG")){
+                        lastError_="failed to send heartbeat PONG";
+                        return std::nullopt;
+                    }
+                    continue;
+                }
+                try{
+                    auto response=nlohmann::json::parse(frame);
+                    if(response.value("req_id",uint64_t{0})==requestId){
+                        return response;
+                    }
+                }
+                catch(const std::exception&){
+                    continue;
+                }
+            }
+
+            const auto remaining=std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline-std::chrono::steady_clock::now()).count();
+            if(remaining<=0){
+                break;
+            }
+            pollfd descriptor{fd_,POLLIN,0};
+            int pollResult;
+            do{
+                pollResult=::poll(&descriptor,1,static_cast<int>(remaining));
+            }while(pollResult<0&&errno==EINTR);
+            if(pollResult==0){
+                break;
+            }
+            if(pollResult<0||(descriptor.revents&(POLLERR|POLLHUP|POLLNVAL))!=0){
+                lastError_="connection closed while waiting for response";
+                return std::nullopt;
+            }
+            char buffer[4096];
+            ssize_t received;
+            do{
+                received=::recv(fd_,buffer,sizeof(buffer),0);
+            }while(received<0&&errno==EINTR);
+            if(received<=0){
+                lastError_=received==0?"server closed connection":"recv failed: "+std::string(std::strerror(errno));
+                return std::nullopt;
+            }
+            input_.append(buffer,static_cast<size_t>(received));
+        }
+        lastError_="request timed out after "+std::to_string(timeoutMs)+" ms";
+        return std::nullopt;
+    }
+
+    const std::string& lastError()const{
+        return lastError_;
+    }
+
+private:
+    void close(){
+        if(fd_>=0){
+            ::shutdown(fd_,SHUT_RDWR);
+            ::close(fd_);
+            fd_=-1;
+        }
+        if(input_.readableBytes()>0){
+            input_.retrieveAll();
+        }
+    }
+
+    int fd_{-1};
+    Buffer input_;
+    std::string lastError_;
+};
+
+static std::string responseMessage(const nlohmann::json& response){
+    if(response.contains("msg")&&response["msg"].is_string()){
+        return response["msg"].get<std::string>();
+    }
+    return "unknown response error";
+}
+
+static bool isRateLimited(const nlohmann::json& response){
+    return !response.value("ok",false)&&
+           response.value("code",-1)==static_cast<int>(im::ErrorCode::RATE_LIMITED);
+}
+
+static int retryAfterMs(const nlohmann::json& response,int fallbackMs){
+    if(response.contains("data")&&response["data"].is_object()){
+        return response["data"].value("retryAfterMs",fallbackMs);
+    }
+    return fallbackMs;
+}
+
+static bool writeBatchRegisterResult(const BatchRegisterOptions& options,
+                                     const nlohmann::json& accounts,
+                                     const nlohmann::json& registeredNotApplied,
+                                     const nlohmann::json& failures){
+    nlohmann::json document{
+        {"groupId",options.groupId},
+        {"accounts",accounts},
+        {"registeredNotApplied",registeredNotApplied},
+        {"failures",failures},
+        {"summary",{
+            {"requested",options.count},
+            {"applicationAccepted",accounts.size()},
+            {"registeredNotApplied",registeredNotApplied.size()},
+            {"registrationFailed",failures.size()}
+        }}
+    };
+    std::filesystem::path outputPath(options.outputPath);
+    std::error_code error;
+    if(outputPath.has_parent_path()){
+        std::filesystem::create_directories(outputPath.parent_path(),error);
+        if(error){
+            std::cerr<<"failed to create output directory: "<<error.message()<<std::endl;
+            return false;
+        }
+    }
+    std::ofstream output(outputPath,std::ios::trunc);
+    if(!output){
+        std::cerr<<"failed to open output file: "<<options.outputPath<<std::endl;
+        return false;
+    }
+    output<<document.dump(2)<<'\n';
+    return output.good();
+}
+
+static int runBatchRegister(int argc,char** argv){
+    auto optionsResult=parseBatchRegisterOptions(argc,argv);
+    if(!optionsResult){
+        return argc>=3&&std::string(argv[2])=="--help"?0:2;
+    }
+    const BatchRegisterOptions options=std::move(*optionsResult);
+    nlohmann::json accounts=nlohmann::json::array();
+    nlohmann::json registeredNotApplied=nlohmann::json::array();
+    nlohmann::json failures=nlohmann::json::array();
+    const int width=std::max(3,static_cast<int>(std::to_string(options.count).size()));
+
+    std::cout<<"Batch registration started: count="<<options.count
+             <<" groupId="<<options.groupId
+             <<" intervalMs="<<options.intervalMs<<std::endl;
+    std::cout<<"Credentials contain plaintext test passwords; protect the output file.\n";
+
+    for(int index=1;index<=options.count;++index){
+        std::ostringstream usernameStream;
+        usernameStream<<options.usernamePrefix<<std::setw(width)<<std::setfill('0')<<index;
+        const std::string username=usernameStream.str();
+        bool finished=false;
+
+        for(int attempt=0;attempt<=options.maxRateLimitRetries&&!finished;++attempt){
+            BatchConnection connection;
+            if(!connection.connectTo(options.host,options.port)){
+                failures.push_back({{"username",username},{"step","connect"},{"error",connection.lastError()}});
+                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username<<" connect failed: "
+                         <<connection.lastError()<<std::endl;
+                finished=true;
+                break;
+            }
+
+            ClientState state;
+            state.username=username;
+            CommandBuilder builder;
+            auto registerResponse=connection.request(
+                builder.buildRegisterReq(state,username,options.password),options.timeoutMs);
+            if(!registerResponse){
+                failures.push_back({{"username",username},{"step","register"},{"error",connection.lastError()}});
+                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username<<" register failed: "
+                         <<connection.lastError()<<std::endl;
+                finished=true;
+                break;
+            }
+            if(isRateLimited(*registerResponse)&&attempt<options.maxRateLimitRetries){
+                const int waitMs=retryAfterMs(*registerResponse,options.intervalMs)+200;
+                std::cerr<<"["<<index<<'/'<<options.count<<"] registration rate limited; retrying in "
+                         <<waitMs<<" ms"<<std::endl;
+                std::this_thread::sleep_for(std::chrono::milliseconds(waitMs));
+                continue;
+            }
+            if(!registerResponse->value("ok",false)){
+                failures.push_back({{"username",username},{"step","register"},
+                                    {"code",registerResponse->value("code",-1)},
+                                    {"error",responseMessage(*registerResponse)}});
+                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username<<" register rejected: "
+                         <<responseMessage(*registerResponse)<<std::endl;
+                finished=true;
+                break;
+            }
+            if(!registerResponse->contains("data")||
+               !(*registerResponse)["data"].contains("accountId")||
+               !(*registerResponse)["data"]["accountId"].is_string()){
+                failures.push_back({{"username",username},{"step","register"},{"error","missing accountId"}});
+                std::cerr<<"["<<index<<'/'<<options.count<<"] register response missing accountId\n";
+                finished=true;
+                break;
+            }
+
+            const std::string accountId=(*registerResponse)["data"]["accountId"].get<std::string>();
+            state.accountId=accountId;
+            nlohmann::json credential{{"accountId",accountId},{"password",options.password},
+                                      {"username",username},{"groupId",options.groupId}};
+            auto loginResponse=connection.request(
+                builder.buildLoginReq(state,accountId,options.password),options.timeoutMs);
+            if(!loginResponse||!loginResponse->value("ok",false)){
+                credential["step"]="login";
+                credential["error"]=loginResponse?responseMessage(*loginResponse):connection.lastError();
+                registeredNotApplied.push_back(std::move(credential));
+                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username
+                         <<" registered but login failed\n";
+                finished=true;
+                break;
+            }
+
+            auto applyResponse=connection.request(
+                builder.buildApplyGroupJoinReq(state,options.groupId,options.applicationMessage),
+                options.timeoutMs);
+            if(!applyResponse||!applyResponse->value("ok",false)){
+                credential["step"]="apply_group";
+                credential["error"]=applyResponse?responseMessage(*applyResponse):connection.lastError();
+                if(applyResponse){
+                    credential["code"]=applyResponse->value("code",-1);
+                }
+                registeredNotApplied.push_back(std::move(credential));
+                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username
+                         <<" registered but group application failed\n";
+                finished=true;
+                break;
+            }
+
+            const auto& data=(*applyResponse)["data"];
+            std::string applicationStatus="accepted";
+            if(data.value("alreadyIn",false)){
+                applicationStatus="already_in";
+            }
+            else if(data.value("alreadyPending",false)){
+                applicationStatus="already_pending";
+            }
+            else if(data.value("submitted",false)){
+                applicationStatus="submitted";
+            }
+            credential["applicationStatus"]=applicationStatus;
+            accounts.push_back(std::move(credential));
+            std::cout<<"["<<index<<'/'<<options.count<<"] registered "<<username
+                     <<" accountId="<<accountId<<" application="<<applicationStatus<<std::endl;
+            finished=true;
+        }
+
+        if(!finished){
+            failures.push_back({{"username",username},{"step","register"},
+                                {"error","rate-limit retry count exhausted"}});
+        }
+        if(!writeBatchRegisterResult(options,accounts,registeredNotApplied,failures)){
+            return 3;
+        }
+        if(index<options.count&&options.intervalMs>0){
+            std::this_thread::sleep_for(std::chrono::milliseconds(options.intervalMs));
+        }
+    }
+
+    std::cout<<"Batch registration finished: applications="<<accounts.size()
+             <<" registered_not_applied="<<registeredNotApplied.size()
+             <<" failures="<<failures.size()<<std::endl;
+    std::cout<<"Result file: "<<options.outputPath<<std::endl;
+    std::cout<<"Approve pending applications before using the accounts for load testing.\n";
+    return failures.empty()&&registeredNotApplied.empty()?0:4;
+}
+
 static void recvLoop(int fd, std::atomic<bool>& running,ClientState& state) {
     Buffer in;
     char tmp[4096];
@@ -954,6 +1453,10 @@ static void recvLoop(int fd, std::atomic<bool>& running,ClientState& state) {
 
 int main(int argc, char** argv) {
     signal(SIGPIPE, SIG_IGN);
+
+    if(argc>=2&&std::string(argv[1])=="--batch-register"){
+        return runBatchRegister(argc,argv);
+    }
 
     const char* ip = "127.0.0.1";
     int port = 8080;
