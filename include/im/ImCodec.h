@@ -49,9 +49,12 @@ enum class DispatchMode : std::uint8_t {//消息响应模式
 
 struct DispatchResult {//分发结果
     DispatchMode mode{DispatchMode::Immediate};
-    std::optional<Response> response;
+    std::optional<Response> response{std::nullopt};
+
+    static DispatchResult immediate(Response response);//现有同步handle
+    static DispatchResult deferred();//异步任务入队成功，本次onMessage不发送响应
+    bool shouldRespond()const noexcept;//
 };
-static DispatchResult immediate(Response response);//现有同步handle
-static DispatchResult deferred();//异步任务入队成功，本次onMessage不发送响应
-bool shouldRespond()noexcept;//
+
+
 }

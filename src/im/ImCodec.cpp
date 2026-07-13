@@ -1,26 +1,26 @@
 #include "im/ImCodec.h"
-
-std::variant<im::Request,im::Response> im::tryParse(std::string_view payload){
+namespace im{
+std::variant<Request,Response> tryParse(std::string_view payload){
     try{
         //JSON parse
         auto j=nlohmann::json::parse(payload);
         //校验ver/type/req_id
         if(!j.contains("ver")||!j.contains("type")||!j.contains("req_id")){
-            return im::Response{.ver=1,.req_id=0,.type=im::MsgType::ERR,.ok=false,.code=im::ErrorCode::MISSING_FIELD,.msg="Missing required field",.data=nlohmann::json{}};
+            return Response{.ver=1,.req_id=0,.type=MsgType::ERR,.ok=false,.code=ErrorCode::MISSING_FIELD,.msg="Missing required field",.data=nlohmann::json{}};
         }
         uint32_t ver=j["ver"].get<uint32_t>();
         if(ver!=1){
-            return im::Response{.ver=ver,.req_id=0,.type=im::MsgType::ERR,.ok=false,.code=im::ErrorCode::UNSUPPORTED_VER,.msg="Unsupported protocol version",.data=nlohmann::json{}};
+            return Response{.ver=ver,.req_id=0,.type=MsgType::ERR,.ok=false,.code=ErrorCode::UNSUPPORTED_VER,.msg="Unsupported protocol version",.data=nlohmann::json{}};
         }
         uint32_t type_int=j["type"].get<uint32_t>();
-        auto type_opt=im::msgTypeFromInt(type_int);
+        auto type_opt=msgTypeFromInt(type_int);
         if (!type_opt.has_value()){
-            return im::Response{.ver=ver,.req_id=0,.type=im::MsgType::ERR,.ok=false,.code=im::ErrorCode::UNKNOWN_TYPE,.msg="Unknown message type",.data=nlohmann::json{}};
+            return Response{.ver=ver,.req_id=0,.type=MsgType::ERR,.ok=false,.code=ErrorCode::UNKNOWN_TYPE,.msg="Unknown message type",.data=nlohmann::json{}};
         }
-        im::MsgType type=type_opt.value();
+        MsgType type=type_opt.value();
         uint64_t req_id=j["req_id"].get<uint64_t>();
         //构造Request
-        im::Request req{.ver=ver,.type=type,.req_id=req_id,.seq=0,.from="",.to="",.body=j};
+        Request req{.ver=ver,.type=type,.req_id=req_id,.seq=0,.from="",.to="",.body=j};
         //可选字段from/to/seq
         if(j.contains("seq")){
             req.seq=j["seq"].get<uint64_t>();
@@ -33,15 +33,15 @@ std::variant<im::Request,im::Response> im::tryParse(std::string_view payload){
         }
         return req;
     }catch(const nlohmann::json::parse_error& e){
-        return im::Response{.ver=1,.req_id=0,.type=im::MsgType::ERR,.ok=false,.code=im::ErrorCode::BAD_JSON,.msg="Invalid JSON format",.data=nlohmann::json{}};
+        return Response{.ver=1,.req_id=0,.type=MsgType::ERR,.ok=false,.code=ErrorCode::BAD_JSON,.msg="Invalid JSON format",.data=nlohmann::json{}};
     }
 }
 //
-std::string im::encodeResponse(const im::Response& resp){
+std::string encodeResponse(const Response& resp){
     nlohmann::json j;
     j["ver"]=resp.ver;
     j["req_id"]=resp.req_id;
-    j["type"]=im::msgTypeToInt(resp.type);
+    j["type"]=msgTypeToInt(resp.type);
     j["ok"]=resp.ok;
     j["code"]=static_cast<uint16_t>(resp.code);
     j["msg"]=resp.msg;
@@ -49,8 +49,8 @@ std::string im::encodeResponse(const im::Response& resp){
     return j.dump();
 }
 
-im::SyncParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit,size_t maxLimit){
-    im::SyncParseResult result{.ok=false};
+SyncParseResult parseSyncCursors(const Request& req,size_t defaultLimit,size_t maxLimit){
+    SyncParseResult result{.ok=false};
     if(!req.body.contains("cursors")){
         return {.ok=true};
     }
@@ -134,13 +134,13 @@ im::SyncParseResult im::parseSyncCursors(const Request& req,size_t defaultLimit,
     return result;
 }
 //Response辅助函数
-im::Response im::makeErr(const im::Request& req,im::ErrorCode code,const std::string& msg,nlohmann::json data){
-    return im::Response{.ver=req.ver,.req_id=req.req_id,.type=im::MsgType::ERR,.ok=false,.code=code,.msg=msg,.data=data};
+Response makeErr(const Request& req,ErrorCode code,const std::string& msg,nlohmann::json data){
+    return Response{.ver=req.ver,.req_id=req.req_id,.type=MsgType::ERR,.ok=false,.code=code,.msg=msg,.data=data};
 }
-im::Response im::makeOk(const im::Request& req,im::MsgType type,nlohmann::json data,std::string mag){
-    return im::Response{.ver=req.ver,.req_id=req.req_id,.type=type,.ok=true,.code=im::ErrorCode::OK,.msg=mag,.data=data};
+Response makeOk(const Request& req,MsgType type,nlohmann::json data,std::string mag){
+    return Response{.ver=req.ver,.req_id=req.req_id,.type=type,.ok=true,.code=ErrorCode::OK,.msg=mag,.data=data};
 }
-size_t im::parseLimit(const Request& req,const std::string& key,size_t defaultValue,size_t limitValue){
+size_t parseLimit(const Request& req,const std::string& key,size_t defaultValue,size_t limitValue){
     if(req.body.contains(key)){
         size_t result=defaultValue;
         if(req.body[key].is_number_unsigned()){
@@ -156,7 +156,7 @@ size_t im::parseLimit(const Request& req,const std::string& key,size_t defaultVa
     }
     return defaultValue;
 }
-std::optional<im::Response> im::parseUint64ArrayField(const im::Request&req,const std::string&field,std::vector<uint64_t>& out,size_t maxBatchSize){
+std::optional<Response> parseUint64ArrayField(const Request&req,const std::string&field,std::vector<uint64_t>& out,size_t maxBatchSize){
     if (!req.body.contains(field)) {
         return std::nullopt;
     }
@@ -189,7 +189,7 @@ std::optional<im::Response> im::parseUint64ArrayField(const im::Request&req,cons
 }
 
 
-im::MessageAckParseResult im::parseMessageAck(const Request& req,size_t maxBatchSize){
+MessageAckParseResult parseMessageAck(const Request& req,size_t maxBatchSize){
     MessageAckParseResult result;
 
     auto msgIdsResult = parseUint64ArrayField(req,"msgIds",result.payload.msgIds,maxBatchSize);
@@ -207,7 +207,7 @@ im::MessageAckParseResult im::parseMessageAck(const Request& req,size_t maxBatch
     return result;
 }
 
-im::HistoryQueryParseResult im::parseHistoryQuery(const Request&req,size_t defaultLimit,size_t maxLimit){
+HistoryQueryParseResult parseHistoryQuery(const Request&req,size_t defaultLimit,size_t maxLimit){
     size_t limit=0;
     if (req.body.contains("limit")) {//存在字段
         if (req.body["limit"].is_number_unsigned()) {
@@ -276,4 +276,15 @@ im::HistoryQueryParseResult im::parseHistoryQuery(const Request&req,size_t defau
     }
     HistoryQuery query{.mode=mode,.beforeMsgId=beforeMsgId,.lastMsgId=lastMsgId,.limit=limit};
     return {.ok=true,.query=query};
+}
+
+DispatchResult DispatchResult::immediate(Response response){
+    return DispatchResult{.mode=DispatchMode::Immediate,.response=std::move(response)};
+}
+DispatchResult DispatchResult::deferred(){
+    return {.mode=DispatchMode::Deferred,.response=std::nullopt};
+}
+bool DispatchResult::shouldRespond()const noexcept{
+    return mode==DispatchMode::Immediate&&response.has_value();
+}
 }

@@ -27,68 +27,73 @@
 
 #include "logger/LogMacros.h"
 
-im::Imservice::Imservice(uint32_t supportedVer,const ImConfig& config,const IdConfig& idconfig):supportedVer_(supportedVer),imConfig_(config),idConfig_(idconfig),idGenerator_(idConfig_.snowflakeNodeId,idConfig_.snowflakeEpochMs){}
+namespace im{
+Imservice::Imservice(uint32_t supportedVer,const ImConfig& config,const IdConfig& idconfig):supportedVer_(supportedVer),imConfig_(config),idConfig_(idconfig),idGenerator_(idConfig_.snowflakeNodeId,idConfig_.snowflakeEpochMs){}
 
-void im::Imservice::setSendToConnKey(SendToConnKeyFn fn){
+void Imservice::setSendToConnKey(SendToConnKeyFn fn){
     sendToConnKey_=std::move(fn);
 }
-im::Imservice::~Imservice()=default;
-void im::Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const std::string &payload){
+Imservice::~Imservice()=default;
+void Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const std::string &payload){
     ConnKey key=conn->fd();
     auto &session=sessionManager_.getOrCreate(key);
     if (session.peerIp_.empty()) {
         session.peerIp_ = conn->peerIp();
         session.peerPort_ = conn->peerPort();
     }
-    auto req_or_resp=im::tryParse(payload);
-    if(auto req_ptr=std::get_if<im::Request>(&req_or_resp)){
+    auto req_or_resp=tryParse(payload);
+    if(auto req_ptr=std::get_if<Request>(&req_or_resp)){
         LOG_INFO_CTX("im request in",makeReqCtx(key,*req_ptr,session,"REQ_IN"));
         Response resp;
         try{
-            resp=dispatcResqest(*req_ptr,key,session);
+            auto result=dispatcRequest(*req_ptr,key,session,conn);
+            if(result.mode==DispatchMode::Immediate){
+                sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT");
+            }
+            else{
+                return;
+            }
         }catch(const std::exception& e){
-            resp=makeErr(*req_ptr,im::ErrorCode::INTERNAL,"Internal server error:"+std::string(e.what()));
+            resp=makeErr(*req_ptr,ErrorCode::INTERNAL,"Internal server error:"+std::string(e.what()));
             //记录DISPATCH_EXCEPTION日志，包含请求上下文和异常信息
             LOG_ERROR_CTX("Exception occurred while dispatching request",makeReqCtx(key,*req_ptr,session,"DISPATCH_EXCEPTION"));
 
         }catch(...){
-            resp=makeErr(*req_ptr,im::ErrorCode::INTERNAL,"Internal server error");
+            resp=makeErr(*req_ptr,ErrorCode::INTERNAL,"Internal server error");
             LOG_ERROR_CTX("Unknown exception occurred while dispatching request",makeReqCtx(key,*req_ptr,session,"DISPATCH_EXCEPTION"));
         }
-        sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT");
-
     }
-    else if(auto resp_ptr=std::get_if<im::Response>(&req_or_resp)){
+    else if(auto resp_ptr=std::get_if<Response>(&req_or_resp)){
         sendParseErrorWithLog(key,*resp_ptr,session);
     }
     
 }
-void im::Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
+void Imservice::onDisconnect(const std::shared_ptr<TcpConnection> & conn){
     ConnKey key=conn->fd();
     sessionManager_.unbindConn(key);
     sessionManager_.erase(key);
 }
-void im::Imservice::shutdown(){
+void Imservice::shutdown(){
     sessionManager_.clear();
     repos_.shutdown();
 }
 
-im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& session){
+Response Imservice::handleAuth(const Request&req,ConnKey key,Session& session){
     if(!imConfig_.allowDebugAuth){
         return makeErr(req,ErrorCode::BAD_REQUEST,"NOT be allowed to auth,please login first");
     }
     if(!req.body.contains("user")){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing username field");
+        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing username field");
     }
     std::string username=req.body["user"].get<std::string>();
     if(username.empty()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"username cannot be empty");
+        return makeErr(req,ErrorCode::MISSING_FIELD,"username cannot be empty");
     }
-    if(session.state_==im::ConnState::Authed&&session.username_==username){//同一连接上已经认证过且用户名相同，幂等处理直接返回成功
-        return makeOk(req,im::MsgType::AUTH_RESP);
+    if(session.state_==ConnState::Authed&&session.username_==username){//同一连接上已经认证过且用户名相同，幂等处理直接返回成功
+        return makeOk(req,MsgType::AUTH_RESP);
     }
-    if(session.state_==im::ConnState::Authed&&session.username_!=username){//同一连接上已经认证过但用户名不同，拒绝
-        return makeErr(req,im::ErrorCode::USER_EXISTS,"User already authenticated with a different username");
+    if(session.state_==ConnState::Authed&&session.username_!=username){//同一连接上已经认证过但用户名不同，拒绝
+        return makeErr(req,ErrorCode::USER_EXISTS,"User already authenticated with a different username");
     }
     std::string accountId;
     auto getAccountId=getStringField(req,"accountId",accountId);
@@ -100,7 +105,7 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
         userId=req.body["userId"].get<uint64_t>();
     }
     if(!sessionManager_.bindUser(key,userId,accountId,username)){
-        return makeErr(req,im::ErrorCode::INTERNAL,"Failed to bind user to session");
+        return makeErr(req,ErrorCode::INTERNAL,"Failed to bind user to session");
     }
     /*
     if(hasRepositories()){
@@ -110,36 +115,36 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
         }
     }
     */
-    return makeOk(req,im::MsgType::AUTH_RESP);
+    return makeOk(req,MsgType::AUTH_RESP);
 }
 
-std::optional<im::Response> im::Imservice::guardAuthenticated(const Request& req,const Session& session){
-    if(session.state_==im::ConnState::Authed){
+std::optional<Response> Imservice::guardAuthenticated(const Request& req,const Session& session){
+    if(session.state_==ConnState::Authed){
         return std::nullopt;
     }
-    return makeErr(req,im::ErrorCode::NOT_AUTHED,"Unauthed, please authenticate first");
+    return makeErr(req,ErrorCode::NOT_AUTHED,"Unauthed, please authenticate first");
 }
-std::optional<im::Response> im::Imservice::guardInGroup(const Request& req,const Session& session,const std::string& groupId){
+std::optional<Response> Imservice::guardInGroup(const Request& req,const Session& session,const std::string& groupId){
     if(!groupId.empty()&&groupManager_.isMember(groupId,session.accountId_)){
         return std::nullopt;
     }
-    return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"Not in group,please join the group first");
+    return makeErr(req,ErrorCode::NOT_IN_GROUP,"Not in group,please join the group first");
 }
-std::optional<im::Response> im::Imservice::getStringField(const Request&req,const std::string& field,std::string& out,bool allowEmpty){
+std::optional<Response> Imservice::getStringField(const Request&req,const std::string& field,std::string& out,bool allowEmpty){
     if(!req.body.contains(field)){//不包含字段
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing field"+field);
+        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing field"+field);
     }
     if(!req.body[field].is_string()){//字段非字符串
-        return makeErr(req,im::ErrorCode::BAD_REQUEST,"Bad request");
+        return makeErr(req,ErrorCode::BAD_REQUEST,"Bad request");
     }
     std::string str=req.body[field].get<std::string>();
     if(allowEmpty==false&&str.empty()){//字段为空
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Field is empty");
+        return makeErr(req,ErrorCode::MISSING_FIELD,"Field is empty");
     }
     out=str;
     return std::nullopt;
 }
-std::string_view im::Imservice::sendResultToString(SendResult result)const{
+std::string_view Imservice::sendResultToString(SendResult result)const{
     switch(result){
         case SendResult::Ok:
             return "Ok";
@@ -155,7 +160,7 @@ std::string_view im::Imservice::sendResultToString(SendResult result)const{
 }
 
 //持久化存储接口
-void im::Imservice::setRepositories(storage::RepositoryBundle repos){
+void Imservice::setRepositories(storage::RepositoryBundle repos){
     repos_=std::move(repos);
     if(repos_.userRepo&&repos_.userSessionRepo&&repos_.userProfileRepo){
         security::PasswordHasher passwordHash(16,"SHA256");
@@ -163,7 +168,7 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
         authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash,tokenManager,repos_.userSessionRepo,repos_.userProfileRepo);
     }
     if(repos_.friendRepo&&repos_.userProfileRepo&&repos_.friendRequestRepo){
-        friendService_=std::make_unique<im::FriendService>(repos_.friendRepo,repos_.userProfileRepo,repos_.friendRequestRepo);
+        friendService_=std::make_unique<FriendService>(repos_.friendRepo,repos_.userProfileRepo,repos_.friendRequestRepo);
     }
     if(repos_.conversationRepo&&repos_.userProfileRepo&&repos_.groupRepo){
         conversationService_=std::make_unique<ConversationService>(repos_.conversationRepo,repos_.userProfileRepo,repos_.groupRepo);
@@ -181,14 +186,14 @@ void im::Imservice::setRepositories(storage::RepositoryBundle repos){
         groupJoinService_=std::make_unique<GroupJoinService>(groupManager_,repos_.groupRepo,repos_.userProfileRepo,repos_.groupJoinRequestRepo,imConfig_.maxGroupMembers);
     }
 }
-void im::Imservice::setRateLimiter(std::unique_ptr<security::RateLimiter> limiter){
+void Imservice::setRateLimiter(std::unique_ptr<security::RateLimiter> limiter){
     rateLimiter_=std::move(limiter);
 }
 
-bool im::Imservice::hasRepositories()const{
+bool Imservice::hasRepositories()const{
     return repos_.valid();
 }
-void im::Imservice::loadFromRepositories(){
+void Imservice::loadFromRepositories(){
     if(!hasRepositories()||!repos_.groupRepo){
         return;
     }
@@ -210,7 +215,7 @@ void im::Imservice::loadFromRepositories(){
 }
 
 
-im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleDm(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -226,7 +231,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
     
     //取目标
     if(req.to.empty()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message recipient");
+        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing message recipient");
     }
     //取文本
     std::string content;
@@ -234,7 +239,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
         return errField.value();
     }
     if(!friendService_){
-        return makeErr(req,im::ErrorCode::INTERNAL,"Friend service is not available");
+        return makeErr(req,ErrorCode::INTERNAL,"Friend service is not available");
     }
     auto userProfile=friendService_->findUser(req.to);
     if(!userProfile){
@@ -264,7 +269,7 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
         }
     }
     //构造推送消息
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::DM_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"msgId",msgId},{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
+    Response pushMsg{.ver=1,.req_id=0,.type=MsgType::DM_PUSH,.ok=true,.code=ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"msgId",msgId},{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
     auto pushResult=pushToAccount(req.to,pushMsg);
     if(pushResult.sent==0){//目标账号没有任何设备收到
         if(!repos_.offlineMessageRepo){
@@ -274,35 +279,35 @@ im::Response im::Imservice::handleDm(const im::Request& req,[[maybe_unused]]Conn
         if(!resultOffline.ok()){
             LOG_WARN("Failed to save offlineMessage: "+content);
         }
-        return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"queuedOffline",true},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
+        return makeOk(req,MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"queuedOffline",true},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
     }
-    return makeOk(req,im::MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"queuedOffline",false},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
+    return makeOk(req,MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"queuedOffline",false},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
 
 }
 
-im::Response im::Imservice::handleListUsers(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleListUsers(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
     std::vector<std::string>users=sessionManager_.onLineUsers();
-    return makeOk(req,im::MsgType::LIST_USERS_RESP,nlohmann::json{{"users",users}});
+    return makeOk(req,MsgType::LIST_USERS_RESP,nlohmann::json{{"users",users}});
 }
 
-im::Response im::Imservice::handleEcho(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleEcho(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
-    return makeOk(req,im::MsgType::ECHO_RESP,req.body);
+    return makeOk(req,MsgType::ECHO_RESP,req.body);
 }
-uint64_t im::Imservice::nowMs()const{
+uint64_t Imservice::nowMs()const{
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
-uint64_t im::Imservice::nextMessageId(){
+uint64_t Imservice::nextMessageId(){
     return nextMsgId_++;
 }
-void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> msgId,std::optional<uint64_t> clientReqId){
+void Imservice::decorate(Response& resp,std::optional<uint64_t> msgId,std::optional<uint64_t> clientReqId){
     if(msgId){
         resp.data["msg_id"]=msgId;
     }
@@ -314,7 +319,7 @@ void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> msgId,st
         resp.data["clientReqId"]=*clientReqId;
     }
 }
- im::Imservice::SendResult im::Imservice::sendPush(ConnKey target,const std::string& payload){
+ Imservice::SendResult Imservice::sendPush(ConnKey target,const std::string& payload){
     
     if(sendToConnKey_){
         SendResult res=sendToConnKey_(target,payload);
@@ -326,7 +331,7 @@ void im::Imservice::decorate(im::Response& resp,std::optional<uint64_t> msgId,st
 
 //房间接口
 
-im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleCreateGroup(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -336,7 +341,7 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
         return errField.value();
     }
     if(groupName.size()>imConfig_.maxGroupNameLen){//群名称过长
-        return makeErr(req,im::ErrorCode::GROUP_NAME_INVALID,"Group name is too long");
+        return makeErr(req,ErrorCode::GROUP_NAME_INVALID,"Group name is too long");
     }
     std::string owner=session.accountId_;
     if(!groupService_){
@@ -350,9 +355,9 @@ im::Response im::Imservice::handleCreateGroup(const Request& req,[[maybe_unused]
         return makeErr(req,ErrorCode::INTERNAL,"value invalid");
     }
     session.joinedGroupIds_.insert(resultCreate.value.value().groupId);
-    return makeOk(req,im::MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",resultCreate.value.value().groupId},{"groupName",groupName},{"ownerAccountId",owner},{"ownerUsername",session.username_}});
+    return makeOk(req,MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",resultCreate.value.value().groupId},{"groupName",groupName},{"ownerAccountId",owner},{"ownerUsername",session.username_}});
 }
-im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string& groupId,ConnKey senderkey,im::Response& push){
+Imservice::BroadcastResult Imservice::broadcastToGroup(const std::string& groupId,ConnKey senderkey,Response& push){
     BroadcastResult result;
     push.req_id=0;//群推送消息不需要req_id，由服务器生成唯一msg_id
     std::optional<uint64_t> msgId=std::nullopt;
@@ -388,7 +393,7 @@ im::Imservice::BroadcastResult im::Imservice::broadcastToGroup(const std::string
    
 }
 
-im::Response im::Imservice::handleJoin(const im::Request & req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleJoin(const Request & req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);//登录门禁
     if(err.has_value()){
         return err.value();
@@ -401,11 +406,11 @@ im::Response im::Imservice::handleJoin(const im::Request & req,[[maybe_unused]]C
     
     auto joinResult=groupManager_.joinGroup(groupId,session.accountId_);
     if(joinResult==JoinResult::ERR_NO_SUCH_GROUP){
-        return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"no such group");
+        return makeErr(req,ErrorCode::NO_SUCH_GROUP,"no such group");
     }
     if(joinResult==JoinResult::OK_ALREADY_IN){
         session.joinedGroupIds_.insert(groupId);//虽然已经在群里了，但为了防止session状态不一致，还是把群id加入session的joinedGroupIds_里
-        return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",false},{"alreadyIn",true}});
+        return makeOk(req,MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",false},{"alreadyIn",true}});
     }
     session.joinedGroupIds_.insert(groupId);
     if(hasRepositories()){
@@ -417,10 +422,10 @@ im::Response im::Imservice::handleJoin(const im::Request & req,[[maybe_unused]]C
             return makeRepoError(req,result.status,"filed to persist group member");
         }
     }
-    return makeOk(req,im::MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",true},{"alreadyIn",false}});
+    return makeOk(req,MsgType::JOIN_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"joined",true},{"alreadyIn",false}});
 }
 
-im::Response im::Imservice::handleLeave(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleLeave(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -434,11 +439,11 @@ im::Response im::Imservice::handleLeave(const im::Request& req,[[maybe_unused]]C
     }
     QuitResult quitResult=groupManager_.leaveGroup(groupId,session.accountId_);
     if(quitResult==QuitResult::ERR_NO_SUCH_GROUP){
-        return makeErr(req,im::ErrorCode::NO_SUCH_GROUP,"No such group");
+        return makeErr(req,ErrorCode::NO_SUCH_GROUP,"No such group");
     }
     if(quitResult==QuitResult::ERR_NOT_IN_GROUP){
         session.joinedGroupIds_.erase(groupId);//虽然不在群里了，但为了防止session状态不一致，还是把群id从session的joinedGroupIds_里移除掉
-        return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",false},{"alreadyLeft",true}});
+        return makeOk(req,MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",false},{"alreadyLeft",true}});
     }
     session.joinedGroupIds_.erase(groupId);
     if (quitResult == QuitResult::OK_LEFT) {
@@ -454,9 +459,9 @@ im::Response im::Imservice::handleLeave(const im::Request& req,[[maybe_unused]]C
     }
 }
 
-    return makeOk(req,im::MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",true},{"alreadyLeft",false}});
+    return makeOk(req,MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",true},{"alreadyLeft",false}});
 }
-im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleGroupMsg(const Request &req ,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);//校验登录
     if(err.has_value()){
         return err.value();
@@ -472,7 +477,7 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
     
     if(imConfig_.requireGroupIdForSend){//如果配置要求必须提供groupId字段
         if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
+            return makeErr(req,ErrorCode::MISSING_FIELD,"groupId can not be empty");
         }
     }
     std::string groupId;
@@ -485,14 +490,14 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
         return errInGroup.value();
     }
     if(!req.body.contains("content")||!req.body["content"].is_string()){
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing message content");
+        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing message content");
     }
     std::string content=req.body["content"].get<std::string>();
     if(content.size()>imConfig_.maxMessageLen){
-        return makeErr(req,im::ErrorCode::BAD_REQUEST,"Message content is too long");
+        return makeErr(req,ErrorCode::BAD_REQUEST,"Message content is too long");
     }
     if(!groupManager_.isMember(groupId,session.accountId_)){
-        return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
+        return makeErr(req,ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
     uint64_t serverTsMs=nowMs();
     uint64_t msgId=nextMessageId();
@@ -516,20 +521,20 @@ im::Response im::Imservice::handleGroupMsg(const im::Request &req ,[[maybe_unuse
         }
     }
     //广播在线成员
-    im::Response pushMsg{.ver=1,.req_id=0,.type=im::MsgType::GROUP_MSG_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId},{"content",content},{"msgId",msgId}}};
+    Response pushMsg{.ver=1,.req_id=0,.type=MsgType::GROUP_MSG_PUSH,.ok=true,.code=ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId},{"content",content},{"msgId",msgId}}};
     BroadcastResult result=broadcastToGroup(groupId,key,pushMsg);
     saveOfflineForGroupMembers(groupId,session.accountId_,msgId);
-    return makeOk(req,im::MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
+    return makeOk(req,MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
 }
-im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleGroupMembers(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
     }
     if(imConfig_.requireGroupIdForSend){
         if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"groupId can not be empty");
+            return makeErr(req,ErrorCode::MISSING_FIELD,"groupId can not be empty");
         }
     }
     std::string groupId;
@@ -544,10 +549,10 @@ im::Response im::Imservice::handleGroupMembers(const im::Request& req,[[maybe_un
     //同步查成员账号资料
 
     auto membersJson=buildMemberProfileList(groupId);
-        return makeOk(req,im::MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId},{"members",membersJson}});
+        return makeOk(req,MsgType::GROUP_MEMBERS_RESP,nlohmann::json{{"groupId",groupId},{"members",membersJson}});
 }
 
-im::Response im::Imservice::handleKickGroupMember(const Request& req, [[maybe_unused]]ConnKey key, Session& session){
+Response Imservice::handleKickGroupMember(const Request& req, [[maybe_unused]]ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -579,17 +584,17 @@ im::Response im::Imservice::handleKickGroupMember(const Request& req, [[maybe_un
     //同步删除在线session中的群聊
     sessionManager_.removeJoinedGroup(targetAccountId,groupId);
     //给被踢用户推送被踢事件
-    im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="you have been kicked from the group",.data=nlohmann::json{{"event","be kicked"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
+    Response pushEvent{.ver=1,.req_id=0,.type=MsgType::GROUP_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.msg="you have been kicked from the group",.data=nlohmann::json{{"event","be kicked"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
     auto result=pushToAccount(targetAccountId,pushEvent);
     if(result.sent==0){
         LOG_WARN("Failed to push the event to the accountId:"+targetAccountId);
     }
     //给群内其他成员广播成员被踢出事件
-    im::Response groupPushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg=targetAccountId+" have been kicked from the group",.data=nlohmann::json{{"event","member_removed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
+    Response groupPushEvent{.ver=1,.req_id=0,.type=MsgType::GROUP_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.msg=targetAccountId+" have been kicked from the group",.data=nlohmann::json{{"event","member_removed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
     auto broastResult=broadcastToGroup(groupId,key,groupPushEvent);
     return makeOk(req,MsgType::KICK_GROUP_MEMBER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"removed",true},{"sent",broastResult.sent},{"closed",broastResult.closed},{"noSuchConnection",broastResult.noSuchConnection}});
 }
-im::Response im::Imservice::handleSetGroupAdmin(const Request& req, [[maybe_unused]]ConnKey key, Session& session){
+Response Imservice::handleSetGroupAdmin(const Request& req, [[maybe_unused]]ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -623,12 +628,12 @@ im::Response im::Imservice::handleSetGroupAdmin(const Request& req, [[maybe_unus
         return makeRepoError(req,result.status,result.message);
     }
     //群内广播成员管理员变更
-    im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="group admin changed",.data=nlohmann::json{{"event","group admin changed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId},{"enable",enable}}};
+    Response pushEvent{.ver=1,.req_id=0,.type=MsgType::GROUP_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.msg="group admin changed",.data=nlohmann::json{{"event","group admin changed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId},{"enable",enable}}};
     
     auto broastResult=broadcastToGroup(groupId,key,pushEvent);
     return makeOk(req,MsgType::SET_GROUP_ADMIN_RESP,nlohmann::json{{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId},{"enable",enable},{"sent",broastResult.sent},{"closed",broastResult.closed},{"noSuchConnection",broastResult.noSuchConnection}});
 }
-im::Response im::Imservice::handleTransferGroupOwner(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+Response Imservice::handleTransferGroupOwner(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -655,13 +660,13 @@ im::Response im::Imservice::handleTransferGroupOwner(const Request& req,[[maybe_
         return makeRepoError(req,result.status,result.message);
     }
     //群内推送群主转让事件
-    im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="group owner changed",.data=nlohmann::json{{"event","group owner changed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
+    Response pushEvent{.ver=1,.req_id=0,.type=MsgType::GROUP_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.msg="group owner changed",.data=nlohmann::json{{"event","group owner changed"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
     
     auto broastResult=broadcastToGroup(groupId,key,pushEvent);
     return makeOk(req,MsgType::TRANSFER_GROUP_OWNER_RESP,nlohmann::json{{"groupId",groupId},{"oldOwner",session.accountId_},{"newOwner",targetAccountId},{"sent",broastResult.sent},{"closed",broastResult.closed},{"noSuchConnection",broastResult.noSuchConnection}});
 }
 
-im::Response im::Imservice::handleInviteGroupMember(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+Response Imservice::handleInviteGroupMember(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -692,7 +697,7 @@ im::Response im::Imservice::handleInviteGroupMember(const Request& req,[[maybe_u
     if(result.value.value().joined){
         sessionManager_.addJoinedGroup(targetAccountId,groupId);
         //群内邀请成员事件广播
-        im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="member_invired",.data=nlohmann::json{{"event","member_invited"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
+        Response pushEvent{.ver=1,.req_id=0,.type=MsgType::GROUP_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.msg="member_invired",.data=nlohmann::json{{"event","member_invited"},{"groupId",groupId},{"operatorAccountId",session.accountId_},{"targetAccountId",targetAccountId}}};
         broadcastToGroup(groupId,key,pushEvent);
     }
     if(result.value.value().alreadyIn){
@@ -700,7 +705,7 @@ im::Response im::Imservice::handleInviteGroupMember(const Request& req,[[maybe_u
     }
     return makeOk(req,MsgType::INVITE_GROUP_MEMBER_RESP,nlohmann::json{{"groupId",groupId},{"targetAccountId",targetAccountId},{"joined",true},{"alreadyIn",false}});
 }
-im::Response im::Imservice::handleDissolveGroup(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+Response Imservice::handleDissolveGroup(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -726,7 +731,7 @@ im::Response im::Imservice::handleDissolveGroup(const Request& req,[[maybe_unuse
         return makeOk(req,MsgType::DISSOLVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"dissolved",false},{"alreadyDissolved",true}});
     }
     auto accountIds=result.value.value().affectedAccountIds;
-    im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="group dissolved",.data=nlohmann::json{{"event","group_dissolved"},{"groupId",groupId},{"operatorAccountId",session.accountId_}}};
+    Response pushEvent{.ver=1,.req_id=0,.type=MsgType::GROUP_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.msg="group dissolved",.data=nlohmann::json{{"event","group_dissolved"},{"groupId",groupId},{"operatorAccountId",session.accountId_}}};
     //广播群解散事件
     for(const auto& accountId:accountIds){
         pushToAccount(accountId,pushEvent);
@@ -735,7 +740,7 @@ im::Response im::Imservice::handleDissolveGroup(const Request& req,[[maybe_unuse
     sessionManager_.removeJoinedGroupForAccounts(accountIds,groupId);
     return makeOk(req,MsgType::DISSOLVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"operatorAccountId",session.accountId_},{"dissolved",true},{"alreadyDissolved",false},{"affectedMembers",accountIds.size()}});
 }
-im::Response im::Imservice::handleApplyGroupJoin(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+Response Imservice::handleApplyGroupJoin(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -765,7 +770,7 @@ im::Response im::Imservice::handleApplyGroupJoin(const Request& req,[[maybe_unus
     auto applyRes=result.value.value();
     return makeOk(req,MsgType::APPLY_GROUP_JOIN_RESP,nlohmann::json{{"groupId",groupId},{"applicantAccountId",session.accountId_},{"submitted",applyRes.submitted},{"alreadyPending",applyRes.alreadyPending},{"alreadyIn",applyRes.alreadyIn}});
 }
-im::Response im::Imservice::handleListGroupJoinRequest(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+Response Imservice::handleListGroupJoinRequest(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -800,7 +805,7 @@ im::Response im::Imservice::handleListGroupJoinRequest(const Request& req,[[mayb
     }
     return makeOk(req,MsgType::LIST_GROUP_JOIN_REQUESTS_RESP,nlohmann::json{{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"requestRecord",recordJsons}});
 }
-im::Response im::Imservice::handleSearchGroups(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+Response Imservice::handleSearchGroups(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -828,7 +833,7 @@ im::Response im::Imservice::handleSearchGroups(const Request& req,[[maybe_unused
 
 
 
-im::Response im::Imservice::handleReviewGroupJoin(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
+Response Imservice::handleReviewGroupJoin(const Request& req,[[maybe_unused]] ConnKey key, Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -864,12 +869,12 @@ im::Response im::Imservice::handleReviewGroupJoin(const Request& req,[[maybe_unu
     auto reviewRes=result.value.value();
         if(!reviewRes.alreadyHandled){
         //向申请人推送
-        im::Response pushEvent{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="join request approve",.data=nlohmann::json{{"event","join_request"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId},{"approved",reviewRes.approved},{"rejected",reviewRes.rejected},{"memberAdded",reviewRes.memberAdded}}};
+        Response pushEvent{.ver=1,.req_id=0,.type=MsgType::GROUP_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.msg="join request approve",.data=nlohmann::json{{"event","join_request"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId},{"approved",reviewRes.approved},{"rejected",reviewRes.rejected},{"memberAdded",reviewRes.memberAdded}}};
         pushToAccount(applicantAccountId,pushEvent);
         if(reviewRes.memberAdded){//成功入群同步状态
             sessionManager_.addJoinedGroup(applicantAccountId,groupId);
             //向申请人推送
-            im::Response push{.ver=1,.req_id=0,.type=im::MsgType::GROUP_EVENT_PUSH,.ok=true,.code=im::ErrorCode::OK,.msg="member joined",.data=nlohmann::json{{"event","member_joined"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId}}};
+            Response push{.ver=1,.req_id=0,.type=MsgType::GROUP_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.msg="member joined",.data=nlohmann::json{{"event","member_joined"},{"groupId",groupId},{"reviewerAccountId",session.accountId_},{"applicantAccountId",applicantAccountId}}};
             broadcastToGroup(groupId,key,push);
         }
     }
@@ -878,7 +883,7 @@ im::Response im::Imservice::handleReviewGroupJoin(const Request& req,[[maybe_unu
 
 
 
-im::Response im::Imservice::handleListGroups(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleListGroups(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -888,12 +893,12 @@ im::Response im::Imservice::handleListGroups(const Request& req,[[maybe_unused]]
 }
 
 
-LogContext im::Imservice::makeReqCtx(ConnKey key,const Request& req,const Session& session,const std::string& event)const{
+LogContext Imservice::makeReqCtx(ConnKey key,const Request& req,const Session& session,const std::string& event)const{
     LogContext ctx;
     ctx.connFd=static_cast<int>(key);
     ctx.event=event;
     ctx.reqId=static_cast<uint64_t>(req.req_id);
-    ctx.msgType=static_cast<uint32_t>(im::msgTypeToInt(req.type));
+    ctx.msgType=static_cast<uint32_t>(msgTypeToInt(req.type));
     if(!session.username_.empty()){
         ctx.user=session.username_;
     }
@@ -903,12 +908,12 @@ LogContext im::Imservice::makeReqCtx(ConnKey key,const Request& req,const Sessio
     ctx.groupId=tryExtractGroupId(req);
     return ctx;
 }
-LogContext im::Imservice::makeRespCtx(ConnKey key,const Request& req,const Response& resp,const Session& session,const std::string& event)const{
+LogContext Imservice::makeRespCtx(ConnKey key,const Request& req,const Response& resp,const Session& session,const std::string& event)const{
     LogContext ctx;
     ctx.connFd=static_cast<int>(key);
     ctx.event=event;
     ctx.reqId=static_cast<uint64_t>(req.req_id);
-    ctx.msgType=static_cast<uint32_t>(im::msgTypeToInt(resp.type));
+    ctx.msgType=static_cast<uint32_t>(msgTypeToInt(resp.type));
     ctx.errCode=static_cast<uint32_t>(resp.code);
     ctx.msgId=tryExtractMsgId(resp);
     if(!session.username_.empty()){
@@ -943,7 +948,7 @@ LogContext im::Imservice::makeRespCtx(ConnKey key,const Request& req,const Respo
     }
     return ctx;
 }
-std::optional<std::string> im::Imservice::tryExtractGroupId(const Request& req)const{
+std::optional<std::string> Imservice::tryExtractGroupId(const Request& req)const{
     if(req.body.contains("groupId")&&req.body["groupId"].is_string()){
         std::string groupId=req.body["groupId"];
         if(!groupId.empty())
@@ -951,7 +956,7 @@ std::optional<std::string> im::Imservice::tryExtractGroupId(const Request& req)c
     }
     return std::nullopt;
 }
-std::optional<uint64_t> im::Imservice::tryExtractMsgId(const Response& resp)const{
+std::optional<uint64_t> Imservice::tryExtractMsgId(const Response& resp)const{
     if(resp.data.contains("msg_id")){
         if(resp.data["msg_id"].is_number_unsigned()){
             return resp.data["msg_id"].get<uint64_t>();
@@ -964,62 +969,62 @@ std::optional<uint64_t> im::Imservice::tryExtractMsgId(const Response& resp)cons
 }
 
 //统一错误处理
-LogLevel im::Imservice::mapErrorToLogLevel(im::ErrorCode code) const{
+LogLevel Imservice::mapErrorToLogLevel(ErrorCode code) const{
     switch(code){
-        case im::ErrorCode::BAD_JSON:
-        case im::ErrorCode::MISSING_FIELD:
-        case im::ErrorCode::UNSUPPORTED_VER:
-        case im::ErrorCode::UNKNOWN_TYPE:
-        case im::ErrorCode::BAD_REQUEST:
-        case im::ErrorCode::GROUP_NAME_INVALID:
-        case im::ErrorCode::NO_SUCH_USER:
-        case im::ErrorCode::NO_SUCH_GROUP:
-        case im::ErrorCode::ALREADY_IN_GROUP:
-        case im::ErrorCode::NOT_IN_GROUP:
-        case im::ErrorCode::NOT_AUTHED:
-        case im::ErrorCode::USER_NOT_FOUND:
-        case im::ErrorCode::BAD_PASSWORD:
-        case im::ErrorCode::WEAK_PASSWORD:
-        case im::ErrorCode::USER_EXISTS:
-        case im::ErrorCode::TOKEN_INVALID:
-        case im::ErrorCode::TOKEN_EXPIRED:
-        case im::ErrorCode::TOKEN_REVOKED:
-        case im::ErrorCode::PROFILE_NOT_FOUND:
-        case im::ErrorCode::AVATAR_URL_TOO_LONG:
-        case im::ErrorCode::SIGNATURE_TOO_LONG:
-        case im::ErrorCode::NICKNAME_INVALID:
-        case im::ErrorCode::CANNOT_ADD_SELF:
-        case im::ErrorCode::ALREADY_FRIENDS:
-        case im::ErrorCode::FRIEND_REQUEST_EXISTS:
-        case im::ErrorCode::FRIEND_REQUEST_NOT_FOUND:
-        case im::ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED:
-        case im::ErrorCode::FRIEND_REQUEST_FORBIDDEN:
-        case im::ErrorCode::INVALID_ACK_PAYLOAD:
-        case im::ErrorCode::ACK_BATCH_TOO_LARGE:
-        case im::ErrorCode::MESSAGE_NOT_FOUND:
-        case im::ErrorCode::MESSAGE_ACK_FORBIDDEN:
-        case im::ErrorCode::NO_PERMISSION:
-        case im::ErrorCode::TARGET_NOT_IN_GROUP:
-        case im::ErrorCode::OWNER_CANNOT_LEAVE:
-        case im::ErrorCode::OWNER_CANNOT_BE_KICKED:
-        case im::ErrorCode::INVALID_GROUP_ROLE:
-        case im::ErrorCode::CANNOT_KICK_SELF:
-        case im::ErrorCode::GROUP_DISSOLVED:
-        case im::ErrorCode::CANNOT_INVITE_SELF:
-        case im::ErrorCode::INVITE_REQUIRES_FRIEND:
-        case im::ErrorCode::GROUP_MEMBER_LIMIT_REACHED:
-        case im::ErrorCode::JOIN_REQUEST_NOT_FOUND:
-        case im::ErrorCode::RATE_LIMITED:
+        case ErrorCode::BAD_JSON:
+        case ErrorCode::MISSING_FIELD:
+        case ErrorCode::UNSUPPORTED_VER:
+        case ErrorCode::UNKNOWN_TYPE:
+        case ErrorCode::BAD_REQUEST:
+        case ErrorCode::GROUP_NAME_INVALID:
+        case ErrorCode::NO_SUCH_USER:
+        case ErrorCode::NO_SUCH_GROUP:
+        case ErrorCode::ALREADY_IN_GROUP:
+        case ErrorCode::NOT_IN_GROUP:
+        case ErrorCode::NOT_AUTHED:
+        case ErrorCode::USER_NOT_FOUND:
+        case ErrorCode::BAD_PASSWORD:
+        case ErrorCode::WEAK_PASSWORD:
+        case ErrorCode::USER_EXISTS:
+        case ErrorCode::TOKEN_INVALID:
+        case ErrorCode::TOKEN_EXPIRED:
+        case ErrorCode::TOKEN_REVOKED:
+        case ErrorCode::PROFILE_NOT_FOUND:
+        case ErrorCode::AVATAR_URL_TOO_LONG:
+        case ErrorCode::SIGNATURE_TOO_LONG:
+        case ErrorCode::NICKNAME_INVALID:
+        case ErrorCode::CANNOT_ADD_SELF:
+        case ErrorCode::ALREADY_FRIENDS:
+        case ErrorCode::FRIEND_REQUEST_EXISTS:
+        case ErrorCode::FRIEND_REQUEST_NOT_FOUND:
+        case ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED:
+        case ErrorCode::FRIEND_REQUEST_FORBIDDEN:
+        case ErrorCode::INVALID_ACK_PAYLOAD:
+        case ErrorCode::ACK_BATCH_TOO_LARGE:
+        case ErrorCode::MESSAGE_NOT_FOUND:
+        case ErrorCode::MESSAGE_ACK_FORBIDDEN:
+        case ErrorCode::NO_PERMISSION:
+        case ErrorCode::TARGET_NOT_IN_GROUP:
+        case ErrorCode::OWNER_CANNOT_LEAVE:
+        case ErrorCode::OWNER_CANNOT_BE_KICKED:
+        case ErrorCode::INVALID_GROUP_ROLE:
+        case ErrorCode::CANNOT_KICK_SELF:
+        case ErrorCode::GROUP_DISSOLVED:
+        case ErrorCode::CANNOT_INVITE_SELF:
+        case ErrorCode::INVITE_REQUIRES_FRIEND:
+        case ErrorCode::GROUP_MEMBER_LIMIT_REACHED:
+        case ErrorCode::JOIN_REQUEST_NOT_FOUND:
+        case ErrorCode::RATE_LIMITED:
             return LogLevel::WARN;
-        case im::ErrorCode::INTERNAL:
+        case ErrorCode::INTERNAL:
             return LogLevel::ERROR;
         default:
             return LogLevel::ERROR;
     }
 }
-im::Imservice::SendResult im::Imservice::sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet){
+Imservice::SendResult Imservice::sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet){
     decorate(resp,std::nullopt,req.req_id);
-    auto payload=im::encodeResponse(resp);
+    auto payload=encodeResponse(resp);
     SendResult result;
     if(sendToConnKey_){
         result=sendToConnKey_(key,payload);
@@ -1056,9 +1061,9 @@ im::Imservice::SendResult im::Imservice::sendResponseWithLog(ConnKey key,const R
     }
     return result;
 }
-im::Imservice::SendResult im::Imservice::sendParseErrorWithLog(ConnKey key,Response& resp,const Session& session){
+Imservice::SendResult Imservice::sendParseErrorWithLog(ConnKey key,Response& resp,const Session& session){
     decorate(resp);
-    auto payload=im::encodeResponse(resp);
+    auto payload=encodeResponse(resp);
     SendResult result;
     if(sendToConnKey_){
         result=sendToConnKey_(key,payload);
@@ -1079,160 +1084,165 @@ im::Imservice::SendResult im::Imservice::sendParseErrorWithLog(ConnKey key,Respo
     }
     return result;
 }
-im::Response im::Imservice::dispatcResqest(const Request& req,ConnKey key,Session& session){
+DispatchResult Imservice::dispatcRequest(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
     switch(req.type){
-        case im::MsgType::AUTH_REQ:
-            return handleAuth(req,key,session);
-        case im::MsgType::ECHO_REQ:
-            return handleEcho(req,key,session);
-        case im::MsgType::DM_REQ:
-            return handleDm(req,key,session);
-        case im::MsgType::LIST_USERS_REQ:
-            return handleListUsers(req,key,session);
-        case im::MsgType::CREATE_GROUP_REQ:
-            return handleCreateGroup(req,key,session);
-        case im::MsgType::JOIN_GROUP_REQ:
-            return handleApplyGroupJoin(req,key,session);
-        case im::MsgType::LEAVE_GROUP_REQ:
+        case MsgType::AUTH_REQ:
+            return DispatchResult::immediate(handleAuth(req,key,session));
+        case MsgType::ECHO_REQ:
+            return DispatchResult::immediate(handleEcho(req,key,session));
+        case MsgType::DM_REQ:
+            return DispatchResult::immediate(handleDm(req,key,session));
+        case MsgType::LIST_USERS_REQ:
+            return DispatchResult::immediate(handleListUsers(req,key,session));
+        case MsgType::CREATE_GROUP_REQ:
+            return DispatchResult::immediate(handleCreateGroup(req,key,session));
+        case MsgType::JOIN_GROUP_REQ:
+            return DispatchResult::immediate(handleApplyGroupJoin(req,key,session));
+        case MsgType::LEAVE_GROUP_REQ:
         {
-            im::Response resp=handleLeave(req,key,session);
+            auto result =DispatchResult::immediate(handleLeave(req,key,session));
+            if(!result.response){
+                return result;
+            }
+            auto resp=result.response.value();
             if(resp.ok&&resp.data.contains("left")&&resp.data["left"].get<bool>()==true){
                     std::string groupId=resp.data["groupId"];
                     LOG_INFO_CTX("im leave group",makeRespCtx(key,req,resp,session,"LEAVE_GROUP"));
-                    im::Response leaveEvent=makeOk(req,im::MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"accountId",session.accountId_},{"username",session.username_},{"groupId",groupId}});
+                    Response leaveEvent=makeOk(req,MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"accountId",session.accountId_},{"username",session.username_},{"groupId",groupId}});
                     broadcastToGroup(groupId,key,leaveEvent);
                 }
-            return resp;
+            return result;
         }
-        case im::MsgType::GROUP_MSG_REQ:
-            return handleGroupMsg(req,key,session);
-        case im::MsgType::GROUP_MEMBERS_REQ:
-            return handleGroupMembers(req,key,session);
-        case im::MsgType::LIST_GROUPS_REQ:
-            return handleListGroups(req,key,session);
-        case im::MsgType::GROUP_HISTORY_REQ:
-            return handleGroupHistory(req,key,session);
-        case im::MsgType::OFFLINE_LIST_REQ:
-            return handleOfflinelist(req,key,session);
-        case im::MsgType::OFFLINE_ACK_REQ:
-            return handleOfflineAck(req,key,session);
-        case im::MsgType::REGISTER_REQ:
-            return handleRegister(req,key,session);
-        case im::MsgType::LOGIN_REQ:
-            return handleLogin(req,key,session);
-        case im::MsgType::LOGOUT_REQ:
-            return handleLogout(req,key,session);
-        case im::MsgType::TOKEN_LOGIN_REQ:
-            return handleTokenLogin(req,key,session);
-        case im::MsgType::GET_PROFILE_REQ:
-            return handleGetProfile(req,key,session);
-        case im::MsgType::UPDATE_PROFILE_REQ:
-            return handleUpdateProfile(req,key,session);
-        case im::MsgType::SEARCH_USER_REQ:
-            return handleSearchUser(req,key,session);
-        case im::MsgType::LIST_FRIENDS_REQ:
-            return handleListFriends(req,key,session);
-        case im::MsgType::SEND_FRIEND_REQUEST_REQ:
-            return handleSendFriendRequest(req,key,session);
-        case im::MsgType::LIST_FRIEND_REQUEST_REQ:
-            return handleListFriendRequests(req,key,session);
-        case im::MsgType::ACCEPT_FRIEND_REQUEST_REQ:
-            return handleAcceptFriendRequest(req,key,session);
-        case im::MsgType::REJECT_FRIEND_REQUEST_REQ:
-            return handleRejectFriendRequest(req,key,session);
-        case im::MsgType::REMOVE_FRIEND_REQ:
-            return handleRemoveFriend(req,key,session);
-        case im::MsgType::DM_HISTORY_REQ:
-            return handleDmHistory(req,key,session);
-        case im::MsgType::CONVERSATION_LIST_REQ:
-            return handleConversationList(req,key,session);
-        case im::MsgType::CONVERSATION_READ_REQ:
-            return handleConversationRead(req,key,session);
-        case im::MsgType::SYNC_REQ:{
+        case MsgType::GROUP_MSG_REQ:{
+            return DispatchResult::deferred();
+        }
+        case MsgType::GROUP_MEMBERS_REQ:
+            return DispatchResult::immediate(handleGroupMembers(req,key,session));
+        case MsgType::LIST_GROUPS_REQ:
+            return DispatchResult::immediate(handleListGroups(req,key,session));
+        case MsgType::GROUP_HISTORY_REQ:
+            return DispatchResult::immediate(handleGroupHistory(req,key,session));
+        case MsgType::OFFLINE_LIST_REQ:
+            return DispatchResult::immediate(handleOfflinelist(req,key,session));
+        case MsgType::OFFLINE_ACK_REQ:
+            return DispatchResult::immediate(handleOfflineAck(req,key,session));
+        case MsgType::REGISTER_REQ:
+            return DispatchResult::immediate(handleRegister(req,key,session));
+        case MsgType::LOGIN_REQ:
+            return DispatchResult::immediate(handleLogin(req,key,session));
+        case MsgType::LOGOUT_REQ:
+            return DispatchResult::immediate(handleLogout(req,key,session));
+        case MsgType::TOKEN_LOGIN_REQ:
+            return DispatchResult::immediate(handleTokenLogin(req,key,session));
+        case MsgType::GET_PROFILE_REQ:
+            return DispatchResult::immediate(handleGetProfile(req,key,session));
+        case MsgType::UPDATE_PROFILE_REQ:
+            return DispatchResult::immediate(handleUpdateProfile(req,key,session));
+        case MsgType::SEARCH_USER_REQ:
+            return DispatchResult::immediate(handleSearchUser(req,key,session));
+        case MsgType::LIST_FRIENDS_REQ:
+            return DispatchResult::immediate(handleListFriends(req,key,session));
+        case MsgType::SEND_FRIEND_REQUEST_REQ:
+            return DispatchResult::immediate(handleSendFriendRequest(req,key,session));
+        case MsgType::LIST_FRIEND_REQUEST_REQ:
+            return DispatchResult::immediate(handleListFriendRequests(req,key,session));
+        case MsgType::ACCEPT_FRIEND_REQUEST_REQ:
+            return DispatchResult::immediate(handleAcceptFriendRequest(req,key,session));
+        case MsgType::REJECT_FRIEND_REQUEST_REQ:
+            return DispatchResult::immediate(handleRejectFriendRequest(req,key,session));
+        case MsgType::REMOVE_FRIEND_REQ:
+            return DispatchResult::immediate(handleRemoveFriend(req,key,session));
+        case MsgType::DM_HISTORY_REQ:
+            return DispatchResult::immediate(handleDmHistory(req,key,session));
+        case MsgType::CONVERSATION_LIST_REQ:
+            return DispatchResult::immediate(handleConversationList(req,key,session));
+        case MsgType::CONVERSATION_READ_REQ:
+            return DispatchResult::immediate(handleConversationRead(req,key,session));
+        case MsgType::SYNC_REQ:{
             LOG_INFO_CTX("sync request in",makeReqCtx(key,req,session,"SYNC_IN"));
-            return handleSync(req,key,session);
+            return DispatchResult::immediate(handleSync(req,key,session));
         }
-        case im::MsgType::MESSAGE_ACK_REQ:
-            return handleMessageAck(req,key,session);
-        case im::MsgType::KICK_GROUP_MEMBER_REQ:
-            return handleKickGroupMember(req,key,session);
-        case im::MsgType::SET_GROUP_ADMIN_REQ:
-            return handleSetGroupAdmin(req,key,session);
-        case im::MsgType::TRANSFER_GROUP_OWNER_REQ:
-            return handleTransferGroupOwner(req,key,session);
-        case im::MsgType::INVITE_GROUP_MEMBER_REQ:
-            return handleInviteGroupMember(req,key,session);
-        case im::MsgType::DISSOLVE_GROUP_REQ:
-            return handleDissolveGroup(req,key,session);
-        case im::MsgType::APPLY_GROUP_JOIN_REQ:
-            return handleApplyGroupJoin(req,key,session);
-        case im::MsgType::LIST_GROUP_JOIN_REQUESTS_REQ:
-            return handleListGroupJoinRequest(req,key,session);
-        case im::MsgType::REVIEW_GROUP_JOIN_REQUEST_REQ:
-            return handleReviewGroupJoin(req,key,session);
-        case im::MsgType::SEARCH_PUBLIC_GROUPS_REQ:
-            return handleSearchGroups(req,key,session);
+        case MsgType::MESSAGE_ACK_REQ:
+            return DispatchResult::immediate(handleMessageAck(req,key,session));
+        case MsgType::KICK_GROUP_MEMBER_REQ:
+            return DispatchResult::immediate(handleKickGroupMember(req,key,session));
+        case MsgType::SET_GROUP_ADMIN_REQ:
+            return DispatchResult::immediate(handleSetGroupAdmin(req,key,session));
+        case MsgType::TRANSFER_GROUP_OWNER_REQ:
+            return DispatchResult::immediate(handleTransferGroupOwner(req,key,session));
+        case MsgType::INVITE_GROUP_MEMBER_REQ:
+            return DispatchResult::immediate(handleInviteGroupMember(req,key,session));
+        case MsgType::DISSOLVE_GROUP_REQ:
+            return DispatchResult::immediate(handleDissolveGroup(req,key,session));
+        case MsgType::APPLY_GROUP_JOIN_REQ:
+            return DispatchResult::immediate(handleApplyGroupJoin(req,key,session));
+        case MsgType::LIST_GROUP_JOIN_REQUESTS_REQ:
+            return DispatchResult::immediate(handleListGroupJoinRequest(req,key,session));
+        case MsgType::REVIEW_GROUP_JOIN_REQUEST_REQ:
+            return DispatchResult::immediate(handleReviewGroupJoin(req,key,session));
+        case MsgType::SEARCH_PUBLIC_GROUPS_REQ:
+            return DispatchResult::immediate(handleSearchGroups(req,key,session));
         default:
-            return makeErr(req,im::ErrorCode::UNKNOWN_TYPE,"Unknown message type");
+            return DispatchResult::immediate(makeErr(req,ErrorCode::UNKNOWN_TYPE,"Unknown message type"));
     }
 }
 
 
 //存储接口
-im::ErrorCode im::Imservice::repoStatusToErrorCode(storage::RepoStatus status)const{
+ErrorCode Imservice::repoStatusToErrorCode(storage::RepoStatus status)const{
     switch(status){
         case storage::RepoStatus::Ok:
-            return im::ErrorCode::OK;
+            return ErrorCode::OK;
         case storage::RepoStatus::AlreadyExists:
-            return im::ErrorCode::USER_EXISTS;
+            return ErrorCode::USER_EXISTS;
         case storage::RepoStatus::InvalidArgument:
-            return im::ErrorCode::BAD_REQUEST;
+            return ErrorCode::BAD_REQUEST;
         case storage::RepoStatus::SqlError:
-            return im::ErrorCode::INTERNAL;
+            return ErrorCode::INTERNAL;
         case storage::RepoStatus::NotFound:
-            return im::ErrorCode::NO_SUCH_GROUP;
+            return ErrorCode::NO_SUCH_GROUP;
         case storage::RepoStatus::CannotAddYourself:
-            return im::ErrorCode::CANNOT_ADD_SELF;
+            return ErrorCode::CANNOT_ADD_SELF;
         case storage::RepoStatus::AlreadyFriends:
-            return im::ErrorCode::ALREADY_FRIENDS;
+            return ErrorCode::ALREADY_FRIENDS;
         case storage::RepoStatus::AlreadyHandled:
-            return im::ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED;
+            return ErrorCode::FRIEND_REQUEST_ALREADY_HANDLED;
         case storage::RepoStatus::Forbidden:
-            return im::ErrorCode::FRIEND_REQUEST_FORBIDDEN;
+            return ErrorCode::FRIEND_REQUEST_FORBIDDEN;
         case storage::RepoStatus::NotFriends:
-            return im::ErrorCode::NOT_FRIENDS;
+            return ErrorCode::NOT_FRIENDS;
         case storage::RepoStatus::NoPermission:
-            return im::ErrorCode::NO_PERMISSION;
+            return ErrorCode::NO_PERMISSION;
         case storage::RepoStatus::TargetNotInGroup:
-            return im::ErrorCode::TARGET_NOT_IN_GROUP;
+            return ErrorCode::TARGET_NOT_IN_GROUP;
         case storage::RepoStatus::OwnerCannotLeave:
-            return im::ErrorCode::OWNER_CANNOT_LEAVE;
+            return ErrorCode::OWNER_CANNOT_LEAVE;
         case storage::RepoStatus::OwnerCannotBeKicked:
-            return im::ErrorCode::OWNER_CANNOT_BE_KICKED;
+            return ErrorCode::OWNER_CANNOT_BE_KICKED;
         case storage::RepoStatus::InvalidGroupRole:
-            return im::ErrorCode::INVALID_GROUP_ROLE;
+            return ErrorCode::INVALID_GROUP_ROLE;
         case storage::RepoStatus::GroupDissolved:
-            return im::ErrorCode::GROUP_DISSOLVED;
+            return ErrorCode::GROUP_DISSOLVED;
         case storage::RepoStatus::CannotInivteSelf:
-            return im::ErrorCode::CANNOT_INVITE_SELF;
+            return ErrorCode::CANNOT_INVITE_SELF;
         case storage::RepoStatus::InviteRequestsFriend:
-            return im::ErrorCode::INVITE_REQUIRES_FRIEND;
+            return ErrorCode::INVITE_REQUIRES_FRIEND;
         case storage::RepoStatus::GroupMemberLimitReach:
-            return im::ErrorCode::GROUP_MEMBER_LIMIT_REACHED;
+            return ErrorCode::GROUP_MEMBER_LIMIT_REACHED;
         case storage::RepoStatus::UserNotFound:
-            return im::ErrorCode::NO_SUCH_USER;
+            return ErrorCode::NO_SUCH_USER;
         case storage::RepoStatus::JoinRequestNotFound:
-            return im::ErrorCode::JOIN_REQUEST_NOT_FOUND;
+            return ErrorCode::JOIN_REQUEST_NOT_FOUND;
         case storage::RepoStatus::GroupNotFound:
-            return im::ErrorCode::NO_SUCH_GROUP;
+            return ErrorCode::NO_SUCH_GROUP;
         case storage::RepoStatus::Conflict:
-            return im::ErrorCode::Conflict;
+            return ErrorCode::Conflict;
         case storage::RepoStatus::Internal:
-            return im::ErrorCode::INTERNAL;
+            return ErrorCode::INTERNAL;
     }
-    return im::ErrorCode::INTERNAL;
+    return ErrorCode::INTERNAL;
 }
-im::Response im::Imservice::makeRepoError(const im::Request& req,storage::RepoStatus status,const std::string& fallbackMsg) const{
+Response Imservice::makeRepoError(const Request& req,storage::RepoStatus status,const std::string& fallbackMsg) const{
     auto code=repoStatusToErrorCode(status);
     std::string msg=fallbackMsg;
     if(status==storage::RepoStatus::SqlError){
@@ -1240,7 +1250,7 @@ im::Response im::Imservice::makeRepoError(const im::Request& req,storage::RepoSt
     }
     return makeErr(req,code,msg);
 }
-im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleGroupHistory(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1260,13 +1270,13 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     
     auto accountId=sessionManager_.accountIdByConn(key);
     if(!accountId){
-        return makeErr(req,im::ErrorCode::NO_SUCH_USER,"User is not exist");
+        return makeErr(req,ErrorCode::NO_SUCH_USER,"User is not exist");
     }
     if(!groupManager_.isMember(groupId,accountId.value())){
-        return makeErr(req,im::ErrorCode::NOT_IN_GROUP,"The user is not in the group");
+        return makeErr(req,ErrorCode::NOT_IN_GROUP,"The user is not in the group");
     }
     if(!hasRepositories()||!repos_.messageRepo){
-        return makeErr(req,im::ErrorCode::INTERNAL,"Message repository is not configured");
+        return makeErr(req,ErrorCode::INTERNAL,"Message repository is not configured");
     }
     auto historyQuery=parseHistoryQuery(req,imConfig_.defaultHistoryLimit,imConfig_.maxHistoryLimit);
     if(!historyQuery.ok){
@@ -1285,10 +1295,10 @@ im::Response im::Imservice::handleGroupHistory(const Request& req,[[maybe_unused
     for(const auto& msg:messages){
         messagesJson.push_back(nlohmann::json{{"msgId",msg.messageId},{"groupId",msg.groupId},{"senderAccountId",msg.senderAccountId},{"senderUsername",msg.senderUsername},{"content",msg.content},{"serverTsMs",msg.serverTsMs}});
     }
-    return makeOk(req,im::MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"mode",historyQueryModeToString(historyQuery.query.mode)},{"beforeMsgId",historyQuery.query.beforeMsgId},{"lastMsgId",historyQuery.query.lastMsgId},{"limit",historyQuery.query.limit},{"messages",messagesJson}});
+    return makeOk(req,MsgType::GROUP_HISTORY_RESP,nlohmann::json{{"groupId",groupId},{"mode",historyQueryModeToString(historyQuery.query.mode)},{"beforeMsgId",historyQuery.query.beforeMsgId},{"lastMsgId",historyQuery.query.lastMsgId},{"limit",historyQuery.query.limit},{"messages",messagesJson}});
 
 }
-im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleDmHistory(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
         return err.value();
@@ -1309,7 +1319,7 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
     }
     //查找账号
     if(!friendService_){
-        return makeErr(req,im::ErrorCode::INTERNAL,"Friend service is not available");
+        return makeErr(req,ErrorCode::INTERNAL,"Friend service is not available");
     }
     auto userProfile=friendService_->findUser(peerAccountId);
     if(!userProfile){
@@ -1345,7 +1355,7 @@ im::Response im::Imservice::handleDmHistory(const Request& req,[[maybe_unused]]C
     return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"conversationKey",conversationKey},{"mode",historyQuery.query.mode},{"beforeMsgId",historyQuery.query.beforeMsgId},{"lastMsgId",historyQuery.query.lastMsgId},{"limit",historyQuery.query.limit},{"messages",messagesJson}});
     
 }
-void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromAccountId,uint64_t msgId){
+void Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromAccountId,uint64_t msgId){
     if(groupId.empty()||fromAccountId.empty()){
         return;
     }
@@ -1367,7 +1377,7 @@ void im::Imservice::saveOfflineForGroupMembers(const std::string& groupId,const 
     }
 
 }
-im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleOfflinelist(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);//校验已登录
     if(err){
         return err.value();
@@ -1387,7 +1397,7 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]
             limit=static_cast<size_t>(req.body["limit"].get<int64_t>());
         }
         else{
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid limit");
+            return makeErr(req,ErrorCode::MISSING_FIELD,"Invalid limit");
         }
     }
     if(limit>200){
@@ -1406,7 +1416,7 @@ im::Response im::Imservice::handleOfflinelist(const Request& req,[[maybe_unused]
     return makeOk(req,MsgType::OFFLINE_LIST_RESP,nlohmann::json{{"messages",indexJson},{"count",indexJson.size()}});
 }
 
-im::Response im::Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]ConnKey key,[[maybe_unused]]Session& session){
+Response Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]ConnKey key,[[maybe_unused]]Session& session){
     //校验已经登录
     auto err=guardAuthenticated(req,session);
     if(err){
@@ -1442,7 +1452,7 @@ im::Response im::Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]
 
 //登录注册接口
 
-im::Response im::Imservice::handleRegister(const Request& req,[[maybe_unused]]ConnKey key,[[maybe_unused]]Session& session){
+Response Imservice::handleRegister(const Request& req,[[maybe_unused]]ConnKey key,[[maybe_unused]]Session& session){
     //注册限流
     if(rateLimiter_){
         std::string ip = session.peerIp_.empty() ? "unknown" : session.peerIp_;
@@ -1479,7 +1489,7 @@ im::Response im::Imservice::handleRegister(const Request& req,[[maybe_unused]]Co
     }
     return makeErr(req,ErrorCode::INTERNAL,"internal"+result.message);
 }
-im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     std::string accountId;
     auto getUsername=getStringField(req,"accountId",accountId);
     if(getUsername){
@@ -1534,7 +1544,7 @@ im::Response im::Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnK
     session.userId_=result.user.value().userId;
     return makeOk(req,MsgType::LOGIN_RESP,nlohmann::json{{"userId",session.userId_},{"accountId",userInfo.accountId},{"username",userInfo.username},{"token",result.issuedToken.value().rawToken},{"expireAtMs",result.issuedToken.value().expireAtMs}});
 }
-im::Response im::Imservice::handleTokenLogin(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleTokenLogin(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     std::string token;
     auto getToken=getStringField(req,"token",token);
     if(getToken){
@@ -1573,7 +1583,7 @@ im::Response im::Imservice::handleTokenLogin(const Request& req,[[maybe_unused]]
     session.userId_=result.user.value().userId;
     return makeOk(req,MsgType::TOKEN_LOGIN_RESP,nlohmann::json{{"userId",session.userId_},{"accountId",userInfo.accountId},{"username",userInfo.username},{"expireAtMs",result.tokenExpireAtMs.value()}});
 }
-im::Response im::Imservice::handleLogout(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleLogout(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     std::string token;
     auto getToken=getStringField(req,"token",token);
     if(getToken){
@@ -1610,7 +1620,7 @@ im::Response im::Imservice::handleLogout(const Request& req,[[maybe_unused]]Conn
 }
 
 //用户资料
-im::Response im::Imservice::handleGetProfile(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleGetProfile(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1626,7 +1636,7 @@ im::Response im::Imservice::handleGetProfile(const Request& req,[[maybe_unused]]
     
     return makeErr(req,ErrorCode::PROFILE_NOT_FOUND,"Failed to get profile");
 }
-im::Response im::Imservice::handleUpdateProfile(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleUpdateProfile(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1672,7 +1682,7 @@ im::Response im::Imservice::handleUpdateProfile(const Request& req,[[maybe_unuse
     return makeErr(req,ErrorCode::INTERNAL,"Failed to update profile");
 }
 
-nlohmann::json im::Imservice::buildMemberProfileList(const std::string&groupId){
+nlohmann::json Imservice::buildMemberProfileList(const std::string&groupId){
     storage::UserProfile emptyUserProfile;
     if(!groupService_){
         return nlohmann::json{{"accountId",emptyUserProfile.accountId},{"username",emptyUserProfile.username},{"nickname",emptyUserProfile.nickname},{"avatarUrl",emptyUserProfile.avatarUrl},{"signature",emptyUserProfile.signature}};
@@ -1686,7 +1696,7 @@ nlohmann::json im::Imservice::buildMemberProfileList(const std::string&groupId){
 }
 
 //好友相关接口
-im::Response im::Imservice::handleSearchUser(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleSearchUser(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1711,7 +1721,7 @@ im::Response im::Imservice::handleSearchUser(const Request& req,[[maybe_unused]]
 
 }
 
-im::Response im::Imservice::handleListFriends(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleListFriends(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1728,7 +1738,7 @@ im::Response im::Imservice::handleListFriends(const Request& req,[[maybe_unused]
     return makeOk(req,MsgType::LIST_FRIENDS_RESP,nlohmann::json{{"friends",friendList},{"count",friendList.size()}});
     
 }
-im::Response im::Imservice::handleRemoveFriend(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleRemoveFriend(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1756,7 +1766,7 @@ im::Response im::Imservice::handleRemoveFriend(const Request& req,[[maybe_unused
     return makeOk(req,MsgType::REMOVE_FRIEND_RESP,nlohmann::json{{"accountId",targetAccountId},{"removed",true}});
     
 }
-im::Imservice::AccountPushResult im::Imservice::pushToAccount(const std::string& targetAccountId,im::Response& push){
+Imservice::AccountPushResult Imservice::pushToAccount(const std::string& targetAccountId,Response& push){
     //获取用户账号的全部ConnKey
     auto keys=sessionManager_.connKeysByAccountId(targetAccountId);
     if(keys.empty()){
@@ -1789,14 +1799,14 @@ im::Imservice::AccountPushResult im::Imservice::pushToAccount(const std::string&
     return pushResult;
 }
 
-im::Imservice::AccountPushResult im::Imservice::notifyFriendEvent(const std::string&targetAccountId,const std::string&event,nlohmann::json data){
+Imservice::AccountPushResult Imservice::notifyFriendEvent(const std::string&targetAccountId,const std::string&event,nlohmann::json data){
     data["event"]=event;
     Response push{.ver=1,.req_id=0,.type=MsgType::FRIEND_EVENT_PUSH,.ok=true,.code=ErrorCode::OK,.data=std::move(data)};
     auto pushResult=pushToAccount(targetAccountId,push);
     return pushResult;
 }
 //好友请求接口
-im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleSendFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1824,7 +1834,7 @@ im::Response im::Imservice::handleSendFriendRequest(const Request& req,[[maybe_u
     return makeOk(req,MsgType::SEND_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",result.value.value()}});
 }
 
-im::Response im::Imservice::handleListFriendRequests(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleListFriendRequests(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1843,7 +1853,7 @@ im::Response im::Imservice::handleListFriendRequests(const Request& req,[[maybe_
     }
     return makeOk(req,MsgType::LIST_FRIEND_REQUEST_RESP,nlohmann::json{{"requests",friendRequestView},{"count",friendRequestView.size()}});
 }
-im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleAcceptFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1861,11 +1871,11 @@ im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe
             requestId=static_cast<uint64_t>(req.body["requestId"].get<int64_t>());
         }
         else{
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid requestId");
+            return makeErr(req,ErrorCode::MISSING_FIELD,"Invalid requestId");
         }
     }
     else{
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing requestId");
+        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing requestId");
     }
     auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     auto result=friendService_->acceptRequest(session.accountId_,requestId,nowMs);
@@ -1881,7 +1891,7 @@ im::Response im::Imservice::handleAcceptFriendRequest(const Request& req,[[maybe
     }
     return makeOk(req,MsgType::ACCEPT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
 }
-im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleRejectFriendRequest(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1896,11 +1906,11 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
             requestId=static_cast<uint64_t>(req.body["requestId"].get<int64_t>());
         }
         else{
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid requestId");
+            return makeErr(req,ErrorCode::MISSING_FIELD,"Invalid requestId");
         }
     }
     else{
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing requestId");
+        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing requestId");
     }
     auto nowMs=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     auto result=friendService_->rejectRequest(session.accountId_,requestId,nowMs);
@@ -1917,7 +1927,7 @@ im::Response im::Imservice::handleRejectFriendRequest(const Request& req,[[maybe
     return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
 }
 
-im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleConversationRead(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -1960,11 +1970,11 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
             readMsgId=static_cast<uint64_t>(req.body["readMsgId"].get<int64_t>());
         }
         else{
-            return makeErr(req,im::ErrorCode::MISSING_FIELD,"Invalid readMsgId");
+            return makeErr(req,ErrorCode::MISSING_FIELD,"Invalid readMsgId");
         }
     }
     else{
-        return makeErr(req,im::ErrorCode::MISSING_FIELD,"Missing readMsgId");
+        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing readMsgId");
     }
     if(!messageAckService_){
         return makeErr(req,ErrorCode::INTERNAL,"messageAckService is not avaiable");
@@ -1980,7 +1990,7 @@ im::Response im::Imservice::handleConversationRead(const Request& req,[[maybe_un
     return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"conversationType",storage::conversationTypeToString(conversationType)},{"targetId",conversationRes.targetId},{"readMsgId",readMsgId},{"readAtMs",conversationRes.readAtMs},{"receiptUpdated",conversationRes.receiptUpdated}});
 }
 
-im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleConversationList(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);//校验已登录
     if(err){
         return err.value();
@@ -2014,7 +2024,7 @@ im::Response im::Imservice::handleConversationList(const Request& req,[[maybe_un
     }
     return makeOk(req,MsgType::CONVERSATION_LIST_RESP,nlohmann::json{{"conversations",conversationViewJson},{"count",conversationViewJson.size()}});
 }
-im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -2071,7 +2081,7 @@ im::Response im::Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKe
     }
     return makeOk(req,MsgType::SYNC_RESP,nlohmann::json{{"deltas",deltasJson},{"offlineIndexes",offlineIndexesJson},{"cursorCount",cursorsResult.cursors.size()},{"deltaCount",deltasJson.size()},{"offlineCount",offlineIndexesJson.size()}});
 }
-im::Response im::Imservice::handleMessageAck(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
+Response Imservice::handleMessageAck(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
         return err.value();
@@ -2105,12 +2115,101 @@ im::Response im::Imservice::handleMessageAck(const Request& req,[[maybe_unused]]
 }
 
 //业务限流服务
-im::Response im::Imservice::makeRateLimitError(const Request& req,const security::RateLimitResult& result){
+Response Imservice::makeRateLimitError(const Request& req,const security::RateLimitResult& result){
     return makeErr(req,ErrorCode::RATE_LIMITED,"too many requests",nlohmann::json{{"retryAfterMs",result.retryAfterMs}});
 }
-std::optional<im::Response> im::Imservice::checkRateLimitOrError(const Request& req,const security::RateLimitResult& result){
+std::optional<Response> Imservice::checkRateLimitOrError(const Request& req,const security::RateLimitResult& result){
     if(result.allowed){
         return std::nullopt;
     }
     return makeRateLimitError(req,result);
+}
+
+//异步消息
+void Imservice::setMessageAsyncExecutor(SubmitMessageTaskFn submitFn,PostToBaseLoopFn postFn){
+    submitMessageTask_=std::move(submitFn);
+    postToBaseLoop_=std::move(postFn);
+    if(!submitMessageTask_||!postToBaseLoop_){
+        throw std::invalid_argument( "message async executor is invalid");
+    }
+}
+void Imservice::stopAcceptingAsyncMessages(){
+    acceptingAsyncMessages_.store(false,std::memory_order_release);
+    
+}
+DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+auto err=guardAuthenticated(req,session);//校验登录
+    if(err.has_value()){
+        return {.mode=DispatchMode::Immediate,.response=err.value()};
+    }
+    if(!submitMessageTask_){
+        return {.mode=DispatchMode::Immediate};
+    }
+    //发消息限流
+    if(rateLimiter_){
+        auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
+        }    
+    }
+    
+    if(imConfig_.requireGroupIdForSend){//如果配置要求必须提供groupId字段
+        if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
+            return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::MISSING_FIELD,"groupId can not be empty")};
+        }
+    }
+    std::string groupId;
+    auto getGroupId=getStringField(req,"groupId",groupId);
+    if(getGroupId){
+        return {.mode=DispatchMode::Immediate,.response=getGroupId.value()};
+    }
+    auto errInGroup=guardInGroup(req,session,groupId);
+    if(errInGroup.has_value()){
+        return {.mode=DispatchMode::Immediate,.response=errInGroup.value()};
+    }
+    std::string content;
+    auto getContent=getStringField(req,"content",content);
+    if(getContent){
+        return {.mode=DispatchMode::Immediate,.response=getContent.value()};
+    }
+    if(content.size()>imConfig_.maxMessageLen){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::BAD_REQUEST,"Message content is too long")};
+    }
+    //生成msgId和时间戳
+    uint64_t serverTsMs=nowMs();
+    uint64_t msgId=nextMessageId();
+
+    //在baseLoop获取群成员快照
+    auto groupMemberInfos=groupManager_.memberInfos(groupId);
+    //计算离线成员
+    std::vector<std::string> offlineAccounts;
+    std::vector<std::string> memberAccountIds;
+    for(const auto& member:groupMemberInfos){
+        if(!sessionManager_.isOnLine(member.accountId)){
+            offlineAccounts.emplace_back(member.accountId);
+        }
+        memberAccountIds.emplace_back(member.accountId);
+    }
+
+    //构造Command
+    GroupMessageWriteCommand command{.msgId=msgId,.serverTsMs=serverTsMs,.groupId=groupId,
+        .senderAccountId=session.accountId_,.senderUsername=session.username_,
+        .content=content,.memberAccountIds=memberAccountIds,.offlineAccountIds=offlineAccounts
+    };
+    //构造异步完成上下文
+    std::weak_ptr<TcpConnection> weakConn=connection;
+    PendingGroupMessageContext context{.senderConnection=weakConn,.senderKey=key,.request=req,
+        .senderAccountId=session.accountId_,.senderUsername=session.username_,
+        .groupId=groupId,.msgId=msgId,.serverTsMs=serverTsMs
+    };
+    //向专用线程提交任务
+    
+    auto submitResult=submitMessageTask_;
+    if(submitResult==)
+    
+}
+void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMessageWriteCommand command,GroupMessageWriteResult result){
+    
+}
 }

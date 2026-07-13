@@ -21,6 +21,8 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
         newConnection(fd);
     });
     threadPool_ = std::make_unique<infra::thread::ThreadPool>(config_.server().backgroundThreads,config_.server().backgroundQueueCapacity);
+    messageThreadPool_=std::make_unique<infra::thread::ThreadPool>(config_.messageAsync().workerThreads,config_.messageAsync().queueCapacity);
+
     imService_ = std::make_unique<im::Imservice>(1,config_.im(),config_.id());
     imService_->setSendToConnKey([this](im::Imservice::ConnKey key,const std::string& payload){
             auto it=connections_.find(key);
@@ -36,7 +38,10 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
             }
             it->second->send(payload);
             return im::Imservice::SendResult::Ok;
-});
+}); 
+    imService_->setMessageAsyncExecutor([this](){
+        
+    })
     //创建healthService_
     healthService_=std::make_unique<infra::health::HealthService>();
     healthService_->setConfig(config_.health());

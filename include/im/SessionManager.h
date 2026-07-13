@@ -18,7 +18,7 @@ public:
     void unbindConn(ConnKey);//断连解绑在线关系
     std::vector<ConnKey> connKeysByAccountId(const std::string &accountId)const;//获取某用户全部在线连接
     std::optional<std::string> accountIdByConn(ConnKey)const;//根据连接获取用户
-    bool isOnLine(const std::string& username)const;//判断用户是否在线
+    bool isOnLine(const std::string& accountId)const;//判断用户是否在线
     std::vector<std::string> onLineUsers()const;//返回成员列表
     void erase(ConnKey);//删除session
     void clear();//
