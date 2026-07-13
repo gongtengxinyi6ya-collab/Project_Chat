@@ -95,7 +95,7 @@ im::Response im::Imservice::handleAuth(const Request&req,ConnKey key,Session& se
     if(getAccountId.has_value()){
         return getAccountId.value();
     }
-    uint64_t userId;
+    uint64_t userId{0};
     if(req.body.contains("userId")&&req.body["userId"].is_number_unsigned()){
         userId=req.body["userId"].get<uint64_t>();
     }

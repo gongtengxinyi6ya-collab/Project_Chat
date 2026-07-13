@@ -350,7 +350,7 @@ RepoValueResult<size_t> SqlGroupJoinRequestRepo::deleteHandledBefore(int64_t cut
         WHERE status IN (1,2)
         AND reviewed_at_ms > 0
         AND reviewed_at_ms < ?
-        ORDER BY reviewes_at_ms ASC
+        ORDER BY reviewed_at_ms ASC
         LIMIT ?
         )",{cutoffMs,limit});
     if(!result.ok()){

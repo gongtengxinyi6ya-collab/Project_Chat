@@ -263,7 +263,7 @@ im::HistoryQueryParseResult im::parseHistoryQuery(const Request&req,size_t defau
     if(beforeMsgId>0&&lastMsgId>0){
         return {.code=ErrorCode::BAD_REQUEST};
     }
-    HistoryQueryMode mode;
+    HistoryQueryMode mode{};
     //模式判断
     if(beforeMsgId==0&&lastMsgId==0){
         mode=HistoryQueryMode::Latest;

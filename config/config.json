@@ -21,10 +21,10 @@
     "keep_alive": true
   },
   "log": {
-    "level": "INFO",
+    "level": "WARN",
     "to_console": false,
     "to_file": true,
-    "file_path": "build/chat.log",
+    "file_path": "build-release/chat.log",
     "json_format": false,
     "async_enabled": true,
     "async_queue_size": 10000,
