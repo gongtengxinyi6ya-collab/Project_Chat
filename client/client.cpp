@@ -118,6 +118,20 @@ public:
         body["message"]=message;
         return body.dump();
     }
+    std::string buildReviewGroupJoinReq(ClientState& state,const std::string& groupId,
+                                        const std::string& applicantAccountId,bool approve){
+        nlohmann::json body;
+        body["ver"]=1;
+        body["type"]=im::msgTypeToInt(im::MsgType::REVIEW_GROUP_JOIN_REQUEST_REQ);
+        body["req_id"]=state.allocReqId();
+        body["from"]=state.accountId;
+        body["to"]="";
+        body["seq"]=state.allocSeq();
+        body["groupId"]=groupId;
+        body["applicantAccountId"]=applicantAccountId;
+        body["approve"]=approve;
+        return body.dump();
+    }
     std::string buildLeaveReq(ClientState& state,std::optional<std::string> groupId){
         nlohmann::json body;
         body["ver"]=1;
@@ -959,6 +973,9 @@ struct BatchRegisterOptions {
     int intervalMs{6500};
     int timeoutMs{5000};
     int maxRateLimitRetries{3};
+    std::string reviewerAccount;
+    std::string reviewerPassword;
+    int approvalIntervalMs{20};
 };
 
 static void printBatchRegisterUsage(const char* program) {
@@ -977,8 +994,14 @@ static void printBatchRegisterUsage(const char* program) {
         << "  --interval-ms N              Delay between registrations, default 6500\n"
         << "  --timeout-ms N               Per-request timeout, default 5000\n"
         << "  --max-rate-limit-retries N   Default 3\n"
-        << "  --application-message TEXT   Join application message\n\n"
-        << "If --password is omitted, PROJECT_CHAT_BENCH_PASSWORD is used.\n";
+        << "  --application-message TEXT   Join application message\n"
+        << "  --reviewer-account ID        Group owner/admin account; enables auto approval\n"
+        << "  --reviewer-password PASSWORD Group owner/admin password\n"
+        << "  --approval-interval-ms N      Delay between approvals, default 20\n\n"
+        << "Environment fallbacks:\n"
+        << "  PROJECT_CHAT_BENCH_PASSWORD\n"
+        << "  PROJECT_CHAT_REVIEWER_ACCOUNT\n"
+        << "  PROJECT_CHAT_REVIEWER_PASSWORD\n";
 }
 
 static bool parsePositiveInt(const std::string& value, int& output, bool allowZero=false) {
@@ -1058,6 +1081,18 @@ static std::optional<BatchRegisterOptions> parseBatchRegisterOptions(int argc,ch
         else if(option=="--application-message"){
             options.applicationMessage=std::move(value);
         }
+        else if(option=="--reviewer-account"){
+            options.reviewerAccount=std::move(value);
+        }
+        else if(option=="--reviewer-password"){
+            options.reviewerPassword=std::move(value);
+        }
+        else if(option=="--approval-interval-ms"){
+            if(!parsePositiveInt(value,options.approvalIntervalMs,true)){
+                std::cerr<<"invalid --approval-interval-ms\n";
+                return std::nullopt;
+            }
+        }
         else{
             std::cerr<<"unknown batch option: "<<option<<std::endl;
             return std::nullopt;
@@ -1069,10 +1104,24 @@ static std::optional<BatchRegisterOptions> parseBatchRegisterOptions(int argc,ch
             options.password=password;
         }
     }
+    if(options.reviewerAccount.empty()){
+        if(const char* account=std::getenv("PROJECT_CHAT_REVIEWER_ACCOUNT")){
+            options.reviewerAccount=account;
+        }
+    }
+    if(options.reviewerPassword.empty()){
+        if(const char* password=std::getenv("PROJECT_CHAT_REVIEWER_PASSWORD")){
+            options.reviewerPassword=password;
+        }
+    }
     if(options.count<=0||options.usernamePrefix.empty()||options.password.empty()||
        options.groupId.empty()||options.outputPath.empty()){
         std::cerr<<"--count, --username-prefix, --password and --group-id are required\n";
         printBatchRegisterUsage(argv[0]);
+        return std::nullopt;
+    }
+    if(options.reviewerAccount.empty()!=options.reviewerPassword.empty()){
+        std::cerr<<"--reviewer-account and --reviewer-password must be provided together\n";
         return std::nullopt;
     }
     if(options.intervalMs<6000){
@@ -1234,17 +1283,29 @@ static int retryAfterMs(const nlohmann::json& response,int fallbackMs){
 static bool writeBatchRegisterResult(const BatchRegisterOptions& options,
                                      const nlohmann::json& accounts,
                                      const nlohmann::json& registeredNotApplied,
-                                     const nlohmann::json& failures){
+                                     const nlohmann::json& failures,
+                                     const nlohmann::json& approvalFailures){
+    size_t groupReady=0;
+    for(const auto& account:accounts){
+        const std::string status=account.value("applicationStatus","");
+        if(status=="approved"||status=="already_approved"||status=="already_in"){
+            ++groupReady;
+        }
+    }
     nlohmann::json document{
         {"groupId",options.groupId},
+        {"reviewerAccountId",options.reviewerAccount},
         {"accounts",accounts},
         {"registeredNotApplied",registeredNotApplied},
         {"failures",failures},
+        {"approvalFailures",approvalFailures},
         {"summary",{
             {"requested",options.count},
             {"applicationAccepted",accounts.size()},
+            {"groupReady",groupReady},
             {"registeredNotApplied",registeredNotApplied.size()},
-            {"registrationFailed",failures.size()}
+            {"registrationFailed",failures.size()},
+            {"approvalFailed",approvalFailures.size()}
         }}
     };
     std::filesystem::path outputPath(options.outputPath);
@@ -1265,6 +1326,93 @@ static bool writeBatchRegisterResult(const BatchRegisterOptions& options,
     return output.good();
 }
 
+static bool approveBatchApplications(const BatchRegisterOptions& options,
+                                     nlohmann::json& accounts,
+                                     nlohmann::json& approvalFailures){
+    if(options.reviewerAccount.empty()){
+        return true;
+    }
+
+    BatchConnection connection;
+    if(!connection.connectTo(options.host,options.port)){
+        approvalFailures.push_back({{"step","reviewer_connect"},{"error",connection.lastError()}});
+        return false;
+    }
+
+    ClientState reviewerState;
+    reviewerState.accountId=options.reviewerAccount;
+    CommandBuilder builder;
+    auto loginResponse=connection.request(
+        builder.buildLoginReq(reviewerState,options.reviewerAccount,options.reviewerPassword),
+        options.timeoutMs);
+    if(!loginResponse||!loginResponse->value("ok",false)){
+        approvalFailures.push_back({{"step","reviewer_login"},
+                                    {"accountId",options.reviewerAccount},
+                                    {"error",loginResponse?responseMessage(*loginResponse):connection.lastError()}});
+        return false;
+    }
+
+    size_t reviewed=0;
+    for(auto& credential:accounts){
+        const std::string status=credential.value("applicationStatus","");
+        if(status=="already_in"||status=="approved"||status=="already_approved"){
+            continue;
+        }
+        const std::string applicantAccountId=credential.value("accountId","");
+        if(applicantAccountId.empty()){
+            approvalFailures.push_back({{"step","approve_group"},{"error","missing applicant accountId"}});
+            credential["applicationStatus"]="approval_failed";
+            continue;
+        }
+
+        auto reviewResponse=connection.request(
+            builder.buildReviewGroupJoinReq(reviewerState,options.groupId,applicantAccountId,true),
+            options.timeoutMs);
+        if(!reviewResponse||!reviewResponse->value("ok",false)){
+            nlohmann::json failure{{"step","approve_group"},{"accountId",applicantAccountId},
+                                   {"username",credential.value("username","")},
+                                   {"error",reviewResponse?responseMessage(*reviewResponse):connection.lastError()}};
+            if(reviewResponse){
+                failure["code"]=reviewResponse->value("code",-1);
+            }
+            approvalFailures.push_back(std::move(failure));
+            credential["applicationStatus"]="approval_failed";
+        }
+        else{
+            if(!reviewResponse->contains("data")||!(*reviewResponse)["data"].is_object()){
+                credential["applicationStatus"]="approval_failed";
+                approvalFailures.push_back({{"step","approve_group"},
+                                            {"accountId",applicantAccountId},
+                                            {"username",credential.value("username","")},
+                                            {"error","review response missing data object"}});
+                continue;
+            }
+            const auto& data=(*reviewResponse)["data"];
+            if(data.value("approved",false)){
+                credential["applicationStatus"]=data.value("alreadyHandled",false)
+                    ?"already_approved":"approved";
+            }
+            else if(data.value("alreadyHandled",false)){
+                credential["applicationStatus"]="already_in";
+            }
+            else{
+                credential["applicationStatus"]="approval_failed";
+                approvalFailures.push_back({{"step","approve_group"},
+                                            {"accountId",applicantAccountId},
+                                            {"username",credential.value("username","")},
+                                            {"error","review response did not confirm approval"}});
+            }
+        }
+        ++reviewed;
+        std::cout<<"[approval "<<reviewed<<'/'<<accounts.size()<<"] "
+                 <<applicantAccountId<<" status="<<credential.value("applicationStatus","")<<std::endl;
+        if(options.approvalIntervalMs>0){
+            std::this_thread::sleep_for(std::chrono::milliseconds(options.approvalIntervalMs));
+        }
+    }
+    return approvalFailures.empty();
+}
+
 static int runBatchRegister(int argc,char** argv){
     auto optionsResult=parseBatchRegisterOptions(argc,argv);
     if(!optionsResult){
@@ -1274,6 +1422,7 @@ static int runBatchRegister(int argc,char** argv){
     nlohmann::json accounts=nlohmann::json::array();
     nlohmann::json registeredNotApplied=nlohmann::json::array();
     nlohmann::json failures=nlohmann::json::array();
+    nlohmann::json approvalFailures=nlohmann::json::array();
     const int width=std::max(3,static_cast<int>(std::to_string(options.count).size()));
 
     std::cout<<"Batch registration started: count="<<options.count
@@ -1388,7 +1537,7 @@ static int runBatchRegister(int argc,char** argv){
             failures.push_back({{"username",username},{"step","register"},
                                 {"error","rate-limit retry count exhausted"}});
         }
-        if(!writeBatchRegisterResult(options,accounts,registeredNotApplied,failures)){
+        if(!writeBatchRegisterResult(options,accounts,registeredNotApplied,failures,approvalFailures)){
             return 3;
         }
         if(index<options.count&&options.intervalMs>0){
@@ -1396,12 +1545,20 @@ static int runBatchRegister(int argc,char** argv){
         }
     }
 
+    const bool approvalsOk=approveBatchApplications(options,accounts,approvalFailures);
+    if(!writeBatchRegisterResult(options,accounts,registeredNotApplied,failures,approvalFailures)){
+        return 3;
+    }
+
     std::cout<<"Batch registration finished: applications="<<accounts.size()
-             <<" registered_not_applied="<<registeredNotApplied.size()
-             <<" failures="<<failures.size()<<std::endl;
+              <<" registered_not_applied="<<registeredNotApplied.size()
+              <<" failures="<<failures.size()
+              <<" approval_failures="<<approvalFailures.size()<<std::endl;
     std::cout<<"Result file: "<<options.outputPath<<std::endl;
-    std::cout<<"Approve pending applications before using the accounts for load testing.\n";
-    return failures.empty()&&registeredNotApplied.empty()?0:4;
+    if(options.reviewerAccount.empty()){
+        std::cout<<"Approve pending applications before using the accounts for load testing.\n";
+    }
+    return failures.empty()&&registeredNotApplied.empty()&&approvalsOk?0:4;
 }
 
 static void recvLoop(int fd, std::atomic<bool>& running,ClientState& state) {

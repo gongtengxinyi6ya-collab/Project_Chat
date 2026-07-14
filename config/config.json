@@ -36,7 +36,7 @@
     "max_message_len": 4096,
     "allow_debug_auth":false,
     "max_ack_batch_size": 200,
-    "max_group_members": 100,
+    "max_group_members": 500,
     "require_friend_for_group_invite": true,
     "default_history_limit": 50,
     "max_history_limit": 100,
