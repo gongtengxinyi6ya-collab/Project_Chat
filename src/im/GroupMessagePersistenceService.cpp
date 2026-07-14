@@ -13,8 +13,11 @@ GroupMessagePersistenceService::GroupMessagePersistenceService(std::shared_ptr<s
     }
 }
 GroupMessageWriteResult GroupMessagePersistenceService::persist(const GroupMessageWriteCommand& command) const{
-    if(command.groupId.empty()||command.senderAccountId.empty()){
+    if(command.groupId.empty()||command.msgId==0||command.senderAccountId.empty()){
         return GroupMessageWriteResult{.messageResult={storage::RepoStatus::InvalidArgument}};
+    }
+    if(!messageRepo_||!conversationRepo_||offlineMessageRepo_){
+        return GroupMessageWriteResult{.messageResult={storage::RepoStatus::Internal}};
     }
     GroupMessageWriteResult groupMsgWriteRes;
     try{
@@ -24,11 +27,8 @@ GroupMessageWriteResult GroupMessagePersistenceService::persist(const GroupMessa
             return groupMsgWriteRes;
         }
         //消息保存成功更新会话
-        auto resultConver=conversationRepo_->upsertGroupOnMessage(command.groupId,command.memberAccountIds,command.senderAccountId,command.senderUsername,command.msgId,command.content,command.serverTsMs);
-        if(!resultConver.ok()){
-            //会话更新失败
-            groupMsgWriteRes.conversationResult=resultConver;
-        }
+        groupMsgWriteRes.conversationResult=conversationRepo_->upsertGroupOnMessage(command.groupId,command.memberAccountIds,command.senderAccountId,command.senderUsername,command.msgId,command.content,command.serverTsMs);
+        
         //保存离线索引
         for(const auto& account:command.offlineAccountIds){
             auto resultOffline=offlineMessageRepo_->saveOfflineMessage(account,command.msgId,command.groupId);

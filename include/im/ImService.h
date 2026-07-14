@@ -112,8 +112,7 @@ private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
     SendToConnKeyFn sendToConnKey_;
     SessionManager sessionManager_;
-    uint64_t nextMsgId_{1};//全局递增消息id，用于推送消息唯一标识
-
+    
     GroupManager groupManager_;//房间管理
     ImConfig imConfig_;//IM相关配置
     IdConfig idConfig_;//id配置

@@ -112,7 +112,7 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
         )";
     //动态拼接VALUES占位符
     std::vector<storage::SqlParam> params;
-     bool first=true;
+    bool first=true;
     for(const auto &accountId:memberAccountIds){
         if(first){
             sql+=",";

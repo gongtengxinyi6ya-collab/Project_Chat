@@ -310,14 +310,14 @@ uint64_t Imservice::nowMs()const{
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
 uint64_t Imservice::nextMessageId(){
-    return nextMsgId_++;
+    return idGenerator_.nextId();
 }
 void Imservice::decorate(Response& resp,std::optional<uint64_t> msgId,std::optional<uint64_t> clientReqId){
     if(msgId.has_value()){
         resp.data["msgId"]=msgId.value();
     }
     else if(!resp.data.contains("msgId")){
-        resp.data["msgId"]=nextMsgId_++;
+        resp.data["msgId"]=idGenerator_.nextId();
     }
     if(!resp.data.contains("serverTsMs"))
         resp.data["serverTsMs"]=nowMs();
