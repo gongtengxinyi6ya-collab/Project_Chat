@@ -42,6 +42,30 @@ namespace infra::health{
         <<", maintenanceRunningTooLong="<<snapshot.maintenanceRunningTooLong
         <<", lastError="<<snapshot.maintenance.lastError;
     }
+    oss << ", messageExecutorEnabled="
+    << snapshot.messageExecutorEnabled
+    << ", messageExecutorHealthy="
+    << snapshot.messageExecutorHealthy
+    << ", messageExecutorSaturated="
+    << snapshot.messageExecutorSaturated
+    << ", messageWorkers="
+    << snapshot.messageExecutorStats.workerCount
+    << ", messageActive="
+    << snapshot.messageExecutorStats.activeTasks
+    << ", messageQueueSize="
+    << snapshot.messageExecutorStats.queuedTasks
+    << ", messageQueueCapacity="
+    << snapshot.messageExecutorStats.queueCapacity
+    << ", messageSubmitted="
+    << snapshot.messageExecutorStats.submittedTasks
+    << ", messageCompleted="
+    << snapshot.messageExecutorStats.completedTasks
+    << ", messageFailed="
+    << snapshot.messageExecutorStats.failedTasks
+    << ", messageRejectedFull="
+    << snapshot.messageExecutorStats.rejectedFull
+    << ", messageRejectedStopped="
+    << snapshot.messageExecutorStats.rejectedStopped;
     return oss.str();
 }
 }

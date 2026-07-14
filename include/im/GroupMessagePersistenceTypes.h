@@ -22,13 +22,13 @@ struct GroupMessageWriteCommand {//提交给工作线程的不可变群消息持
 struct GroupMessageWriteResult {//返回给baseLoop的多步持久化结果
     storage::RepoResult messageResult{storage::RepoStatus::Internal,"not executed"};//正文消息入库结果
 
-    std::optional<storage::RepoResult> conversationResult;//是否更新会话列表
+    std::optional<storage::RepoResult> conversationResult{std::nullopt};//是否更新会话列表
 
     std::size_t offlineAttempted{0};//计划离线所有保存数量
     std::size_t offlineSaved{0};//真正保存的离线索引数量
     std::size_t offlineFailed{0};//失败保存的离线索引数量
 
-    std::string exceptionMessage;//异常信息
+    std::string exceptionMessage{};//异常信息
     bool durable() const noexcept{return messageResult.ok();};//消息是否真正持久化成功
     bool degraded() const noexcept{
         if(!durable()) return false;

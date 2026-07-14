@@ -80,11 +80,18 @@ public:
 
     using ConnKey=int;//连接标识
     using SendToConnKeyFn=std::function<SendResult (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
+    using MessageTask = std::function<void()>;//异步任务接口
+    using SubmitMessageTaskFn =std::function<infra::thread::TaskSubmitResult(MessageTask)>;//提交消息持久化任务到工作线程池
+    using PostToBaseLoopFn =std::function<bool(MessageTask)>;//投递持久化的结果任务到baseLoop线程
 
     explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig(),const IdConfig& idconfig=IdConfig());
     ~Imservice();
+    //回调设置
     void setSendToConnKey(SendToConnKeyFn fn);
-    void ronMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
+    void setMessageAsyncExecutor(SubmitMessageTaskFn submitFn,PostToBaseLoopFn postFn);//注入群消息异步处理所需的两个执行器
+    void stopAcceptingAsyncMessages();//服务关闭时禁止再接受新的异步消息任务
+
+    void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
 
     void shutdown();
@@ -153,7 +160,7 @@ private:
     LogLevel mapErrorToLogLevel(ErrorCode code) const;//错误映射
     SendResult sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet);//统一回包出口函数，处理日志，错误
     SendResult sendParseErrorWithLog( ConnKey key,Response& resp,const Session& session);//统一解析错误回包函数
-    DispatchResult dispatcRequest(const Request&req,ConnKey key,Session& ssession,const std::shared_ptr<TcpConnection>& connection);//分发并返回resp
+    DispatchResult dispatchRequest(const Request&req,ConnKey key,Session& ssession,const std::shared_ptr<TcpConnection>& connection);//分发并返回resp
 
     //持久化储存
     storage::RepositoryBundle repos_;//保存用户，群，消息三个Repo
@@ -213,16 +220,12 @@ private:
     std::optional<Response> checkRateLimitOrError(const Request& req,const security::RateLimitResult& result);//辅助方法
 
     //异步接口
-    using MessageTask = std::function<void()>;//异步任务接口
-    using SubmitMessageTaskFn =std::function<infra::thread::TaskSubmitResult(MessageTask)>;//提交消息持久化任务到工作线程池
-    using PostToBaseLoopFn =std::function<bool(MessageTask)>;//投递持久化的结果任务到baseLoop线程
     std::shared_ptr<GroupMessagePersistenceService> groupMessagePersistence_;
-    SubmitMessageTaskFn submitMessageTask_;
-    PostToBaseLoopFn postToBaseLoop_;
+    SubmitMessageTaskFn submitMessageTask_;//调用线程：负责将任务放入messageThreadPool_队列
+    PostToBaseLoopFn postToBaseLoop_;//调用消息工作线程将完成任务放回baseLoop
     std::atomic<bool> acceptingAsyncMessages_{true};//控制当前服务是否还接受新的异步群消息任务
-    void setMessageAsyncExecutor(SubmitMessageTaskFn submitFn,PostToBaseLoopFn postFn);//注入群消息异步处理所需的两个执行器
-    void stopAcceptingAsyncMessages();//服务关闭时禁止再接受新的异步消息任务
     DispatchResult handleGroupMessageAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);//群消息异步入口
+    DispatchResult submitResultMapToDispatchResult(const Request& req,infra::thread::TaskSubmitResult result);
     struct PendingGroupMessageContext {//异步上下文
         std::weak_ptr<TcpConnection> senderConnection;//发送者连接
         ConnKey senderKey{0};//连接标识

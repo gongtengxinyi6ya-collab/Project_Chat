@@ -77,7 +77,10 @@ private:
     void stopInBaseLoop();//内部真正执行服务停止逻辑
     void closeAllConnections();//关闭当前所有连接
     void tryFinishStopInBaseLoop();//判断是否可以进入最终释放阶段
-    void finishStopInBaseLoop();//完成最终释放
+    void finishStopInBaseLoop();//完成Drain并排队最终清理
+
+    bool finalStopQueued_{false};
+    void finalizeStopInBaseLoop();
 
     //后台清理服务
     std::unique_ptr<infra::maintenance::MaintenanceService> maintenanceService_;

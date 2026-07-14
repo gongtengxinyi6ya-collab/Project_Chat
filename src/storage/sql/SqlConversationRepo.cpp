@@ -95,26 +95,25 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
         return {.status=RepoStatus::Internal,.message="Failed to connect the dataBase"};
     }
     
-    std::string sql=R"(        INSERT INTO conversations (
-            owner_account_id,
-            conversation_type,
-            target_id,
-            last_msg_id,
-            last_preview,
-            last_sender_account_id,
-            last_sender_username,
-            last_ts_ms,
-            unread_count,
-            last_read_msg_id,
-            last_read_at_ms
-        )
-        VALUES
-        
+    std::string sql=R"(        
+        INSERT INTO conversations (
+                owner_account_id,
+                conversation_type,
+                target_id,
+                last_msg_id,
+                last_preview,
+                last_sender_account_id,
+                last_sender_username,
+                last_ts_ms,
+                unread_count,
+                last_read_msg_id,
+                last_read_at_ms
+            )VALUES
         )";
     //动态拼接VALUES占位符
     std::vector<storage::SqlParam> params;
+     bool first=true;
     for(const auto &accountId:memberAccountIds){
-        bool first=true;
         if(first){
             sql+=",";
             first=false;
@@ -122,21 +121,21 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
         sql+="(?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         params.emplace_back(accountId);
         params.emplace_back(groupId);
-        params.emplace_back(accountId);
+        params.emplace_back(msgId);
         params.emplace_back(finalPreview);
         params.emplace_back(senderAccountId);
         params.emplace_back(senderUsername);
         params.emplace_back(serverTsMs);
     
         if(accountId==senderAccountId){//发送者
-            params.emplace_back(0);
+            params.emplace_back(uint64_t{0});
             params.emplace_back(msgId);
             params.emplace_back(serverTsMs);
         }
         else{
-            params.emplace_back(1);
-            params.emplace_back(0);
-            params.emplace_back(0);
+            params.emplace_back(uint64_t{0});
+            params.emplace_back(uint64_t{0});
+            params.emplace_back(uint64_t{0});
         }
     }
     sql+=R"(

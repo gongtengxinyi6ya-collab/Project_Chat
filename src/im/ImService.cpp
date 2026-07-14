@@ -21,6 +21,7 @@
 #include "im/MessageAckService.h"
 #include "im/GroupService.h"
 #include "im/GroupJoinService.h"
+#include "im/GroupMessagePersistenceService.h"
 
 #include "security/rate_limit/RateLimiter.h"
 #include "security/PasswordHasher.h"
@@ -44,26 +45,27 @@ void Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const std::s
     auto req_or_resp=tryParse(payload);
     if(auto req_ptr=std::get_if<Request>(&req_or_resp)){
         LOG_INFO_CTX("im request in",makeReqCtx(key,*req_ptr,session,"REQ_IN"));
-        Response resp;
         try{
-            auto result=dispatcRequest(*req_ptr,key,session,conn);
-            if(result.mode==DispatchMode::Immediate){
-                sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT");
+            auto result=dispatchRequest(*req_ptr,key,session,conn);
+            if(!result.shouldRespond()){
+                return ;
             }
-            else{
-                return;
-            }
+            auto resp=std::move(result.response.value());
+            sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT");
         }catch(const std::exception& e){
-            resp=makeErr(*req_ptr,ErrorCode::INTERNAL,"Internal server error:"+std::string(e.what()));
+            auto response=makeErr(*req_ptr,ErrorCode::INTERNAL,"Internal server error:"+std::string(e.what()));
             //记录DISPATCH_EXCEPTION日志，包含请求上下文和异常信息
             LOG_ERROR_CTX("Exception occurred while dispatching request",makeReqCtx(key,*req_ptr,session,"DISPATCH_EXCEPTION"));
+            sendResponseWithLog(key,*req_ptr,response,session,"RESP_OUT");
 
         }catch(...){
-            resp=makeErr(*req_ptr,ErrorCode::INTERNAL,"Internal server error");
+            auto resp=makeErr(*req_ptr,ErrorCode::INTERNAL,"Internal server error");
             LOG_ERROR_CTX("Unknown exception occurred while dispatching request",makeReqCtx(key,*req_ptr,session,"DISPATCH_EXCEPTION"));
+            sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT");
         }
+        return;
     }
-    else if(auto resp_ptr=std::get_if<Response>(&req_or_resp)){
+    if(auto resp_ptr=std::get_if<Response>(&req_or_resp)){
         sendParseErrorWithLog(key,*resp_ptr,session);
     }
     
@@ -184,6 +186,9 @@ void Imservice::setRepositories(storage::RepositoryBundle repos){
     }
     if(repos_.groupRepo&&repos_.userProfileRepo&&repos_.groupJoinRequestRepo){
         groupJoinService_=std::make_unique<GroupJoinService>(groupManager_,repos_.groupRepo,repos_.userProfileRepo,repos_.groupJoinRequestRepo,imConfig_.maxGroupMembers);
+    }
+    if(repos_.messageRepo){
+        groupMessagePersistence_=std::make_unique<GroupMessagePersistenceService>(repos_.messageRepo,repos_.conversationRepo,repos_.offlineMessageRepo);
     }
 }
 void Imservice::setRateLimiter(std::unique_ptr<security::RateLimiter> limiter){
@@ -308,15 +313,16 @@ uint64_t Imservice::nextMessageId(){
     return nextMsgId_++;
 }
 void Imservice::decorate(Response& resp,std::optional<uint64_t> msgId,std::optional<uint64_t> clientReqId){
-    if(msgId){
-        resp.data["msg_id"]=msgId;
+    if(msgId.has_value()){
+        resp.data["msgId"]=msgId.value();
     }
-    else{
+    else if(!resp.data.contains("msgId")){
         resp.data["msgId"]=nextMsgId_++;
     }
-    resp.data["serverTsMs"]=nowMs();
+    if(!resp.data.contains("serverTsMs"))
+        resp.data["serverTsMs"]=nowMs();
     if(clientReqId.has_value()){
-        resp.data["clientReqId"]=*clientReqId;
+        resp.data["clientReqId"]=clientReqId.value();
     }
 }
  Imservice::SendResult Imservice::sendPush(ConnKey target,const std::string& payload){
@@ -1084,7 +1090,7 @@ Imservice::SendResult Imservice::sendParseErrorWithLog(ConnKey key,Response& res
     }
     return result;
 }
-DispatchResult Imservice::dispatcRequest(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
     switch(req.type){
         case MsgType::AUTH_REQ:
             return DispatchResult::immediate(handleAuth(req,key,session));
@@ -1114,7 +1120,7 @@ DispatchResult Imservice::dispatcRequest(const Request& req,ConnKey key,Session&
             return result;
         }
         case MsgType::GROUP_MSG_REQ:{
-            return DispatchResult::deferred();
+            return handleGroupMessageAsync(req,key,session,connection);
         }
         case MsgType::GROUP_MEMBERS_REQ:
             return DispatchResult::immediate(handleGroupMembers(req,key,session));
@@ -2142,8 +2148,17 @@ auto err=guardAuthenticated(req,session);//校验登录
     if(err.has_value()){
         return {.mode=DispatchMode::Immediate,.response=err.value()};
     }
-    if(!submitMessageTask_){
-        return {.mode=DispatchMode::Immediate};
+    //校验异步功能配置
+    if(!submitMessageTask_||!postToBaseLoop_||!groupMessagePersistence_){
+        return DispatchResult::immediate(handleGroupMsg(req,key,session));
+    }
+    //服务停止接受新任务
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Message service is stopping"));
+    }
+    //连接已经关闭
+    if(!connection||connection->isClosed()){
+        return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Connection is closed"));
     }
     //发消息限流
     if(rateLimiter_){
@@ -2204,12 +2219,102 @@ auto err=guardAuthenticated(req,session);//校验登录
         .groupId=groupId,.msgId=msgId,.serverTsMs=serverTsMs
     };
     //向专用线程提交任务
-    
-    auto submitResult=submitMessageTask_;
-    if(submitResult==)
+    auto persistenceService=groupMessagePersistence_;
+    auto postToBaseLoop=postToBaseLoop_;
+    auto submitResult=submitMessageTask_([this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
+        //baseLoop提交任务交给消息线程处理
+        auto writeResult=persistenceService->persist(command);//消息线程处理持久化
+        auto posted=postToBaseLoop([this,context=std::move(context),command=std::move(command),writeResult=std::move(writeResult)]()mutable{
+            //提交回baseLoop
+            completeGroupMessage(std::move(context),std::move(command),std::move(writeResult));
+        });
+        if(!posted){
+            LOG_WARN("Failed to post group message completion to baseLoop");
+        }
+    });
+    //处理提交结果
+    return submitResultMapToDispatchResult(req,submitResult);
     
 }
+DispatchResult Imservice::submitResultMapToDispatchResult(const Request&req,infra::thread::TaskSubmitResult result){
+    switch(result){
+        case infra::thread::TaskSubmitResult::Accepted://任务提交成功调用异步
+            return DispatchResult::deferred();
+        case infra::thread::TaskSubmitResult::QueueFull:
+            return DispatchResult::immediate(makeErr(req,ErrorCode::DELIVERY_OVERLOADED,"Message persistence queue is full",nlohmann::json{{"retryable",true}}));
+        case infra::thread::TaskSubmitResult::Stopping:
+            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Message service is stopping"));
+        case infra::thread::TaskSubmitResult::InvalidTask:
+            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Invalid message persistence task"));
+        default:
+            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Invaild task"));
+    }
+}
 void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMessageWriteCommand command,GroupMessageWriteResult result){
-    
+    auto conn=context.senderConnection.lock();
+    Session* currentSession=nullptr;
+    if(conn&&!conn->isClosed()){//连接未关闭
+        currentSession=sessionManager_.find(context.senderKey);
+        if(currentSession&&currentSession->accountId_!=context.senderAccountId){
+            currentSession=nullptr;
+        }
+    }
+    if(!result.durable()){//消息持久化失败
+        LOG_ERROR("Failed to persist group message, groupId=" +command.groupId +", msgId=" +std::to_string(command.msgId) +", error=" + result.messageResult.message);
+        if(currentSession){
+            auto resp=makeRepoError(context.request,result.messageResult.status,result.messageResult.message);
+            sendResponseWithLog(context.senderKey,context.request,resp,*currentSession,"GROUP_MAG_PERSIST_FAILED");
+        }
+        return;
+    }
+    //构成推送响应
+    Response push{
+        .ver = context.request.ver,
+        .req_id = 0,
+        .type = MsgType::GROUP_MSG_PUSH,
+        .ok = true,
+        .code = ErrorCode::OK,
+        .msg = "New group message",
+        .data = nlohmann::json{
+            {"fromAccountId", command.senderAccountId},
+            {"fromUsername", command.senderUsername},
+            {"groupId", command.groupId},
+            {"content", command.content},
+            {"msgId", command.msgId},
+            {"serverTsMs", command.serverTsMs}
+        }
+    };
+    //广播消息
+    auto broadcastResult=broadcastToGroup(command.groupId,context.senderKey,push);
+    if (result.degraded()) {//持久化消息存在降级
+        LOG_WARN(
+            "Group message persisted with degraded side effects, "
+            "groupId=" + command.groupId +
+            ", msgId=" + std::to_string(command.msgId) +
+            ", offlineFailed=" +
+            std::to_string(result.offlineFailed) +
+            ", exception=" +
+            result.exceptionMessage);
+    }
+
+    if (!currentSession) {
+        return;
+    }
+    Response response = makeOk(
+        context.request,
+        MsgType::GROUP_MSG_RESP,
+        nlohmann::json{
+            {"groupId", command.groupId},
+            {"msgId", command.msgId},
+            {"serverTsMs", command.serverTsMs},
+            {"sent", broadcastResult.sent},
+            {"dropped", broadcastResult.dropped()},
+            {"noSuchConnection",
+                broadcastResult.noSuchConnection},
+            {"closed", broadcastResult.closed},
+            {"overloaded", broadcastResult.overloaded},
+            {"persistenceDegraded", result.degraded()}
+        });
+    sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"GROUP_MSG_RESP_OUT");
 }
 }

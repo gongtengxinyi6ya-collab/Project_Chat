@@ -13,7 +13,7 @@ GroupMessagePersistenceService::GroupMessagePersistenceService(std::shared_ptr<s
     }
 }
 GroupMessageWriteResult GroupMessagePersistenceService::persist(const GroupMessageWriteCommand& command) const{
-    if(command.groupId.empty()||command.msgId<0||command.senderAccountId.empty()){
+    if(command.groupId.empty()||command.senderAccountId.empty()){
         return GroupMessageWriteResult{.messageResult={storage::RepoStatus::InvalidArgument}};
     }
     GroupMessageWriteResult groupMsgWriteRes;

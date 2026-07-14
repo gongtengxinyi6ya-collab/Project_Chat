@@ -20,6 +20,7 @@ namespace infra::health {
 class HealthService {
 public:
     using MaintenanceProvider =std::function<infra::maintenance::MaintenanceSnapshot()>;
+    using MessageExecutorStatsProvider =std::function<infra::thread::ThreadPoolStats()>;
     HealthService();
     explicit HealthService(const HealthConfig& config);
     void setConfig(const HealthConfig& config);
@@ -27,6 +28,7 @@ public:
     void setRedisClient(std::weak_ptr<infra::redis::RedisClient> redisClient);//注入Redis客户端
     void setOnlineConnectionProvider(std::function<size_t()> provider);//注入在线连接获取函数
     void setMaintenanceProvider(MaintenanceProvider provider,int64_t exceptedIntervalMs);//注入维护快照获取函数
+    void setMessageExecutorStatsProvider(MessageExecutorStatsProvider provider,std::uint32_t queueWarnPercent);
     HealthSnapshot snapshot();//生成完整健康快照
 
 private:
@@ -41,6 +43,10 @@ private:
     int64_t maintenanceIntervalMs_{0};
 
     uint64_t lastSqlAcquireTimeouts_{0};
+
+    MessageExecutorStatsProvider messageExecutorStatsProvider_;
+    std::uint32_t messageQueueWarnPercent_{80};
+    std::uint64_t lastMessageRejectedFull_{0};
     
     int64_t currentEpochMs() const;
 
@@ -49,7 +55,8 @@ private:
     void fillRuntimeStats(HealthSnapshot& snapshot);//填充运行时信息
     void fillLoggerStats(HealthSnapshot& snapshot);
     void fillMaintenanceStats(HealthSnapshot& snapshot);
-
+    void fillMessageExecutorStats(HealthSnapshot& snapshot);
+    
     void decideStatus(HealthSnapshot& snapshot);//根据状态计算总健康状态
 
     bool hasNewSqlAcquireTimeouts(const storage::SqlConnectionPoolStats& stats);

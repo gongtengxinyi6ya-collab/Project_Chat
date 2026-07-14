@@ -36,7 +36,7 @@ public:
     const RedisConfig& redis()const{return redisConfig_;}
     const HealthConfig& health()const{return healthConfig_;}
     const MaintenanceConfig& maintenance()const{return maintenance_;}
-    const MessageAsyncConfig& messageAsync() const;
+    const MessageAsyncConfig& messageAsync()const{return messageAsync_;};
 private:
     ServerConfig server_;
     NetConfig net_;

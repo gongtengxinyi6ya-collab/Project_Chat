@@ -21,8 +21,9 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
         newConnection(fd);
     });
     threadPool_ = std::make_unique<infra::thread::ThreadPool>(config_.server().backgroundThreads,config_.server().backgroundQueueCapacity);
-    messageThreadPool_=std::make_unique<infra::thread::ThreadPool>(config_.messageAsync().workerThreads,config_.messageAsync().queueCapacity);
-
+    if(config_.messageAsync().enabled){
+        messageThreadPool_=std::make_unique<infra::thread::ThreadPool>(config_.messageAsync().workerThreads,config_.messageAsync().queueCapacity);
+    }
     imService_ = std::make_unique<im::Imservice>(1,config_.im(),config_.id());
     imService_->setSendToConnKey([this](im::Imservice::ConnKey key,const std::string& payload){
             auto it=connections_.find(key);
@@ -39,9 +40,24 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
             it->second->send(payload);
             return im::Imservice::SendResult::Ok;
 }); 
-    imService_->setMessageAsyncExecutor([this](){
-        
-    })
+    if(messageThreadPool_){
+        imService_->setMessageAsyncExecutor(
+            [this](std::function<void()>task)->infra::thread::TaskSubmitResult{
+                //注入工作任务提交
+                if(!messageThreadPool_){
+                    return infra::thread::TaskSubmitResult::Stopping;
+                }
+                return messageThreadPool_->submit(std::move(task));
+            },
+            [this](std::function<void()>task)->bool{
+                if(!baseloop_||!task){
+                    return false;
+                }
+                baseloop_->queueInLoop(std::move(task));
+                return true;
+            }
+        );
+    }
     //创建healthService_
     healthService_=std::make_unique<infra::health::HealthService>();
     healthService_->setConfig(config_.health());
@@ -56,7 +72,14 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     healthService_->setOnlineConnectionProvider([this](){
         return connections_.size();
     });
-
+    if(messageThreadPool_){
+        healthService_->setMessageExecutorStatsProvider([this](){
+            if(!messageThreadPool_){
+                return infra::thread::ThreadPoolStats{};
+            }
+            return messageThreadPool_->stats();
+        },config_.messageAsync().queueWarnPercent);
+    }
     if(config_.maintenance().enabled){
         maintenanceService_=std::make_unique<infra::maintenance::MaintenanceService>(config_.maintenance(),maintenanceRepos);
         healthService_->setMaintenanceProvider([this](){
@@ -243,6 +266,9 @@ void TcpServer::stopInBaseLoop(){
         return ;
     }
     stopping_.store(true,std::memory_order_release);
+    if(imService_){
+        imService_->stopAcceptingAsyncMessages();
+    }
     if(healthTimerId_.valid()){
         baseloop_->cancel(healthTimerId_);
         healthTimerId_=TimerId{};
@@ -290,6 +316,23 @@ void TcpServer::tryFinishStopInBaseLoop(){
 }
 
 void TcpServer::finishStopInBaseLoop(){
+    if (finalStopQueued_) {
+        return;
+    }
+
+    finalStopQueued_ = true;
+
+    if (messageThreadPool_) {
+        messageThreadPool_->stop(infra::thread::ThreadPoolStopMode::Drain);
+    }
+
+    baseloop_->queueInLoop([this]() {
+        finalizeStopInBaseLoop();
+    });
+
+}
+
+void TcpServer::finalizeStopInBaseLoop(){
     if(stopped_){//已经结束，防止重复释放
         return ;
     }
@@ -314,5 +357,4 @@ void TcpServer::finishStopInBaseLoop(){
     if(quitCallback_){
         quitCallback_();
     }
-
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <stddef.h>
 #include "third_party/json.hpp"
 
 /*独立配置消息持久化线程池*/

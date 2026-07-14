@@ -31,6 +31,10 @@ void HealthService::setMaintenanceProvider(std::function<infra::maintenance::Mai
         maintenanceIntervalMs_=expectedIntervalMs;
     }
 }
+void HealthService::setMessageExecutorStatsProvider(MessageExecutorStatsProvider provider,std::uint32_t queueWarnPercent) {
+    messageExecutorStatsProvider_ =std::move(provider);
+    messageQueueWarnPercent_ =queueWarnPercent;
+}
 HealthSnapshot HealthService::snapshot(){
     HealthSnapshot snapshot;
     fillRuntimeStats(snapshot);
@@ -39,6 +43,7 @@ HealthSnapshot HealthService::snapshot(){
 
     fillLoggerStats(snapshot);
     fillMaintenanceStats(snapshot);
+    fillMessageExecutorStats(snapshot);
     decideStatus(snapshot);
     return snapshot;
 }
@@ -158,6 +163,29 @@ void HealthService::fillMaintenanceStats(HealthSnapshot& snapshot){
     snapshot.maintenanceHealthy= !snapshot.maintenanceStale &&!snapshot.maintenanceRunningTooLong && (!snapshot.maintenance.hasRun || snapshot.maintenance.lastRunOk);
 
 }
+void HealthService::fillMessageExecutorStats(HealthSnapshot& snapshot) {
+    if (!messageExecutorStatsProvider_) {
+        snapshot.messageExecutorEnabled = false;
+        snapshot.messageExecutorHealthy = true;
+        return;
+    }
+
+    snapshot.messageExecutorEnabled = true;
+    snapshot.messageExecutorStats =messageExecutorStatsProvider_();
+
+    const auto& stats =snapshot.messageExecutorStats;
+
+    if (stats.queueCapacity > 0) {
+        const std::size_t warnSize =(stats.queueCapacity *messageQueueWarnPercent_ + 99) / 100;
+        snapshot.messageExecutorSaturated =stats.queuedTasks >= warnSize;
+    }
+
+    snapshot.messageExecutorRejectedIncreased =stats.rejectedFull >lastMessageRejectedFull_;
+
+    lastMessageRejectedFull_ =stats.rejectedFull;
+
+    snapshot.messageExecutorHealthy =!snapshot.messageExecutorSaturated &&!snapshot.messageExecutorRejectedIncreased &&stats.state ==infra::thread::ThreadPoolState::Running;
+}
 void HealthService::decideStatus(HealthSnapshot& snapshot){
     snapshot.status = HealthStatus::Healthy;
 
@@ -196,7 +224,17 @@ void HealthService::decideStatus(HealthSnapshot& snapshot){
     if(snapshot.loggerStats.dropped>0){
         addReason(snapshot,"logger dropped");
     }
+
+    if (snapshot.messageExecutorEnabled &&!snapshot.messageExecutorHealthy) {
+        snapshot.status = HealthStatus::Degraded;
+        if (snapshot.messageExecutorSaturated) {
+            addReason(snapshot,"message executor queue saturated");
+        }
+        if (snapshot.messageExecutorRejectedIncreased) {addReason(snapshot,"message executor rejected task");
+        }
+    }
 }
+
 
 void HealthService::addReason(HealthSnapshot& snapshot, std::string reason){
     if(snapshot.reason.empty()){

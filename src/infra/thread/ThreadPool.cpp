@@ -114,6 +114,7 @@ void ThreadPool::stop(ThreadPoolStopMode mode){
 ThreadPoolStats ThreadPool::stats()const{
     return ThreadPoolStats{.state=state_.load(std::memory_order_relaxed),
         .workerCount=threads_.size(),.queuedTasks=taskQueue_.size(),
+        .queueCapacity=taskQueue_.capacity(),
         .activeTasks=activeTasks_.load(std::memory_order_relaxed),
         .submittedTasks=submittedTasks_.load(std::memory_order_relaxed),
         .completedTasks=completedTasks_.load(std::memory_order_relaxed),

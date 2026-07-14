@@ -3,7 +3,7 @@
 
 MessageAsyncConfig MessageAsyncConfig::fromJson(const nlohmann::json& j){
     MessageAsyncConfig config;
-    config.enabled=ConfigParseHelper::getOrDefault(j,"enable",config.enabled);
+    config.enabled=ConfigParseHelper::getOrDefault(j,"enabled",config.enabled);
     config.workerThreads=ConfigParseHelper::getOrDefault(j,"worker_threads",config.workerThreads);
     config.queueCapacity=ConfigParseHelper::getOrDefault(j,"queue_capacity",config.queueCapacity);
     config.queueWarnPercent=ConfigParseHelper::getOrDefault(j,"queue_warn_percent",config.queueWarnPercent);

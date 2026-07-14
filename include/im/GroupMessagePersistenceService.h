@@ -1,4 +1,4 @@
-#pragma ocne
+#pragma once
 #include <memory>
 #include "GroupMessagePersistenceTypes.h"
 namespace storage{

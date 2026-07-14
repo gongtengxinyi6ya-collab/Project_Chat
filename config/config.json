@@ -94,5 +94,11 @@
   "offline_index_retention_ms": 2592000000,
   "batch_size": 500,
   "max_batches_per_run": 20
+},
+"message_async": {
+  "enabled": true,
+  "worker_threads": 1,
+  "queue_capacity": 256,
+  "queue_warn_percent": 80
 }
 }

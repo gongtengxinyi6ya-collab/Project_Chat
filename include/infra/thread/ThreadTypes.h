@@ -35,6 +35,7 @@ struct ThreadPoolStats {//状态统计
 
     size_t workerCount{0};
     size_t queuedTasks{0};
+    std::size_t queueCapacity{0};
     size_t activeTasks{0};
 
     uint64_t submittedTasks{0};

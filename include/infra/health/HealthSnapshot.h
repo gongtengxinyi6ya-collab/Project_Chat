@@ -5,6 +5,7 @@
 #include "storage/sql/SqlPoolStats.h"
 #include "logger/LoggerStats.h"
 #include "infra/maintenance/MaintenanceStats.h"
+#include "infra/thread/ThreadTypes.h"
 /*表示服务当前健康状态，作为HealthService的输出结果*/
 
 namespace infra::health {
@@ -38,6 +39,14 @@ struct HealthSnapshot {
 
     LoggerStats loggerStats{};//日志状态
     std::string reason{};//健康状态降级原因
+
+    //消息线程池状态
+    bool messageExecutorEnabled{false};
+    bool messageExecutorHealthy{true};
+    bool messageExecutorSaturated{false};
+    bool messageExecutorRejectedIncreased{false};
+
+    infra::thread::ThreadPoolStats messageExecutorStats{};
 };
 
 }
