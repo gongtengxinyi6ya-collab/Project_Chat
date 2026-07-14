@@ -4,7 +4,7 @@
     "credential_count": 20,
     "drain_ms": 3000,
     "duration_s": 60,
-    "elapsed_s": 69.107130192,
+    "elapsed_s": 66.063825642,
     "group_id": "G202260700507148288",
     "host": "127.0.0.1",
     "max_inflight_per_client": 128,
@@ -28,32 +28,32 @@
   },
   "fanout": {
     "other_push_recv": 0,
-    "push_delivery_ratio": 0.0,
-    "push_recv": 27681,
+    "push_delivery_ratio": 1.0,
+    "push_recv": 114000,
     "server_reported_closed": 0,
     "server_reported_dropped": 0,
     "server_reported_no_such_connection": 0,
     "server_reported_overloaded": 0,
-    "server_reported_sent": 0
+    "server_reported_sent": 114000
   },
   "latency_ms": {
-    "avg": 0.0,
-    "max": 0.0,
-    "min": 0.0,
-    "p50": 0.0,
-    "p90": 0.0,
-    "p95": 0.0,
-    "p99": 0.0,
-    "p999": 0.0,
-    "samples": 0
+    "avg": 128.97199666299989,
+    "max": 433.766762,
+    "min": 8.991768,
+    "p50": 120.0908075,
+    "p90": 249.60791120000007,
+    "p95": 296.05458870000007,
+    "p99": 360.90253528000017,
+    "p999": 415.074571271,
+    "samples": 6000
   },
   "process": {
     "load_generator": {
-      "cpu_percent": 2.6333333333333333,
-      "pid": 9737,
-      "rss_end_kb": 8000,
-      "rss_peak_kb": 8000,
-      "rss_start_kb": 7872
+      "cpu_percent": 5.183333333333333,
+      "pid": 13890,
+      "rss_end_kb": 8016,
+      "rss_peak_kb": 8016,
+      "rss_start_kb": 7888
     },
     "server": {
       "cpu_percent": 0.0,
@@ -67,43 +67,43 @@
   "requests": {
     "attempted": 6000,
     "error_codes": {},
-    "error_total": 6000,
+    "error_total": 0,
     "inflight_throttled": 0,
-    "late_response": 2093,
+    "late_response": 0,
     "parse_fail": 0,
-    "peak_inflight": 26,
-    "response_ok": 0,
+    "peak_inflight": 3,
+    "response_ok": 6000,
     "schedule_lag_events": 0,
     "send_fail": 0,
     "sent": 6000,
     "server_error_response": 0,
-    "success_rate": 0.0,
-    "timeout": 6000,
+    "success_rate": 1.0,
+    "timeout": 0,
     "unmatched_response": 0
   },
-  "run_id": "9737-1783920254755",
+  "run_id": "13890-1784023549013",
   "throughput": {
     "attempted_qps": 100.0,
-    "ok_qps": 0.0,
-    "push_qps": 461.35,
+    "ok_qps": 100.0,
+    "push_qps": 1900.0,
     "sent_qps": 100.0,
-    "total_events_qps": 461.35
+    "total_events_qps": 2000.0
   },
-  "timestamp": "2026-07-13 13:25:23",
+  "timestamp": "2026-07-14 18:06:55",
   "traffic": {
-    "app_bytes_recv_measured": 8774877,
-    "app_bytes_recv_total": 11646067,
+    "app_bytes_recv_measured": 37905120,
+    "app_bytes_recv_total": 41063000,
     "app_bytes_sent_measured": 1107120,
     "app_bytes_sent_total": 1198340,
-    "recv_mib_per_s": 0.13947291374206544,
+    "recv_mib_per_s": 0.6024856567382813,
     "send_mib_per_s": 0.017597198486328125
   },
   "warmup": {
-    "error": 77,
-    "push_recv": 7429,
-    "response_ok": 299,
+    "error": 0,
+    "push_recv": 9500,
+    "response_ok": 500,
     "sent": 500,
-    "timeout": 124
+    "timeout": 0
   },
   "warnings": []
 }

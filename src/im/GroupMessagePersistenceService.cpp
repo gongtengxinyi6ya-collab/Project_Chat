@@ -16,7 +16,7 @@ GroupMessageWriteResult GroupMessagePersistenceService::persist(const GroupMessa
     if(command.groupId.empty()||command.msgId==0||command.senderAccountId.empty()){
         return GroupMessageWriteResult{.messageResult={storage::RepoStatus::InvalidArgument}};
     }
-    if(!messageRepo_||!conversationRepo_||offlineMessageRepo_){
+    if(!messageRepo_||!conversationRepo_||!offlineMessageRepo_){
         return GroupMessageWriteResult{.messageResult={storage::RepoStatus::Internal}};
     }
     GroupMessageWriteResult groupMsgWriteRes;

@@ -114,10 +114,10 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
     std::vector<storage::SqlParam> params;
     bool first=true;
     for(const auto &accountId:memberAccountIds){
-        if(first){
+        if(!first){
             sql+=",";
-            first=false;
         }
+        first=false;
         sql+="(?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         params.emplace_back(accountId);
         params.emplace_back(groupId);
@@ -133,7 +133,7 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
             params.emplace_back(serverTsMs);
         }
         else{
-            params.emplace_back(uint64_t{0});
+            params.emplace_back(uint64_t{1});
             params.emplace_back(uint64_t{0});
             params.emplace_back(uint64_t{0});
         }

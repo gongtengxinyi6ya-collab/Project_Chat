@@ -2263,7 +2263,7 @@ void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMes
         LOG_ERROR("Failed to persist group message, groupId=" +command.groupId +", msgId=" +std::to_string(command.msgId) +", error=" + result.messageResult.message);
         if(currentSession){
             auto resp=makeRepoError(context.request,result.messageResult.status,result.messageResult.message);
-            sendResponseWithLog(context.senderKey,context.request,resp,*currentSession,"GROUP_MAG_PERSIST_FAILED");
+            sendResponseWithLog(context.senderKey,context.request,resp,*currentSession,"GROUP_MSG_PERSIST_FAILED");
         }
         return;
     }
@@ -2287,10 +2287,15 @@ void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMes
     //广播消息
     auto broadcastResult=broadcastToGroup(command.groupId,context.senderKey,push);
     if (result.degraded()) {//持久化消息存在降级
+        std::string conversationError;//记录会话错误
+        if (result.conversationResult.has_value() &&!result.conversationResult->ok()) {
+            conversationError =result.conversationResult->message;
+        }
         LOG_WARN(
             "Group message persisted with degraded side effects, "
             "groupId=" + command.groupId +
             ", msgId=" + std::to_string(command.msgId) +
+            ", conversationError=" + conversationError +
             ", offlineFailed=" +
             std::to_string(result.offlineFailed) +
             ", exception=" +
