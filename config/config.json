@@ -51,7 +51,7 @@
     "user": "root",
     "password": "Root_123456!",
     "database": "project_chat",
-    "pool_size": 4,
+    "pool_size": 8,
     "connect_timeout_ms": 3000,
     "acquire_timeout_ms":3000
   },
@@ -97,8 +97,8 @@
 },
 "message_async": {
   "enabled": true,
-  "worker_threads": 1,
-  "queue_capacity": 256,
+  "worker_threads": 4,
+  "queue_capacity": 1024,
   "queue_warn_percent": 80
 }
 }

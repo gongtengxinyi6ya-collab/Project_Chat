@@ -1,0 +1,34 @@
+{
+  "allReady": false,
+  "groups": [
+    {
+      "accountsFile": "tools/load_test_groups/load_test_accounts_20.json",
+      "actualMemberCount": 21,
+      "failureCount": 1,
+      "groupId": "G202810048685019137",
+      "groupName": "bench_20260715_20_1784043283635",
+      "ready": false,
+      "targetMemberCount": 20
+    },
+    {
+      "accountsFile": "tools/load_test_groups/load_test_accounts_50.json",
+      "actualMemberCount": 51,
+      "failureCount": 1,
+      "groupId": "G202810048739545088",
+      "groupName": "bench_20260715_50_1784043283635",
+      "ready": false,
+      "targetMemberCount": 50
+    },
+    {
+      "accountsFile": "tools/load_test_groups/load_test_accounts_100.json",
+      "actualMemberCount": 101,
+      "failureCount": 1,
+      "groupId": "G202810048768905217",
+      "groupName": "bench_20260715_100_1784043283635",
+      "ready": false,
+      "targetMemberCount": 100
+    }
+  ],
+  "reviewerAccountId": "imc1vdibEm0j",
+  "sourceAccountsFile": "tools/load_test_accounts_100.json"
+}

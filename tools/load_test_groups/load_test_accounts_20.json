@@ -1,0 +1,159 @@
+{
+  "accounts": [
+    [],
+    {
+      "accountId": "imc1vdibEm0j",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "owner",
+      "username": "bench_20260714_001"
+    },
+    {
+      "accountId": "imn9pjcbg1E8",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_002"
+    },
+    {
+      "accountId": "imm56N9AFM1V",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_003"
+    },
+    {
+      "accountId": "im4Jj2mSA5w7",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_004"
+    },
+    {
+      "accountId": "immkQqOoIPlH",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_005"
+    },
+    {
+      "accountId": "imw4XmWl2R4W",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_006"
+    },
+    {
+      "accountId": "imrEYk8R33X8",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_007"
+    },
+    {
+      "accountId": "imPrHYHkJNjn",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_008"
+    },
+    {
+      "accountId": "imG0pHv3KuBe",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_009"
+    },
+    {
+      "accountId": "im4AUW0Xq4Ig",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_010"
+    },
+    {
+      "accountId": "imJeimrFNU1W",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_011"
+    },
+    {
+      "accountId": "imbssv0yGSte",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_012"
+    },
+    {
+      "accountId": "imoFVtOGrWtg",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_014"
+    },
+    {
+      "accountId": "imO08WL35eeb",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_015"
+    },
+    {
+      "accountId": "imzhdHlD86Ok",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_016"
+    },
+    {
+      "accountId": "im5G9eSJ26TN",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_017"
+    },
+    {
+      "accountId": "imyT15h53znW",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_018"
+    },
+    {
+      "accountId": "imBy4agfxUjk",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_019"
+    },
+    {
+      "accountId": "im0GDp68sWwc",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_020"
+    },
+    {
+      "accountId": "im7uY6oIfczu",
+      "groupId": "G202810048685019137",
+      "password": "Bench_123456!",
+      "role": "member",
+      "username": "bench_20260714_021"
+    }
+  ],
+  "failures": [
+    []
+  ],
+  "groupId": "G202810048685019137",
+  "groupName": "bench_20260715_20_1784043283635",
+  "summary": {
+    "actualMemberCount": 21,
+    "alreadyMembers": 0,
+    "applicationsSubmitted": 19,
+    "approvalsSucceeded": 19,
+    "failureCount": 1,
+    "ready": false
+  },
+  "targetMemberCount": 20
+}

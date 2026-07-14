@@ -1130,6 +1130,145 @@ static std::optional<BatchRegisterOptions> parseBatchRegisterOptions(int argc,ch
     return options;
 }
 
+struct BatchPrepareGroupsOptions {
+    std::string host{"127.0.0.1"};
+    int port{8080};
+    std::string accountsPath{"tools/load_test_accounts_100.json"};
+    std::string reviewerAccount;
+    std::string reviewerPassword;
+    std::string groupNamePrefix{"load_test"};
+    std::string outputDirectory{"tools/load_test_groups"};
+    std::vector<int> groupSizes{20,50,100};
+    std::string applicationMessage{"load test group application"};
+    int timeoutMs{10000};
+    int requestIntervalMs{20};
+};
+
+static void printBatchPrepareGroupsUsage(const char* program){
+    std::cout
+        <<"Usage:\n"
+        <<"  "<<program<<" --batch-prepare-groups [options]\n\n"
+        <<"Required options:\n"
+        <<"  --reviewer-account ID        Group owner account\n"
+        <<"  --reviewer-password PASSWORD Group owner password\n\n"
+        <<"Optional options:\n"
+        <<"  --host HOST                  Default 127.0.0.1\n"
+        <<"  --port PORT                  Default 8080\n"
+        <<"  --accounts-file PATH         Existing reusable accounts file\n"
+        <<"  --group-sizes LIST           Total members including owner, default 20,50,100\n"
+        <<"  --group-name-prefix PREFIX   Default load_test\n"
+        <<"  --output-dir PATH            Default tools/load_test_groups\n"
+        <<"  --application-message TEXT   Join application message\n"
+        <<"  --timeout-ms N               Per-request timeout, default 10000\n"
+        <<"  --request-interval-ms N      Delay between requests, default 20\n\n"
+        <<"Reviewer credentials may also use PROJECT_CHAT_REVIEWER_ACCOUNT and "
+        <<"PROJECT_CHAT_REVIEWER_PASSWORD.\n";
+}
+
+static bool parseGroupSizes(const std::string& value,std::vector<int>& sizes){
+    std::vector<int> parsedSizes;
+    std::stringstream stream(value);
+    std::string item;
+    while(std::getline(stream,item,',')){
+        int size=0;
+        if(!parsePositiveInt(item,size)||size<2){
+            return false;
+        }
+        parsedSizes.push_back(size);
+    }
+    if(parsedSizes.empty()){
+        return false;
+    }
+    std::sort(parsedSizes.begin(),parsedSizes.end());
+    parsedSizes.erase(std::unique(parsedSizes.begin(),parsedSizes.end()),parsedSizes.end());
+    sizes=std::move(parsedSizes);
+    return true;
+}
+
+static std::optional<BatchPrepareGroupsOptions> parseBatchPrepareGroupsOptions(int argc,char** argv){
+    BatchPrepareGroupsOptions options;
+    for(int index=2;index<argc;++index){
+        std::string option=argv[index];
+        if(option=="--help"){
+            printBatchPrepareGroupsUsage(argv[0]);
+            return std::nullopt;
+        }
+        if(index+1>=argc){
+            std::cerr<<"missing value for "<<option<<std::endl;
+            return std::nullopt;
+        }
+        std::string value=argv[++index];
+        if(option=="--host"){
+            options.host=std::move(value);
+        }
+        else if(option=="--port"){
+            if(!parsePositiveInt(value,options.port)||options.port>65535){
+                std::cerr<<"invalid --port\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--accounts-file"){
+            options.accountsPath=std::move(value);
+        }
+        else if(option=="--reviewer-account"){
+            options.reviewerAccount=std::move(value);
+        }
+        else if(option=="--reviewer-password"){
+            options.reviewerPassword=std::move(value);
+        }
+        else if(option=="--group-sizes"){
+            if(!parseGroupSizes(value,options.groupSizes)){
+                std::cerr<<"invalid --group-sizes\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--group-name-prefix"){
+            options.groupNamePrefix=std::move(value);
+        }
+        else if(option=="--output-dir"){
+            options.outputDirectory=std::move(value);
+        }
+        else if(option=="--application-message"){
+            options.applicationMessage=std::move(value);
+        }
+        else if(option=="--timeout-ms"){
+            if(!parsePositiveInt(value,options.timeoutMs)){
+                std::cerr<<"invalid --timeout-ms\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--request-interval-ms"){
+            if(!parsePositiveInt(value,options.requestIntervalMs,true)){
+                std::cerr<<"invalid --request-interval-ms\n";
+                return std::nullopt;
+            }
+        }
+        else{
+            std::cerr<<"unknown batch prepare option: "<<option<<std::endl;
+            return std::nullopt;
+        }
+    }
+
+    if(options.reviewerAccount.empty()){
+        if(const char* account=std::getenv("PROJECT_CHAT_REVIEWER_ACCOUNT")){
+            options.reviewerAccount=account;
+        }
+    }
+    if(options.reviewerPassword.empty()){
+        if(const char* password=std::getenv("PROJECT_CHAT_REVIEWER_PASSWORD")){
+            options.reviewerPassword=password;
+        }
+    }
+    if(options.reviewerAccount.empty()||options.reviewerPassword.empty()||
+       options.accountsPath.empty()||options.outputDirectory.empty()||
+       options.groupNamePrefix.empty()){
+        std::cerr<<"reviewer credentials, accounts file, group name prefix and output directory are required\n";
+        printBatchPrepareGroupsUsage(argv[0]);
+        return std::nullopt;
+    }
+    return options;
+}
+
 class BatchConnection {
 public:
     BatchConnection()=default;
@@ -1561,6 +1700,386 @@ static int runBatchRegister(int argc,char** argv){
     return failures.empty()&&registeredNotApplied.empty()&&approvalsOk?0:4;
 }
 
+struct ReusableCredential {
+    std::string accountId;
+    std::string password;
+    std::string username;
+};
+
+struct PreparedLoadGroup {
+    int targetMemberCount{0};
+    std::string groupName;
+    std::string groupId;
+    std::filesystem::path accountsPath;
+    nlohmann::json accounts{nlohmann::json::array()};
+    nlohmann::json failures{nlohmann::json::array()};
+    std::unordered_set<std::string> readyAccountIds;
+    size_t applicationsSubmitted{0};
+    size_t approvalsSucceeded{0};
+    size_t alreadyMembers{0};
+};
+
+struct PendingGroupApproval {
+    size_t groupIndex{0};
+    size_t credentialIndex{0};
+};
+
+static std::optional<std::vector<ReusableCredential>> loadReusableCredentials(
+    const BatchPrepareGroupsOptions& options){
+    std::ifstream input(options.accountsPath);
+    if(!input){
+        std::cerr<<"cannot open reusable accounts file: "<<options.accountsPath<<std::endl;
+        return std::nullopt;
+    }
+    nlohmann::json document;
+    try{
+        input>>document;
+    }
+    catch(const std::exception& e){
+        std::cerr<<"invalid reusable accounts JSON: "<<e.what()<<std::endl;
+        return std::nullopt;
+    }
+    const nlohmann::json* accounts=&document;
+    if(document.is_object()&&document.contains("accounts")){
+        accounts=&document["accounts"];
+    }
+    if(!accounts->is_array()||accounts->empty()){
+        std::cerr<<"reusable accounts file must contain a non-empty accounts array\n";
+        return std::nullopt;
+    }
+
+    std::vector<ReusableCredential> credentials;
+    std::unordered_set<std::string> uniqueAccountIds;
+    for(const auto& entry:*accounts){
+        if(!entry.is_object()||!entry.contains("accountId")||!entry["accountId"].is_string()||
+           !entry.contains("password")||!entry["password"].is_string()){
+            std::cerr<<"reusable account requires string accountId and password\n";
+            return std::nullopt;
+        }
+        ReusableCredential credential{
+            .accountId=entry["accountId"].get<std::string>(),
+            .password=entry["password"].get<std::string>(),
+            .username=entry.value("username","")
+        };
+        if(credential.accountId.empty()||credential.password.empty()){
+            std::cerr<<"reusable accountId and password cannot be empty\n";
+            return std::nullopt;
+        }
+        if(credential.accountId==options.reviewerAccount){
+            continue;
+        }
+        if(uniqueAccountIds.insert(credential.accountId).second){
+            credentials.push_back(std::move(credential));
+        }
+    }
+    return credentials;
+}
+
+static bool connectAndLoginBatchAccount(BatchConnection& connection,
+                                        const BatchPrepareGroupsOptions& options,
+                                        const std::string& accountId,
+                                        const std::string& password,
+                                        ClientState& state,
+                                        std::string& error){
+    if(!connection.connectTo(options.host,options.port)){
+        error=connection.lastError();
+        return false;
+    }
+    state=ClientState{};
+    state.accountId=accountId;
+    CommandBuilder builder;
+    auto response=connection.request(
+        builder.buildLoginReq(state,accountId,password),options.timeoutMs);
+    if(!response||!response->value("ok",false)){
+        error=response?responseMessage(*response):connection.lastError();
+        return false;
+    }
+    if(response->contains("data")&&(*response)["data"].is_object()){
+        state.username=(*response)["data"].value("username","");
+    }
+    return true;
+}
+
+static std::string makePreparedGroupName(const std::string& prefix,int memberCount,
+                                         int64_t runSuffix){
+    const std::string suffix="_"+std::to_string(memberCount)+"_"+std::to_string(runSuffix);
+    constexpr size_t maxGroupNameLength=64;
+    if(prefix.size()+suffix.size()<=maxGroupNameLength){
+        return prefix+suffix;
+    }
+    return prefix.substr(0,maxGroupNameLength-suffix.size())+suffix;
+}
+
+static nlohmann::json makePreparedCredential(const ReusableCredential& credential,
+                                             const PreparedLoadGroup& group,
+                                             const std::string& role){
+    return nlohmann::json{
+        {"accountId",credential.accountId},
+        {"password",credential.password},
+        {"username",credential.username},
+        {"groupId",group.groupId},
+        {"role",role}
+    };
+}
+
+static void addPreparedCredential(PreparedLoadGroup& group,
+                                  const ReusableCredential& credential,
+                                  const std::string& role){
+    if(group.readyAccountIds.insert(credential.accountId).second){
+        group.accounts.push_back(makePreparedCredential(credential,group,role));
+    }
+}
+
+static bool writeJsonDocument(const std::filesystem::path& path,
+                              const nlohmann::json& document){
+    std::error_code error;
+    if(path.has_parent_path()){
+        std::filesystem::create_directories(path.parent_path(),error);
+        if(error){
+            std::cerr<<"failed to create output directory: "<<error.message()<<std::endl;
+            return false;
+        }
+    }
+    std::ofstream output(path,std::ios::trunc);
+    if(!output){
+        std::cerr<<"failed to open output file: "<<path.string()<<std::endl;
+        return false;
+    }
+    output<<document.dump(2)<<'\n';
+    return output.good();
+}
+
+static int runBatchPrepareGroups(int argc,char** argv){
+    auto optionsResult=parseBatchPrepareGroupsOptions(argc,argv);
+    if(!optionsResult){
+        return argc>=3&&std::string(argv[2])=="--help"?0:2;
+    }
+    const BatchPrepareGroupsOptions options=std::move(*optionsResult);
+    auto credentialsResult=loadReusableCredentials(options);
+    if(!credentialsResult){
+        return 3;
+    }
+    const auto& credentials=*credentialsResult;
+    const int largestGroup=options.groupSizes.back();
+    if(credentials.size()<static_cast<size_t>(largestGroup-1)){
+        std::cerr<<"not enough reusable accounts: need "<<(largestGroup-1)
+                 <<", available "<<credentials.size()<<std::endl;
+        return 3;
+    }
+
+    BatchConnection reviewerConnection;
+    ClientState reviewerState;
+    std::string reviewerError;
+    if(!connectAndLoginBatchAccount(reviewerConnection,options,options.reviewerAccount,
+                                    options.reviewerPassword,reviewerState,reviewerError)){
+        std::cerr<<"reviewer login failed: "<<reviewerError<<std::endl;
+        return 4;
+    }
+
+    const auto runSuffix=std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    CommandBuilder reviewerBuilder;
+    std::vector<PreparedLoadGroup> groups;
+    groups.reserve(options.groupSizes.size());
+    for(int memberCount:options.groupSizes){
+        PreparedLoadGroup group;
+        group.targetMemberCount=memberCount;
+        group.groupName=makePreparedGroupName(options.groupNamePrefix,memberCount,runSuffix);
+        auto response=reviewerConnection.request(
+            reviewerBuilder.buildCreateGroupReq(reviewerState,group.groupName),options.timeoutMs);
+        if(!response||!response->value("ok",false)||!response->contains("data")||
+           !(*response)["data"].is_object()||
+           !(*response)["data"].contains("groupId")||
+           !(*response)["data"]["groupId"].is_string()){
+            std::cerr<<"create group "<<group.groupName<<" failed: "
+                     <<(response?responseMessage(*response):reviewerConnection.lastError())<<std::endl;
+            return 4;
+        }
+        group.groupId=(*response)["data"]["groupId"].get<std::string>();
+        group.accountsPath=std::filesystem::path(options.outputDirectory)/
+            ("load_test_accounts_"+std::to_string(memberCount)+".json");
+        ReusableCredential reviewerCredential{
+            .accountId=options.reviewerAccount,
+            .password=options.reviewerPassword,
+            .username=reviewerState.username
+        };
+        addPreparedCredential(group,reviewerCredential,"owner");
+        std::cout<<"created group target="<<memberCount
+                 <<" groupId="<<group.groupId
+                 <<" name="<<group.groupName<<std::endl;
+        groups.push_back(std::move(group));
+    }
+
+    std::vector<PendingGroupApproval> pendingApprovals;
+    for(size_t credentialIndex=0;
+        credentialIndex<static_cast<size_t>(largestGroup-1);++credentialIndex){
+        std::vector<size_t> targetGroups;
+        for(size_t groupIndex=0;groupIndex<groups.size();++groupIndex){
+            if(credentialIndex<static_cast<size_t>(groups[groupIndex].targetMemberCount-1)){
+                targetGroups.push_back(groupIndex);
+            }
+        }
+
+        BatchConnection accountConnection;
+        ClientState accountState;
+        std::string loginError;
+        const auto& credential=credentials[credentialIndex];
+        if(!connectAndLoginBatchAccount(accountConnection,options,credential.accountId,
+                                        credential.password,accountState,loginError)){
+            for(size_t groupIndex:targetGroups){
+                groups[groupIndex].failures.push_back({
+                    {"step","applicant_login"},
+                    {"accountId",credential.accountId},
+                    {"error",loginError}
+                });
+            }
+            std::cerr<<"applicant login failed accountId="<<credential.accountId
+                     <<" error="<<loginError<<std::endl;
+            continue;
+        }
+
+        CommandBuilder applicantBuilder;
+        for(size_t groupIndex:targetGroups){
+            auto& group=groups[groupIndex];
+            auto response=accountConnection.request(
+                applicantBuilder.buildApplyGroupJoinReq(accountState,group.groupId,
+                                                        options.applicationMessage),
+                options.timeoutMs);
+            if(!response||!response->value("ok",false)||!response->contains("data")||
+               !(*response)["data"].is_object()){
+                group.failures.push_back({
+                    {"step","apply_group"},
+                    {"accountId",credential.accountId},
+                    {"code",response?response->value("code",-1):-1},
+                    {"error",response?responseMessage(*response):accountConnection.lastError()}
+                });
+                continue;
+            }
+            const auto& data=(*response)["data"];
+            if(data.value("alreadyIn",false)){
+                addPreparedCredential(group,credential,"member");
+                ++group.alreadyMembers;
+            }
+            else if(data.value("submitted",false)||data.value("alreadyPending",false)){
+                ++group.applicationsSubmitted;
+                pendingApprovals.push_back({groupIndex,credentialIndex});
+            }
+            else{
+                group.failures.push_back({
+                    {"step","apply_group"},
+                    {"accountId",credential.accountId},
+                    {"error","application response did not confirm submission"}
+                });
+            }
+            if(options.requestIntervalMs>0){
+                std::this_thread::sleep_for(std::chrono::milliseconds(options.requestIntervalMs));
+            }
+        }
+        std::cout<<"applications processed "<<(credentialIndex+1)<<'/'<<(largestGroup-1)
+                 <<" accountId="<<credential.accountId<<std::endl;
+        if((credentialIndex+1)%20==0){
+            auto keepAliveResponse=reviewerConnection.request(
+                reviewerBuilder.buildListGroupsReq(reviewerState),options.timeoutMs);
+            if(!keepAliveResponse||!keepAliveResponse->value("ok",false)){
+                reviewerError.clear();
+                if(!connectAndLoginBatchAccount(reviewerConnection,options,
+                                                options.reviewerAccount,
+                                                options.reviewerPassword,
+                                                reviewerState,reviewerError)){
+                    std::cerr<<"reviewer keepalive reconnect failed: "
+                             <<reviewerError<<std::endl;
+                    return 4;
+                }
+                reviewerBuilder=CommandBuilder{};
+            }
+        }
+    }
+
+    for(size_t index=0;index<pendingApprovals.size();++index){
+        const auto pending=pendingApprovals[index];
+        auto& group=groups[pending.groupIndex];
+        const auto& credential=credentials[pending.credentialIndex];
+        auto response=reviewerConnection.request(
+            reviewerBuilder.buildReviewGroupJoinReq(reviewerState,group.groupId,
+                                                    credential.accountId,true),
+            options.timeoutMs);
+        bool approved=false;
+        if(response&&response->value("ok",false)&&response->contains("data")&&
+           (*response)["data"].is_object()){
+            const auto& data=(*response)["data"];
+            approved=data.value("approved",false);
+        }
+        if(approved){
+            addPreparedCredential(group,credential,"member");
+            ++group.approvalsSucceeded;
+        }
+        else{
+            group.failures.push_back({
+                {"step","approve_group"},
+                {"accountId",credential.accountId},
+                {"code",response?response->value("code",-1):-1},
+                {"error",response?responseMessage(*response):reviewerConnection.lastError()}
+            });
+        }
+        if(options.requestIntervalMs>0){
+            std::this_thread::sleep_for(std::chrono::milliseconds(options.requestIntervalMs));
+        }
+        if((index+1)%20==0||index+1==pendingApprovals.size()){
+            std::cout<<"approvals processed "<<(index+1)<<'/'<<pendingApprovals.size()<<std::endl;
+        }
+    }
+
+    nlohmann::json manifestGroups=nlohmann::json::array();
+    bool allReady=true;
+    for(auto& group:groups){
+        const bool ready=group.accounts.size()==static_cast<size_t>(group.targetMemberCount)&&
+                         group.failures.empty();
+        allReady=allReady&&ready;
+        nlohmann::json document{
+            {"groupId",group.groupId},
+            {"groupName",group.groupName},
+            {"targetMemberCount",group.targetMemberCount},
+            {"accounts",group.accounts},
+            {"failures",group.failures},
+            {"summary",{
+                {"ready",ready},
+                {"actualMemberCount",group.accounts.size()},
+                {"applicationsSubmitted",group.applicationsSubmitted},
+                {"approvalsSucceeded",group.approvalsSucceeded},
+                {"alreadyMembers",group.alreadyMembers},
+                {"failureCount",group.failures.size()}
+            }}
+        };
+        if(!writeJsonDocument(group.accountsPath,document)){
+            return 5;
+        }
+        manifestGroups.push_back({
+            {"groupId",group.groupId},
+            {"groupName",group.groupName},
+            {"targetMemberCount",group.targetMemberCount},
+            {"actualMemberCount",group.accounts.size()},
+            {"ready",ready},
+            {"accountsFile",group.accountsPath.string()},
+            {"failureCount",group.failures.size()}
+        });
+    }
+
+    const std::filesystem::path manifestPath=
+        std::filesystem::path(options.outputDirectory)/"manifest.json";
+    nlohmann::json manifest{
+        {"sourceAccountsFile",options.accountsPath},
+        {"reviewerAccountId",options.reviewerAccount},
+        {"allReady",allReady},
+        {"groups",manifestGroups}
+    };
+    if(!writeJsonDocument(manifestPath,manifest)){
+        return 5;
+    }
+    std::cout<<"group preparation finished, manifest="<<manifestPath.string()<<std::endl;
+    std::cout<<"Credential files contain plaintext test passwords; protect the output directory.\n";
+    return allReady?0:6;
+}
+
 static void recvLoop(int fd, std::atomic<bool>& running,ClientState& state) {
     Buffer in;
     char tmp[4096];
@@ -1613,6 +2132,9 @@ int main(int argc, char** argv) {
 
     if(argc>=2&&std::string(argv[1])=="--batch-register"){
         return runBatchRegister(argc,argv);
+    }
+    if(argc>=2&&std::string(argv[1])=="--batch-prepare-groups"){
+        return runBatchPrepareGroups(argc,argv);
     }
 
     const char* ip = "127.0.0.1";

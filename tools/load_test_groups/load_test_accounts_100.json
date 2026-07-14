@@ -1,732 +1,719 @@
 {
   "accounts": [
+    [],
     {
       "accountId": "imc1vdibEm0j",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "owner",
       "username": "bench_20260714_001"
     },
     {
       "accountId": "imn9pjcbg1E8",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_002"
     },
     {
       "accountId": "imm56N9AFM1V",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_003"
     },
     {
       "accountId": "im4Jj2mSA5w7",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_004"
     },
     {
       "accountId": "immkQqOoIPlH",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_005"
     },
     {
       "accountId": "imw4XmWl2R4W",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_006"
     },
     {
       "accountId": "imrEYk8R33X8",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_007"
     },
     {
       "accountId": "imPrHYHkJNjn",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_008"
     },
     {
       "accountId": "imG0pHv3KuBe",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_009"
     },
     {
       "accountId": "im4AUW0Xq4Ig",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_010"
     },
     {
       "accountId": "imJeimrFNU1W",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_011"
     },
     {
       "accountId": "imbssv0yGSte",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_012"
     },
     {
       "accountId": "imoFVtOGrWtg",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_014"
     },
     {
       "accountId": "imO08WL35eeb",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_015"
     },
     {
       "accountId": "imzhdHlD86Ok",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_016"
     },
     {
       "accountId": "im5G9eSJ26TN",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_017"
     },
     {
       "accountId": "imyT15h53znW",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_018"
     },
     {
       "accountId": "imBy4agfxUjk",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_019"
     },
     {
       "accountId": "im0GDp68sWwc",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_020"
     },
     {
       "accountId": "im7uY6oIfczu",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_021"
     },
     {
       "accountId": "im2ZPUmu1gH3",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_022"
     },
     {
       "accountId": "im4JawsvLmgW",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_023"
     },
     {
       "accountId": "imS5n8ZnAaBv",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_024"
     },
     {
       "accountId": "imb1XGpLPGFA",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_025"
     },
     {
       "accountId": "im2jNp9a18e5",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_026"
     },
     {
       "accountId": "imtW90B9RGQd",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_027"
     },
     {
       "accountId": "impFyS9FwLUu",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_028"
     },
     {
       "accountId": "imXsyIuIurk4",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_029"
     },
     {
       "accountId": "imtLhnKGfOKm",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_030"
     },
     {
       "accountId": "imWVboOkAecf",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_031"
     },
     {
       "accountId": "imlTYvtFcEDw",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_032"
     },
     {
       "accountId": "imTEjFmzZt4H",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_033"
     },
     {
       "accountId": "imfwgNYlJIGn",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_034"
     },
     {
       "accountId": "im5i7Z8Ekxwt",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_035"
     },
     {
       "accountId": "im8ZWq3mRZiL",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_036"
     },
     {
       "accountId": "imSbjC9QwVJm",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_037"
     },
     {
       "accountId": "imXHxX4UiHkr",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_038"
     },
     {
       "accountId": "im5hU3bhiBqy",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_039"
     },
     {
       "accountId": "imIAR8OP5a7q",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_040"
     },
     {
       "accountId": "imZnjLYlUbt6",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_041"
     },
     {
       "accountId": "imr5QPVy1khQ",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_042"
     },
     {
       "accountId": "imIFabPTQZEO",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_043"
     },
     {
       "accountId": "imAYLK7l7pif",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_044"
     },
     {
       "accountId": "imLE2ZUx5uDg",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_045"
     },
     {
       "accountId": "imt3u1RfgX6W",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_046"
     },
     {
       "accountId": "imn7m9n1oHfJ",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_047"
     },
     {
       "accountId": "imbOoiAbxptP",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_048"
     },
     {
       "accountId": "imCFQu03AdvO",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_049"
     },
     {
       "accountId": "impIs9oLgD0b",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_050"
     },
     {
       "accountId": "imW3lJfRt423",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_051"
     },
     {
       "accountId": "im26giF1QXAK",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_052"
     },
     {
       "accountId": "imZU6H0Cc01f",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_053"
     },
     {
       "accountId": "imOM4vdXCMUW",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_054"
     },
     {
       "accountId": "imkdFC3QnUM6",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_055"
     },
     {
       "accountId": "imYZm5N3oSfL",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_056"
     },
     {
       "accountId": "imxvwtpcNuYp",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_057"
     },
     {
       "accountId": "imz5NioqkSpU",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_058"
     },
     {
       "accountId": "imi5MOfoxXl7",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_059"
     },
     {
       "accountId": "imc0j48b4OoE",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_060"
     },
     {
       "accountId": "im04JTosfpSa",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_061"
     },
     {
       "accountId": "imGaNCTdVV15",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_062"
     },
     {
       "accountId": "imRPA3btacb5",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_063"
     },
     {
       "accountId": "imjsetHDHyvJ",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_064"
     },
     {
       "accountId": "imf22W1UL0MK",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_065"
     },
     {
       "accountId": "im2qoBP4vjlR",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_066"
     },
     {
       "accountId": "imXgr0UAn4P0",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_067"
     },
     {
       "accountId": "imGBBA7qcUGZ",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_068"
     },
     {
       "accountId": "imhZ0lz96Edw",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_069"
     },
     {
       "accountId": "im1je1F3usd5",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_070"
     },
     {
       "accountId": "imtg6GySpjRY",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_071"
     },
     {
       "accountId": "imd9IwG6BIEa",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_072"
     },
     {
       "accountId": "im6dThwUYfJ6",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_073"
     },
     {
       "accountId": "imgm4W3VSUs2",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_074"
     },
     {
       "accountId": "im7JSb3C8Xy5",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_075"
     },
     {
       "accountId": "imTr4u7XfKlZ",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_076"
     },
     {
       "accountId": "imfiV9pwsczF",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_077"
     },
     {
       "accountId": "imu6vUXX1WZu",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_078"
     },
     {
       "accountId": "imbf2CX7PYVS",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_079"
     },
     {
       "accountId": "im3DW3xN2GEz",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_080"
     },
     {
       "accountId": "imAclMVix0Bg",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_081"
     },
     {
       "accountId": "im7JkjkWh6Wr",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_082"
     },
     {
       "accountId": "imTC1LtTNbQz",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_083"
     },
     {
       "accountId": "imX0zAj18nLh",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_084"
     },
     {
       "accountId": "imynA55oOaYZ",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_085"
     },
     {
       "accountId": "imwZ3kDLQvjk",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_086"
     },
     {
       "accountId": "imCFyyGQDKZ1",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_087"
     },
     {
       "accountId": "imEaCDghMb4T",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_088"
     },
     {
       "accountId": "im3znPza1UwN",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_089"
     },
     {
       "accountId": "imFBh90VrCAc",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_090"
     },
     {
       "accountId": "im29IaZExTH8",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_091"
     },
     {
       "accountId": "imKWkxCxmKYE",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_092"
     },
     {
       "accountId": "imz9vYsrK10P",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_093"
     },
     {
       "accountId": "im8e4YDS1N7O",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_094"
     },
     {
       "accountId": "im8AfFNW9508",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_095"
     },
     {
       "accountId": "im4WA2l9b0Hp",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_096"
     },
     {
       "accountId": "imydTHa13qoE",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_097"
     },
     {
       "accountId": "imTjJfc0noi5",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_098"
     },
     {
       "accountId": "imN5myvCT2Yt",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_099"
     },
     {
       "accountId": "imTfDo6GV1s1",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260714_100"
     },
     {
       "accountId": "imCZDD4UuAxz",
-      "applicationStatus": "submitted",
-      "groupId": "G202260700507148288",
+      "groupId": "G202810048768905217",
       "password": "Bench_123456!",
+      "role": "member",
       "username": "bench_20260713_001"
     }
   ],
-  "approvalFailures": [
-    {
-      "accountId": "imxNWlyiPrE4",
-      "error": "Password is incorrect",
-      "step": "reviewer_login"
-    }
+  "failures": [
+    []
   ],
-  "failures": [],
-  "groupId": "G202260700507148288",
-  "registeredNotApplied": [
-    {
-      "accountId": "imUkd1WdlTGp",
-      "error": "username is different",
-      "groupId": "G202260700507148288",
-      "password": "Bench_123456!",
-      "step": "login",
-      "username": "bench_20260714_013"
-    }
-  ],
-  "reviewerAccountId": "imxNWlyiPrE4",
+  "groupId": "G202810048768905217",
+  "groupName": "bench_20260715_100_1784043283635",
   "summary": {
-    "applicationAccepted": 99,
-    "approvalFailed": 1,
-    "groupReady": 0,
-    "registeredNotApplied": 1,
-    "registrationFailed": 0,
-    "requested": 100
-  }
+    "actualMemberCount": 101,
+    "alreadyMembers": 0,
+    "applicationsSubmitted": 99,
+    "approvalsSucceeded": 99,
+    "failureCount": 1,
+    "ready": false
+  },
+  "targetMemberCount": 100
 }
