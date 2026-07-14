@@ -21,7 +21,7 @@
     "keep_alive": true
   },
   "log": {
-    "level": "WARN",
+    "level": "ERROR",
     "to_console": false,
     "to_file": true,
     "file_path": "build-release/chat.log",

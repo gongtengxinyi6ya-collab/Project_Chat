@@ -1021,6 +1021,7 @@ LogLevel Imservice::mapErrorToLogLevel(ErrorCode code) const{
         case ErrorCode::GROUP_MEMBER_LIMIT_REACHED:
         case ErrorCode::JOIN_REQUEST_NOT_FOUND:
         case ErrorCode::RATE_LIMITED:
+        case ErrorCode::DELIVERY_OVERLOADED:
             return LogLevel::WARN;
         case ErrorCode::INTERNAL:
             return LogLevel::ERROR;

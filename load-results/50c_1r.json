@@ -1,0 +1,109 @@
+{
+  "config": {
+    "clients_requested": 50,
+    "credential_count": 50,
+    "drain_ms": 10000,
+    "duration_s": 60,
+    "elapsed_s": 71.171924907,
+    "group_id": "G202810048739545088",
+    "host": "127.0.0.1",
+    "max_inflight_per_client": 256,
+    "payload_bytes": 64,
+    "port": 8080,
+    "rate_per_client": 1.0,
+    "request_timeout_ms": 10000,
+    "target_qps": 50.0,
+    "warmup_s": 10
+  },
+  "connections": {
+    "connect_fail": 0,
+    "connect_ok": 50,
+    "group_check_fail": 0,
+    "group_check_ok": 50,
+    "login_fail": 0,
+    "login_ok": 50,
+    "ready": 50,
+    "recv_fail": 0,
+    "worker_exceptions": 0
+  },
+  "fanout": {
+    "other_push_recv": 0,
+    "push_delivery_ratio": 1.0,
+    "push_recv": 147000,
+    "server_reported_closed": 0,
+    "server_reported_dropped": 0,
+    "server_reported_no_such_connection": 0,
+    "server_reported_overloaded": 0,
+    "server_reported_sent": 147000
+  },
+  "latency_ms": {
+    "avg": 66.67034468799994,
+    "max": 163.32717,
+    "min": 6.224203,
+    "p50": 66.6319235,
+    "p90": 115.6354265,
+    "p95": 122.78398675,
+    "p99": 134.23843422999997,
+    "p999": 158.69906191100026,
+    "samples": 3000
+  },
+  "process": {
+    "load_generator": {
+      "cpu_percent": 5.383333333333333,
+      "pid": 6499,
+      "rss_end_kb": 11348,
+      "rss_peak_kb": 11348,
+      "rss_start_kb": 11064
+    },
+    "server": {
+      "cpu_percent": 5.916666666666667,
+      "pid": 4613,
+      "rss_end_kb": 16032,
+      "rss_peak_kb": 16464,
+      "rss_start_kb": 16044,
+      "sampled": true
+    }
+  },
+  "requests": {
+    "attempted": 3000,
+    "error_codes": {},
+    "error_total": 0,
+    "inflight_throttled": 0,
+    "late_response": 0,
+    "parse_fail": 0,
+    "peak_inflight": 1,
+    "response_ok": 3000,
+    "schedule_lag_events": 0,
+    "send_fail": 0,
+    "sent": 3000,
+    "server_error_response": 0,
+    "success_rate": 1.0,
+    "timeout": 0,
+    "unmatched_response": 0
+  },
+  "run_id": "6499-1784045944623",
+  "throughput": {
+    "attempted_qps": 50.0,
+    "ok_qps": 50.0,
+    "push_qps": 2450.0,
+    "sent_qps": 50.0,
+    "total_events_qps": 2500.0
+  },
+  "timestamp": "2026-07-15 00:20:15",
+  "traffic": {
+    "app_bytes_recv_measured": 47568000,
+    "app_bytes_recv_total": 55495700,
+    "app_bytes_sent_measured": 549000,
+    "app_bytes_sent_total": 639800,
+    "recv_mib_per_s": 0.756072998046875,
+    "send_mib_per_s": 0.008726119995117188
+  },
+  "warmup": {
+    "error": 0,
+    "push_recv": 24500,
+    "response_ok": 500,
+    "sent": 500,
+    "timeout": 0
+  },
+  "warnings": []
+}

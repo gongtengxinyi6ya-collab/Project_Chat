@@ -1,6 +1,5 @@
 {
   "accounts": [
-    [],
     {
       "accountId": "imc1vdibEm0j",
       "groupId": "G202810048685019137",
@@ -142,18 +141,16 @@
       "username": "bench_20260714_021"
     }
   ],
-  "failures": [
-    []
-  ],
+  "failures": [],
   "groupId": "G202810048685019137",
   "groupName": "bench_20260715_20_1784043283635",
   "summary": {
-    "actualMemberCount": 21,
+    "actualMemberCount": 20,
     "alreadyMembers": 0,
     "applicationsSubmitted": 19,
     "approvalsSucceeded": 19,
-    "failureCount": 1,
-    "ready": false
+    "failureCount": 0,
+    "ready": true
   },
   "targetMemberCount": 20
 }
