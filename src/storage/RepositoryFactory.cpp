@@ -16,6 +16,7 @@
 #include "storage/sql/SqlFriendRequestRepo.h"
 #include "storage/sql/SqlConversationRepo.h"
 #include "storage/sql/SqlGroupJoinRequestRepo.h"
+#include "storage/sql/SqlGroupMessageWriteStore.h"
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& dbConfig){
     auto pool=std::make_shared<SqlConnectionPool>(dbConfig);
     if(!pool->start()){
@@ -35,6 +36,7 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
     bundle.friendRequestRepo=std::make_shared<SqlFriendRequestRepo>(pool);
     bundle.conversationRepo=std::make_shared<SqlConversationRepo>(pool);
     bundle.groupJoinRequestRepo=std::make_shared<SqlGroupJoinRequestRepo>(pool);
+    bundle.groupMessageWriteStore=std::make_shared<SqlGroupMessageWriteStore>(pool);
     bundle.sqlPool=pool;
     auto stats = pool->stats();
     LOG_INFO("SQL pool started total=" + std::to_string(stats.total) +

@@ -1,5 +1,5 @@
 #include "im/GroupMessagePersistenceService.h"
-#include "storage/sql/SqlGroupMessageWriteStore.h"
+#include "storage/GroupMessageWriteStore.h"
 #include <stdexcept>
 #include <exception>
 #include <chrono>
@@ -15,7 +15,7 @@ GroupMessageWriteResult GroupMessagePersistenceService::persist(const GroupMessa
     if(command.groupId.empty()||command.msgId==0||command.senderAccountId.empty()){
         return GroupMessageWriteResult{.commitResult={storage::RepoStatus::InvalidArgument}};
     }
-    if(writeStore_){
+    if(!writeStore_){
         return GroupMessageWriteResult{.commitResult={storage::RepoStatus::Internal}};
     }
     GroupMessageWriteResult groupMsgWriteRes;
@@ -30,7 +30,7 @@ GroupMessageWriteResult GroupMessagePersistenceService::persist(const GroupMessa
         }
         //计算持久化时间
         auto end=std::chrono::steady_clock::now();
-        groupMsgWriteRes.persistUs=std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+        groupMsgWriteRes.persistUs=std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
 
         return groupMsgWriteRes;
     }catch(const std::exception& e){

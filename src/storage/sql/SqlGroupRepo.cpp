@@ -223,9 +223,6 @@ storage::RepoResult storage::SqlGroupRepo::removeMember(const std::string& group
         if(!cursorResult.ok()){
             return {.status=RepoStatus::SqlError,.message=cursorResult.error};
         }
-        if(cursorResult.affectedRows==0){
-            return {.status=RepoStatus::NotFound,.message=cursorResult.error};
-        }
         transation.commit();
         return {.status=RepoStatus::Ok};
     }catch(const std::exception& e){
@@ -376,7 +373,7 @@ storage::RepoResult storage::SqlGroupRepo::createGroupWithOwner(const std::strin
         if(!headResult.ok()){
             return {.status=RepoStatus::SqlError,.message=headResult.error};
         }
-        if(headResult.rows.empty()){
+        if(headResult.affectedRows==0){
             return {.status=RepoStatus::NotFound,.message=headResult.error};
         }
         //增加群主游标

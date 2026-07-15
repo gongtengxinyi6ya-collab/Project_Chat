@@ -187,8 +187,8 @@ void Imservice::setRepositories(storage::RepositoryBundle repos){
     if(repos_.groupRepo&&repos_.userProfileRepo&&repos_.groupJoinRequestRepo){
         groupJoinService_=std::make_unique<GroupJoinService>(groupManager_,repos_.groupRepo,repos_.userProfileRepo,repos_.groupJoinRequestRepo,imConfig_.maxGroupMembers);
     }
-    if(repos_.messageRepo){
-        groupMessagePersistence_=std::make_unique<GroupMessagePersistenceService>(repos_.messageRepo,repos_.conversationRepo,repos_.offlineMessageRepo);
+    if(repos_.groupMessageWriteStore){
+        groupMessagePersistence_=std::make_unique<GroupMessagePersistenceService>(repos_.groupMessageWriteStore);
     }
 }
 void Imservice::setRateLimiter(std::unique_ptr<security::RateLimiter> limiter){
@@ -2196,18 +2196,6 @@ auto err=guardAuthenticated(req,session);//校验登录
     uint64_t serverTsMs=nowMs();
     uint64_t msgId=nextMessageId();
 
-    //在baseLoop获取群成员快照
-    auto groupMemberInfos=groupManager_.memberInfos(groupId);
-    //计算离线成员
-    std::vector<std::string> offlineAccounts;
-    std::vector<std::string> memberAccountIds;
-    for(const auto& member:groupMemberInfos){
-        if(!sessionManager_.isOnLine(member.accountId)){
-            offlineAccounts.emplace_back(member.accountId);
-        }
-        memberAccountIds.emplace_back(member.accountId);
-    }
-
     //构造Command
     GroupMessageWriteCommand command{.msgId=msgId,.serverTsMs=serverTsMs,.groupId=groupId,
         .senderAccountId=session.accountId_,.senderUsername=session.username_,
@@ -2222,12 +2210,16 @@ auto err=guardAuthenticated(req,session);//校验登录
     //向专用线程提交任务
     auto persistenceService=groupMessagePersistence_;
     auto postToBaseLoop=postToBaseLoop_;
-    auto submitResult=submitMessageTask_(groupId,[this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
+    auto enqueueAt=std::chrono::steady_clock::now();
+    auto submitResult=submitMessageTask_(groupId,[enqueueAt,this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
         //baseLoop提交任务交给消息线程处理
+        auto start=std::chrono::steady_clock::now();//记录开始任务时间
+        
         auto writeResult=persistenceService->persist(command);//消息线程处理持久化
+        writeResult.queueWaitUs=std::chrono::duration_cast<std::chrono::microseconds>(start-enqueueAt).count();
         auto posted=postToBaseLoop([this,context=std::move(context),command=std::move(command),writeResult=std::move(writeResult)]()mutable{
-            //提交回baseLoop
-            completeGroupMessage(std::move(context),std::move(command),std::move(writeResult));
+        //提交回baseLoop
+        completeGroupMessage(std::move(context),std::move(command),std::move(writeResult));
         });
         if(!posted){
             LOG_WARN("Failed to post group message completion to baseLoop");

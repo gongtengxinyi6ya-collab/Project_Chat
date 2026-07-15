@@ -76,9 +76,9 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     if(messageExecutor_){
         healthService_->setMessageExecutorStatsProvider([this](){
             if(!messageExecutor_){
-                return std::vector<infra::thread::ThreadPoolStats>{};
+                return infra::thread::ThreadPoolStats{};
             }
-            return messageExecutor_->stats();
+            return messageExecutor_->aggregateStats();
         },config_.messageAsync().queueWarnPercent);
     }
     if(config_.maintenance().enabled){

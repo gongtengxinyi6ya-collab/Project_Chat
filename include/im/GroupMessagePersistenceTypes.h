@@ -21,7 +21,7 @@ struct GroupMessageWriteCommand {//提交给工作线程的不可变群消息持
 struct GroupMessageWriteResult {//返回给baseLoop的多步持久化结果
     storage::RepoResult commitResult{storage::RepoStatus::Internal,"not executed"};//正文消息入库结果
 
-    std::uint64_t groupSeq;//数据库分配的群内序号
+    std::uint64_t groupSeq{0};//数据库分配的群内序号
 
     std::string exceptionMessage{};//异常信息
     std::int64_t queueWaitUs{0};//线程池队列等待的时间

@@ -18,6 +18,7 @@ public:
     TaskSubmitResult submit(std::string_view key,Task task);//提交任务
     std::vector<ThreadPoolStats> stats() const;//获取所有shard状态
     void stop(ThreadPoolStopMode mode);
+    ThreadPoolStats aggregateStats() const;//状态汇总
 private:
     std::vector<std::unique_ptr<ThreadPool>> shards_;//保存多个线程池分片
     std::hash<std::string_view> hasher_;//根据key找shards

@@ -327,7 +327,7 @@ RepoValueResult<GroupJoinReviewResult> SqlGroupJoinRequestRepo::review(const std
             FROM group_conversation_heads
             WHERE group_id = ?;
             )",
-        {applicantAccountId});
+        {applicantAccountId,groupId});
         if(!cursorResult.ok()){
             return {.status=RepoStatus::SqlError,.message=cursorResult.error};
         }
