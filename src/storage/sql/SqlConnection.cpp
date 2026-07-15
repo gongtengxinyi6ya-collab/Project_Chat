@@ -146,7 +146,11 @@ SqlResult SqlConnection::beginTransaction(){
     if(!ensureConnected()){
         return SqlResult{.success=false,.error="not connected"};
     }
+    if(inTransaction){
+        return SqlResult{.success=false,.error="in Trasation already"};
+    }
     try{
+        conn_->setAutoCommit(false);
         inTransaction_=true;
         autoCommit_=false;
         return SqlResult{.success=true};
@@ -161,8 +165,12 @@ SqlResult SqlConnection::commit(){
     if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }
+    if(!inTransaction){
+        return SqlResult{.success=false,.error="Not in Trasation"};
+    }
     try{
         conn_->commit();
+        conn_->setAutoCommit(true);
         inTransaction_=false;
         autoCommit_=true;
         return SqlResult{.success=true};
@@ -177,11 +185,13 @@ SqlResult SqlConnection::rollback(){
     }
     try{
         conn_->rollback();
+        conn_->setAutoCommit(true);
         autoCommit_=true;
         inTransaction_=false;
         return SqlResult{.success=true};
     }catch(const sql::SQLException& e){
         autoCommit_=true;
+        markBroken();
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }

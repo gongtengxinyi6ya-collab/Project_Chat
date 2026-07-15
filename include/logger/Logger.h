@@ -31,10 +31,13 @@ public:
     void setAsyncOptions(size_t ququeSize,std::chrono::milliseconds);
     void shutdown();
 
-private:
-    Logger()=default;//默认构造函数
+    
     Logger(const Logger&)=delete;//禁止拷贝构造
     Logger& operator=(const Logger&)=delete;//禁止拷贝赋值
+    Logger(Logger&&)=delete;//禁用移动构造
+    Logger& operator=(Logger&&)=delete;
+private:
+    Logger()=default;//默认构造函数
     void writeLine(std::string&&);
 
     std::atomic<LogLevel> minLevel_{LogLevel::DEBUG};//最小输出级别

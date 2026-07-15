@@ -2151,7 +2151,7 @@ auto err=guardAuthenticated(req,session);//校验登录
     }
     //校验异步功能配置
     if(!submitMessageTask_||!postToBaseLoop_||!groupMessagePersistence_){
-        return DispatchResult::immediate(handleGroupMsg(req,key,session));
+        return DispatchResult{.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"group message pipeline unavailable")};
     }
     //服务停止接受新任务
     if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
