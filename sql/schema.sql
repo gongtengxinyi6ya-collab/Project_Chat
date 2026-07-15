@@ -262,3 +262,61 @@ ALTER TABLE group_join_requests
 ALTER TABLE offline_messages
     ADD INDEX idx_offline_messages_cleanup
     (created_at);
+
+
+--群会话头表
+CREATE TABLE group_conversation_heads (
+    group_id VARCHAR(64) NOT NULL,
+    last_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_msg_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_preview VARCHAR(256) NOT NULL DEFAULT '',
+    last_sender_account_id VARCHAR(32) NOT NULL DEFAULT '',
+    last_sender_username VARCHAR(64) NOT NULL DEFAULT '',
+    last_ts_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (group_id),
+    KEY idx_group_heads_last_ts (last_ts_ms)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+  --成员已读游标
+  CREATE TABLE user_group_cursors (
+    account_id VARCHAR(32) NOT NULL,
+    group_id VARCHAR(64) NOT NULL,
+    last_read_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_read_msg_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    last_read_at_ms BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    joined_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (account_id, group_id),
+    KEY idx_group_cursors_group (group_id)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+  ALTER TABLE messages
+    ADD COLUMN group_seq BIGINT UNSIGNED NULL AFTER group_id;
+
+UPDATE messages AS target
+JOIN (
+    SELECT
+        id,
+        ROW_NUMBER() OVER (
+            PARTITION BY group_id
+            ORDER BY msg_id ASC
+        ) AS generated_seq
+    FROM messages
+) AS ranked
+ON ranked.id = target.id
+SET target.group_seq = ranked.generated_seq;
+
+ALTER TABLE messages
+    MODIFY group_seq BIGINT UNSIGNED NOT NULL,
+    ADD UNIQUE KEY uk_messages_group_seq (group_id, group_seq);
