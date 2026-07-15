@@ -16,7 +16,10 @@ public:
     uint32_t poolSize()const;
     uint32_t connectTimeoutMs()const;
     uint32_t acquireTimeoutMs() const;
-
+    uint32_t messagePoolSize() const noexcept{return messagePoolSize_;};
+    uint32_t messageAcquireTimeoutMs() const noexcept{return messageAcquireTimeoutMs_;};
+    uint32_t preparedStatementCacheSize() const noexcept{return preparedStatementCacheSize_;};
+    uint32_t slowQueryMs() const noexcept{return slowQueryMs_;};
 private:
     std::string host_{"127.0.0.1"};//数据库地址
     uint16_t port_{3306};//MySQL默认端口
@@ -26,4 +29,8 @@ private:
     uint32_t poolSize_{4};//数据库连接池大小
     uint32_t connectTimeoutMs_{3000};//数据库连接超时时间
     uint32_t acquireTimeoutMs_{3000};
+    uint32_t messagePoolSize_{4};
+    uint32_t messageAcquireTimeoutMs_{200};
+    uint32_t preparedStatementCacheSize_{64};
+    uint32_t slowQueryMs_{50};
 };

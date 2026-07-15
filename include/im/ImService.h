@@ -78,7 +78,7 @@ public:
         bool delivered()const{return sent>0;}//是否至少投递到一个设备
     };
     //回调
-    using ConnKey=int;//连接标识
+    using ConnKey=std::uint64_t;//连接标识
     using SendToConnKeyFn=std::function<SendResult (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
     using MessageTask = std::function<void()>;//异步任务接口
     using SubmitMessageTaskFn =std::function<infra::thread::TaskSubmitResult(const std::string& orderingKey,MessageTask)>;//提交消息持久化任务到工作线程池

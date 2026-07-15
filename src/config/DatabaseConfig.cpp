@@ -10,6 +10,10 @@ DatabaseConfig DatabaseConfig::fromJson(const nlohmann::json& j){
     databaseConfig.poolSize_=ConfigParseHelper::getOrDefault(j,"pool_size",databaseConfig.poolSize_);
     databaseConfig.connectTimeoutMs_=ConfigParseHelper::getOrDefault(j,"connect_timeout_ms",databaseConfig.connectTimeoutMs_);
     databaseConfig.acquireTimeoutMs_ =ConfigParseHelper::getOrDefault(j, "acquire_timeout_ms", databaseConfig.acquireTimeoutMs_);
+    databaseConfig.messagePoolSize_ =ConfigParseHelper::getOrDefault(j, "message_pool_size",databaseConfig.messagePoolSize_);
+    databaseConfig.messageAcquireTimeoutMs_ =ConfigParseHelper::getOrDefault(j, "message_acquire_timeout_ms",databaseConfig.messageAcquireTimeoutMs_);
+    databaseConfig.preparedStatementCacheSize_ =ConfigParseHelper::getOrDefault(j, "prepared_statement_cache_size",databaseConfig.preparedStatementCacheSize_);
+    databaseConfig.slowQueryMs_ =ConfigParseHelper::getOrDefault(j, "slow_query_ms",databaseConfig.slowQueryMs_);
     return databaseConfig;
 
 }

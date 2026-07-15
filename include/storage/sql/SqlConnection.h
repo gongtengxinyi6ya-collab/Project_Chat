@@ -52,7 +52,7 @@ private:
     SqlResult readResultSet(sql::ResultSet* resultSet);
 
     bool inTransaction_{false};//标记当前事务是否处于事务状态
-
+    bool autoCommit_{true};
     bool broken_{false};
     uint64_t reconnectCount_{0};
 };

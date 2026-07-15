@@ -147,8 +147,8 @@ SqlResult SqlConnection::beginTransaction(){
         return SqlResult{.success=false,.error="not connected"};
     }
     try{
-        conn_->setAutoCommit(false);//关闭自动提交
         inTransaction_=true;
+        autoCommit_=false;
         return SqlResult{.success=true};
     }catch(const sql::SQLException& e){
         if (isConnectionError(e)) {
@@ -163,15 +163,11 @@ SqlResult SqlConnection::commit(){
     }
     try{
         conn_->commit();
-        conn_->setAutoCommit(true);
         inTransaction_=false;
+        autoCommit_=true;
         return SqlResult{.success=true};
     }catch(const sql::SQLException& e){
-        try{
-            conn_->setAutoCommit(true);
-        }catch(const sql::SQLException& e2){
-            // Ignore this error
-        }
+        autoCommit_=true;        
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }
@@ -181,15 +177,11 @@ SqlResult SqlConnection::rollback(){
     }
     try{
         conn_->rollback();
-        conn_->setAutoCommit(true);//恢复自动提交
+        autoCommit_=true;
         inTransaction_=false;
         return SqlResult{.success=true};
     }catch(const sql::SQLException& e){
-        try{
-            conn_->setAutoCommit(true);
-        }catch(...){
-
-        }
+        autoCommit_=true;
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }
@@ -200,7 +192,12 @@ void SqlConnection::resetSessionState(){
     if(inTransaction_){
         rollback();
     }
-    conn_->setAutoCommit(true);
+    else if(autoCommit_){
+        return ;
+    }
+    else{
+        conn_->setAutoCommit(true);
+    }
 }
 SqlResult SqlConnection::readResultSet(sql::ResultSet* resultset){
     SqlResult result;
