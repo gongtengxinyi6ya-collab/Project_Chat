@@ -307,6 +307,33 @@ RepoValueResult<GroupJoinReviewResult> SqlGroupJoinRequestRepo::review(const std
             if(resultInsert.affectedRows==0){
                 return {.status=RepoStatus::GroupNotFound};
             }
+            //插入成员成功后插入用户游标，默认历史消息不算作未读
+            auto cursorResult=conn->executePrepared(R"(
+            INSERT INTO user_group_cursors (
+                account_id,
+                group_id,
+                last_read_seq,
+                last_read_msg_id,
+                last_read_at_ms,
+                joined_seq
+            )
+            SELECT
+                ?,
+                group_id,
+                last_seq,
+                last_msg_id,
+                0,
+                last_seq
+            FROM group_conversation_heads
+            WHERE group_id = ?;
+            )",
+        {applicantAccountId});
+        if(!cursorResult.ok()){
+            return {.status=RepoStatus::SqlError,.message=cursorResult.error};
+        }
+        if(cursorResult.affectedRows==0){
+            return {.status=RepoStatus::NotFound,.message=cursorResult.error};
+        }
             //插入成功后更新申请
             auto resultApprove=conn->executePrepared(R"(
                 UPDATE group_join_requests

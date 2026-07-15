@@ -24,8 +24,8 @@ struct GroupMessageWriteResult {//返回给baseLoop的多步持久化结果
     std::uint64_t groupSeq;//数据库分配的群内序号
 
     std::string exceptionMessage{};//异常信息
-    std::uint64_t queueWaitUs;//线程池队列等待的时间
-    std::uint64_t persistUs;//SQL事务耗时
+    std::int64_t queueWaitUs{0};//线程池队列等待的时间
+    std::int64_t persistUs{0};//SQL事务耗时
 
     bool durable() const noexcept{return commitResult.ok()&&groupSeq>0;};//消息是否真正持久化成功
     

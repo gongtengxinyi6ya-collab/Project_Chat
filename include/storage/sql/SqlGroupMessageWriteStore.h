@@ -2,8 +2,10 @@
 #include "storage/GroupMessageWriteStore.h"
 #include <memory>
 
+/*实现抽象类：
+负责使用连接和事务，完整提交一条群消息*/
 namespace storage{
-    class SqlConnectionPool pool_;
+    class SqlConnectionPool;
 
 class SqlGroupMessageWriteStore:public GroupMessageWriteStore{
 public:

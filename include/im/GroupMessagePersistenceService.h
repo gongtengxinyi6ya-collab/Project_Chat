@@ -2,20 +2,16 @@
 #include <memory>
 #include "GroupMessagePersistenceTypes.h"
 namespace storage{
-    class MessageRepo;
-    class ConversationRepo;
-    class OfflineMessageRepo;
+    class GroupMessageWriteStore;
 }
 
 namespace im{
 /*封装群消息的阻塞型持久化操作*/
 class GroupMessagePersistenceService{
 public:
-    GroupMessagePersistenceService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::ConversationRepo> conversationRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo);
+    GroupMessagePersistenceService(std::shared_ptr<storage::GroupMessageWriteStore> writeStore);
     GroupMessageWriteResult persist(const GroupMessageWriteCommand& command) const;//消息持久化
 private:
-    std::shared_ptr<storage::MessageRepo> messageRepo_;
-    std::shared_ptr<storage::ConversationRepo> conversationRepo_;
-    std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo_;
+    std::shared_ptr<storage::GroupMessageWriteStore> writeStore_;
 };
 }

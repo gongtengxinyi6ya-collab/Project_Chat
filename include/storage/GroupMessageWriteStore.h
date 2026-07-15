@@ -1,5 +1,4 @@
 #pragma once
-#include <string>
 #include <cstdint>
 #include "storage/RepoValueResult.h"
 #include "im/GroupMessagePersistenceTypes.h"

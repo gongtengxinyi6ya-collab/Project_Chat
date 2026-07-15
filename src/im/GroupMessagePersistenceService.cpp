@@ -1,45 +1,37 @@
 #include "im/GroupMessagePersistenceService.h"
-#include "storage/MessageRepo.h"
-#include "storage/ConversationRepo.h"
-#include "storage/OfflineMessageRepo.h"
+#include "storage/sql/SqlGroupMessageWriteStore.h"
 #include <stdexcept>
 #include <exception>
+#include <chrono>
 namespace im{
 
-GroupMessagePersistenceService::GroupMessagePersistenceService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::ConversationRepo> conversationRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo)
-:messageRepo_(std::move(messageRepo)),conversationRepo_(std::move(conversationRepo)),offlineMessageRepo_(std::move(offlineMessageRepo)){
-    if(!messageRepo_){
-        throw std::invalid_argument("messageRepo invalid");
+GroupMessagePersistenceService::GroupMessagePersistenceService(std::shared_ptr<storage::GroupMessageWriteStore> writeStore)
+:writeStore_(std::move(writeStore)){
+    if(!writeStore_){
+        throw std::invalid_argument("writeStore invalid");
     }
 }
 GroupMessageWriteResult GroupMessagePersistenceService::persist(const GroupMessageWriteCommand& command) const{
     if(command.groupId.empty()||command.msgId==0||command.senderAccountId.empty()){
-        return GroupMessageWriteResult{.messageResult={storage::RepoStatus::InvalidArgument}};
+        return GroupMessageWriteResult{.commitResult={storage::RepoStatus::InvalidArgument}};
     }
-    if(!messageRepo_||!conversationRepo_||!offlineMessageRepo_){
-        return GroupMessageWriteResult{.messageResult={storage::RepoStatus::Internal}};
+    if(writeStore_){
+        return GroupMessageWriteResult{.commitResult={storage::RepoStatus::Internal}};
     }
     GroupMessageWriteResult groupMsgWriteRes;
     try{
-        auto result=messageRepo_->saveGroupMessage(command.msgId,command.groupId,command.senderAccountId,command.senderUsername,command.content,command.serverTsMs);
-        groupMsgWriteRes.messageResult={.status=result.status,.message=result.message};
-        if(!result.ok()){//消息保存失败返回结果
-            return groupMsgWriteRes;
+        //计算SQL开始时间
+        auto start=std::chrono::steady_clock::now();
+        auto result=writeStore_->commit(command);
+        groupMsgWriteRes.commitResult={.status=result.status,.message=result.message};
+        if(result.ok()&&result.value.has_value()){
+            //成功保存groupSeq
+            groupMsgWriteRes.groupSeq=result.value.value();
         }
-        //消息保存成功更新会话
-        groupMsgWriteRes.conversationResult=conversationRepo_->upsertGroupOnMessage(command.groupId,command.memberAccountIds,command.senderAccountId,command.senderUsername,command.msgId,command.content,command.serverTsMs);
-        
-        //保存离线索引
-        for(const auto& account:command.offlineAccountIds){
-            auto resultOffline=offlineMessageRepo_->saveOfflineMessage(account,command.msgId,command.groupId);
-            groupMsgWriteRes.offlineAttempted++;
-            if(!resultOffline.ok()){
-                groupMsgWriteRes.offlineFailed++;
-            }
-            else{
-                groupMsgWriteRes.offlineSaved++;
-            }
-        }
+        //计算持久化时间
+        auto end=std::chrono::steady_clock::now();
+        groupMsgWriteRes.persistUs=std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+
         return groupMsgWriteRes;
     }catch(const std::exception& e){
         groupMsgWriteRes.exceptionMessage=e.what();
