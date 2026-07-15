@@ -283,7 +283,7 @@ CREATE TABLE group_conversation_heads (
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_unicode_ci;
 
-  --成员已读游标
+--成员已读游标
   CREATE TABLE user_group_cursors (
     account_id VARCHAR(32) NOT NULL,
     group_id VARCHAR(64) NOT NULL,
