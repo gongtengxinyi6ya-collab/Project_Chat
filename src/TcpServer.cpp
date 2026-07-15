@@ -8,6 +8,7 @@
 #include "infra/health/HealthFormatter.h"
 #include "infra/maintenance/MaintenanceService.h"
 #include "infra/thread/ThreadPool.h"
+#include "infra/thread/KeyedSerialExecutor.h"
 #ifdef PROJECT_CHAT_ENABLE_REDIS
 #include "infra/redis/RedisClient.h"
 #include "security/rate_limit/RedisRateLimitStore.h"
@@ -22,7 +23,7 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     });
     threadPool_ = std::make_unique<infra::thread::ThreadPool>(config_.server().backgroundThreads,config_.server().backgroundQueueCapacity);
     if(config_.messageAsync().enabled){
-        messageThreadPool_=std::make_unique<infra::thread::ThreadPool>(config_.messageAsync().workerThreads,config_.messageAsync().queueCapacity);
+        messageExecutor_=std::make_unique<infra::thread::KeyedSerialExecutor>(config_.messageAsync().workerThreads,config_.messageAsync().queueCapacity);
     }
     imService_ = std::make_unique<im::Imservice>(1,config_.im(),config_.id());
     imService_->setSendToConnKey([this](im::Imservice::ConnKey key,const std::string& payload){
@@ -40,14 +41,14 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
             it->second->send(payload);
             return im::Imservice::SendResult::Ok;
 }); 
-    if(messageThreadPool_){
+    if(messageExecutor_){
         imService_->setMessageAsyncExecutor(
-            [this](std::function<void()>task)->infra::thread::TaskSubmitResult{
+            [this](const std::string& groupId,std::function<void()>task)->infra::thread::TaskSubmitResult{
                 //注入工作任务提交
-                if(!messageThreadPool_){
+                if(!messageExecutor_){
                     return infra::thread::TaskSubmitResult::Stopping;
                 }
-                return messageThreadPool_->submit(std::move(task));
+                return messageExecutor_->submit(groupId,std::move(task));
             },
             [this](std::function<void()>task)->bool{
                 if(!baseloop_||!task){
@@ -72,12 +73,12 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     healthService_->setOnlineConnectionProvider([this](){
         return connections_.size();
     });
-    if(messageThreadPool_){
+    if(messageExecutor_){
         healthService_->setMessageExecutorStatsProvider([this](){
-            if(!messageThreadPool_){
-                return infra::thread::ThreadPoolStats{};
+            if(!messageExecutor_){
+                return std::vector<infra::thread::ThreadPoolStats>{};
             }
-            return messageThreadPool_->stats();
+            return messageExecutor_->stats();
         },config_.messageAsync().queueWarnPercent);
     }
     if(config_.maintenance().enabled){
@@ -322,8 +323,8 @@ void TcpServer::finishStopInBaseLoop(){
 
     finalStopQueued_ = true;
 
-    if (messageThreadPool_) {
-        messageThreadPool_->stop(infra::thread::ThreadPoolStopMode::Drain);
+    if (messageExecutor_) {
+        messageExecutor_->stop(infra::thread::ThreadPoolStopMode::Drain);
     }
 
     baseloop_->queueInLoop([this]() {

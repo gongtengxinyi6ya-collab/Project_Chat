@@ -2211,7 +2211,7 @@ auto err=guardAuthenticated(req,session);//校验登录
     //构造Command
     GroupMessageWriteCommand command{.msgId=msgId,.serverTsMs=serverTsMs,.groupId=groupId,
         .senderAccountId=session.accountId_,.senderUsername=session.username_,
-        .content=content,.memberAccountIds=memberAccountIds,.offlineAccountIds=offlineAccounts
+        .content=content
     };
     //构造异步完成上下文
     std::weak_ptr<TcpConnection> weakConn=connection;
@@ -2222,7 +2222,7 @@ auto err=guardAuthenticated(req,session);//校验登录
     //向专用线程提交任务
     auto persistenceService=groupMessagePersistence_;
     auto postToBaseLoop=postToBaseLoop_;
-    auto submitResult=submitMessageTask_([this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
+    auto submitResult=submitMessageTask_(groupId,[this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
         //baseLoop提交任务交给消息线程处理
         auto writeResult=persistenceService->persist(command);//消息线程处理持久化
         auto posted=postToBaseLoop([this,context=std::move(context),command=std::move(command),writeResult=std::move(writeResult)]()mutable{
@@ -2261,9 +2261,9 @@ void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMes
         }
     }
     if(!result.durable()){//消息持久化失败
-        LOG_ERROR("Failed to persist group message, groupId=" +command.groupId +", msgId=" +std::to_string(command.msgId) +", error=" + result.messageResult.message);
+        LOG_ERROR("Failed to persist group message, groupId=" +command.groupId +", msgId=" +std::to_string(command.msgId) +", error=" + result.commitResult.message);
         if(currentSession){
-            auto resp=makeRepoError(context.request,result.messageResult.status,result.messageResult.message);
+            auto resp=makeRepoError(context.request,result.commitResult.status,result.commitResult.message);
             sendResponseWithLog(context.senderKey,context.request,resp,*currentSession,"GROUP_MSG_PERSIST_FAILED");
         }
         return;
@@ -2282,26 +2282,12 @@ void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMes
             {"groupId", command.groupId},
             {"content", command.content},
             {"msgId", command.msgId},
-            {"serverTsMs", command.serverTsMs}
+            {"serverTsMs", command.serverTsMs},
+            {"groupSeq",result.groupSeq}
         }
     };
     //广播消息
     auto broadcastResult=broadcastToGroup(command.groupId,context.senderKey,push);
-    if (result.degraded()) {//持久化消息存在降级
-        std::string conversationError;//记录会话错误
-        if (result.conversationResult.has_value() &&!result.conversationResult->ok()) {
-            conversationError =result.conversationResult->message;
-        }
-        LOG_WARN(
-            "Group message persisted with degraded side effects, "
-            "groupId=" + command.groupId +
-            ", msgId=" + std::to_string(command.msgId) +
-            ", conversationError=" + conversationError +
-            ", offlineFailed=" +
-            std::to_string(result.offlineFailed) +
-            ", exception=" +
-            result.exceptionMessage);
-    }
 
     if (!currentSession) {
         return;
@@ -2313,13 +2299,7 @@ void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMes
             {"groupId", command.groupId},
             {"msgId", command.msgId},
             {"serverTsMs", command.serverTsMs},
-            {"sent", broadcastResult.sent},
-            {"dropped", broadcastResult.dropped()},
-            {"noSuchConnection",
-                broadcastResult.noSuchConnection},
-            {"closed", broadcastResult.closed},
-            {"overloaded", broadcastResult.overloaded},
-            {"persistenceDegraded", result.degraded()}
+            {"persisUs",result.persistUs},
         });
     sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"GROUP_MSG_RESP_OUT");
 }

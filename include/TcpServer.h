@@ -25,7 +25,7 @@ namespace infra::maintenance {
     class MaintenanceService;
 }
 namespace infra::thread{
-    class ThreadPool;
+    class KeyedSerialExecutor;
 }
 //管理所有客户端连接，创建TcpConnection,删除/关闭连接，处理聊天逻辑
 //在主线程中监听新连接，分发到IO线程处理，IO线程中创建TcpConnection对象，保存到connections_中
@@ -59,7 +59,7 @@ private:
     // 使用 unique_ptr 让连接自动释放，避免手动 delete
     std::unordered_map<int,std::shared_ptr<TcpConnection>> connections_;//管理所有连接，key为fd，value为TcpConnection对象指针
     std::unique_ptr<infra::thread::ThreadPool> threadPool_;//线程池，处理消息转发等耗时操作
-    std::unique_ptr<infra::thread::ThreadPool> messageThreadPool_;//异步消息处理线程池
+    std::unique_ptr<infra::thread::KeyedSerialExecutor> messageExecutor_;//异步消息处理线程池
     
     //IM系统
     std::unique_ptr<im::Imservice> imService_;//IM业务对象，处理消息逻辑

@@ -20,7 +20,7 @@ namespace infra::health {
 class HealthService {
 public:
     using MaintenanceProvider =std::function<infra::maintenance::MaintenanceSnapshot()>;
-    using MessageExecutorStatsProvider =std::function<infra::thread::ThreadPoolStats()>;
+    using MessageExecutorStatsProvider =std::function<std::vector<infra::thread::ThreadPoolStats>()>;
     HealthService();
     explicit HealthService(const HealthConfig& config);
     void setConfig(const HealthConfig& config);
