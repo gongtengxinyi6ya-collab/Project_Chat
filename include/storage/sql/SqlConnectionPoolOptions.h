@@ -4,7 +4,7 @@
 #include <chrono>
 #include <stdexcept>
 /*分离数据库账号地址和连接池运行参数*/
-namespace{
+namespace storage{
 struct SqlConnectionPoolOptions{
     std::string name;//连接池名称
     std::size_t poolSize{0};//连接数量

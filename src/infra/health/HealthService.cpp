@@ -81,6 +81,36 @@ void HealthService::checkSql(HealthSnapshot& snapshot){
         }
     }
 }
+void HealthService::checkMessageSql(HealthSnapshot& snapshot){
+    auto sqlPool=messageSqlPool_.lock();
+    if(!sqlPool){
+        snapshot.sqlEnabled=false;
+        snapshot.sqlHealthy=true;
+        return;
+    }
+    
+    else{
+        snapshot.sqlEnabled=true;
+        auto stats=sqlPool->stats();
+        snapshot.sqlStats=stats;
+        if(!stats.started){
+            snapshot.sqlHealthy=false;
+        }
+        if(stats.total==0){
+            snapshot.sqlHealthy=false;
+        }
+        if(config_.sqlTimeoutDeltaMode()){
+            if(hasNewSqlAcquireTimeouts(stats)){
+                snapshot.sqlAcquireTimeoutIncreased=true;
+            }
+        }
+        else{
+            if(stats.acquireTimeouts>0){
+                snapshot.sqlAcquireTimeoutIncreased=true;
+            }
+        }
+    }
+}
 bool HealthService::hasNewSqlAcquireTimeouts(const storage::SqlConnectionPoolStats& stats){
     if(stats.acquireTimeouts>lastSqlAcquireTimeouts_){
         lastSqlAcquireTimeouts_=stats.acquireTimeouts;

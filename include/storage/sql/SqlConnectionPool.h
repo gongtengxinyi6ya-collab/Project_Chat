@@ -16,8 +16,7 @@ namespace storage{
 class SqlConnectionPool{
 public:
 
-    explicit SqlConnectionPool(const DatabaseConfig& config);
-    SqlConnectionPool(const DatabaseConfig& databaseConfig,SqlConnectionPoolOptions options);
+    explicit SqlConnectionPool(const DatabaseConfig& databaseConfig,SqlConnectionPoolOptions options);
 
     const std::string& name() const noexcept {
         return options_.name;

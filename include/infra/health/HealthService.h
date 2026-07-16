@@ -27,8 +27,6 @@ public:
     void setSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool);//注入SQL连接池
     void setMessageSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool);
 
-    std::weak_ptr<storage::SqlConnectionPool> messageSqlPool_;
-    std::uint64_t lastMessageSqlAcquireTimeouts_{0};
     void setRedisClient(std::weak_ptr<infra::redis::RedisClient> redisClient);//注入Redis客户端
     void setOnlineConnectionProvider(std::function<size_t()> provider);//注入在线连接获取函数
     void setMaintenanceProvider(MaintenanceProvider provider,int64_t exceptedIntervalMs);//注入维护快照获取函数
@@ -58,6 +56,7 @@ private:
     int64_t currentEpochMs() const;
 
     void checkSql(HealthSnapshot& snapshot);//读取SQL pool状态
+    void checkMessageSql(HealthSnapshot& snapshot);
     void checkRedis(HealthSnapshot& snapshot);//检查Redis客户端状态
     void fillRuntimeStats(HealthSnapshot& snapshot);//填充运行时信息
     void fillLoggerStats(HealthSnapshot& snapshot);

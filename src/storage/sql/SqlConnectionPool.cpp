@@ -3,9 +3,7 @@
 #include <exception>
 #include "logger/LogMacros.h"
 namespace storage{
-SqlConnectionPool::SqlConnectionPool(const DatabaseConfig& config)
-:config_(config),acquireTimeout_(std::chrono::milliseconds(config_.acquireTimeoutMs())){
-}
+
 SqlConnectionPool::SqlConnectionPool(const DatabaseConfig& config,SqlConnectionPoolOptions options)
 :config_(config),options_(options),acquireTimeout_(options_.acquireTimeout){
 }

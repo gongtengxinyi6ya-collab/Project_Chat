@@ -209,7 +209,7 @@ SqlResult SqlConnection::beginTransaction(){
     if(!ensureConnected()){
         return SqlResult{.success=false,.error="not connected"};
     }
-    if(inTransaction){
+    if(inTransaction_){
         return SqlResult{.success=false,.error="in Trasation already"};
     }
     try{
@@ -228,7 +228,7 @@ SqlResult SqlConnection::commit(){
     if(!connected_||!conn_){
         return SqlResult{.success=false,.error="not connected"};
     }
-    if(!inTransaction){
+    if(!inTransaction_){
         return SqlResult{.success=false,.error="Not in Trasation"};
     }
     try{

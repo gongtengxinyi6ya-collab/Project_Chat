@@ -11,38 +11,50 @@ PreparedStatementCache::PreparedStatementCache(std::size_t capacity)
 
 sql::PreparedStatement* PreparedStatementCache::getOrPrepare(sql::Connection& connection,std::string_view statementName,const std::string& sqlText){
     //
+    if(statementName.empty()){
+        throw std::invalid_argument("statementName is empty");
+    }
     std::string name(statementName);
     auto it=entries_.find(name);
     if(it!=entries_.end()){
-        if(it->second.sqlText==sqlText){
+        if(it->second.sqlText!=sqlText){
+            lru_.erase(it->second.lruIterator);
+            entries_.erase(it);
+        }
+        else{
             //找到且sqlText一致
             touch(it);
             return it->second.statement.get();//返回已有PreparedStatement*
         }
-        else{
-            //找到但Sql文本不同
-            entries_.erase(name);
-            throw std::logic_error("PreparedStatementCache: statementName '" +std::string(statementName) +"' reused with different SQL.");
-        }
-
     }
     //未找到
     if(entries_.size()>=capacity_){//缓存已满
         evictOne();
     }
-    auto statement=std::make_unique<sql::PreparedStatement>(connection.prepareStatement(sqlText));
-
-    Entry entry{.sqlText=sqlText,.statement=std::move(statement),.lruIterator=lru_.begin()};
-    auto [insertedIt,inserted]=entries_.emplace(std::move(name),std::move(entry));
-    lru_.push_front(name);
-    if (!inserted) {
-        lru_.pop_front();
-        throw std::logic_error(
-            "failed to insert prepared statement cache entry"
-        );
+    std::unique_ptr<sql::PreparedStatement> statement(connection.prepareStatement(sqlText));
+    if(!statement){
+        throw std::runtime_error("prepareStatement returned nullptr");
     }
-
-    return insertedIt->second.statement.get();
+    lru_.push_front(name);
+    try{
+        Entry entry{.sqlText=sqlText,
+            .statement=std::move(statement),
+            .lruIterator=lru_.begin()};
+        auto [insertedIt,inserted]=entries_.emplace(std::move(name),std::move(entry));
+        lru_.push_front(name);
+        if (!inserted) {
+            lru_.pop_front();
+            throw std::logic_error(
+                "failed to insert prepared statement cache entry"
+            );
+        }
+        return insertedIt->second.statement.get();
+    }catch(...){
+        if (!lru_.empty() && lru_.front() == name) {
+            lru_.pop_front();
+        }
+        throw;
+    }
 }
 void PreparedStatementCache::clear(){
     entries_.clear();

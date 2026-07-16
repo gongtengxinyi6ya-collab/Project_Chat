@@ -45,8 +45,7 @@ void Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const std::s
         LOG_INFO_CTX("im request in",makeReqCtx(key,*req_ptr,session,"REQ_IN"));
         try{
             auto result=dispatchRequest(*req_ptr,key,session,conn);
-            if(!result.shouldRespond()){
-                return ;
+            if(!result.shouldRespond()){return ;
             }
             auto resp=std::move(result.response.value());
             sendResponseWithLog(key,*req_ptr,resp,session,"RESP_OUT");
@@ -154,6 +153,8 @@ std::string_view Imservice::sendResultToString(SendResult result)const{
             return "Closed";
         case SendResult::Overloaded:
             return "Overloaded";
+        case SendResult::Failed:
+            return "Failed";
         default:
             return "Unknown";
     }
@@ -1004,19 +1005,7 @@ Imservice::SendResult Imservice::sendResponseWithLog(ConnKey key,const Request& 
     std::vector<net::ConnKey> target;
     target.push_back(key);
     auto batchResult=sendEncodedPayload(target,payload);
-    SendResult result;
-    if(batchResult.closed>0){
-        result=SendResult::Closed;
-    }
-    else if(batchResult.overloaded>0){
-        result=SendResult::Overloaded;
-    }
-    else if(batchResult.noSuchConnection>0){
-        result=SendResult::NoSuchConnection;
-    }
-    else{
-        result=SendResult::Ok;
-    }
+    auto result=batchResult.singleResult();
     auto ctx=makeRespCtx(key,req,resp,session,outEvet);
     ctx.sendResult=std::string(sendResultToString(result));
     if(result!=SendResult::Ok){//发送失败日志
@@ -1029,6 +1018,9 @@ Imservice::SendResult Imservice::sendResponseWithLog(ConnKey key,const Request& 
         else if(result==SendResult::Overloaded){
             LOG_ERROR_CTX("Failed to send response, connection overloaded",ctx);
         }
+        else if (result == SendResult::Failed) {
+            LOG_ERROR_CTX("Failed to send response, internal send failure",ctx);
+}
         return result;
     }
 
@@ -1083,16 +1075,10 @@ DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session
         case MsgType::LEAVE_GROUP_REQ:
         {
             auto result =DispatchResult::immediate(handleLeave(req,key,session));
-            if(!result.response){
-                return result;
+            if(!result.response){return result;
             }
             auto resp=result.response.value();
-            if(resp.ok&&resp.data.contains("left")&&resp.data["left"].get<bool>()==true){
-                    std::string groupId=resp.data["groupId"];
-                    LOG_INFO_CTX("im leave group",makeRespCtx(key,req,resp,session,"LEAVE_GROUP"));
-                    Response leaveEvent=makeOk(req,MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"accountId",session.accountId_},{"username",session.username_},{"groupId",groupId}});
-                    broadcastToGroup(groupId,key,leaveEvent);
-                }
+            if(resp.ok&&resp.data.contains("left")&&resp.data["left"].get<bool>()==true){    std::string groupId=resp.data["groupId"];    LOG_INFO_CTX("im leave group",makeRespCtx(key,req,resp,session,"LEAVE_GROUP"));    Response leaveEvent=makeOk(req,MsgType::GROUP_EVENT_PUSH,nlohmann::json{{"event","leave"},{"accountId",session.accountId_},{"username",session.username_},{"groupId",groupId}});    broadcastToGroup(groupId,key,leaveEvent);}
             return result;
         }
         case MsgType::GROUP_MSG_REQ:{
@@ -1348,12 +1334,7 @@ void Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std:
     for(auto member:members){
         if(member.accountId!=fromAccountId){//跳过发送者
             auto keys=sessionManager_.connKeysByAccountId(member.accountId);
-            if(keys.empty()){
-                //用户各端都不在线
-                auto result=repos_.offlineMessageRepo->saveOfflineMessage(member.accountId,msgId,groupId);
-                if(!result.ok()){
-                    LOG_WARN("Failed to save offlineMessage for"+member.accountId);
-                }
+            if(keys.empty()){//用户各端都不在线auto result=repos_.offlineMessageRepo->saveOfflineMessage(member.accountId,msgId,groupId);if(!result.ok()){    LOG_WARN("Failed to save offlineMessage for"+member.accountId);}
             }
         }
     }
@@ -1424,11 +1405,16 @@ Response Imservice::handleOfflineAck(const Request& req,[[maybe_unused]]ConnKey 
             return makeErr(req,ErrorCode::BAD_JSON,"Invalid msg_id in msg_ids");
         }
     }
-    auto result=repos_.offlineMessageRepo->ackOfflineMessages(session.accountId_,msgIds);
-    if(result.ok()){
-        return makeOk(req,MsgType::OFFLINE_ACK_RESP,nlohmann::json{{"acked",msgIds.size()}});
+    auto result=repos_.offlineMessageRepo->ackOfflineMessagesBatch(session.accountId_,msgIds);
+    if (!result.ok()) {
+        return makeRepoError(req,result.status,result.message);
     }
-    return makeRepoError(req,result.status,result.message);
+
+    if (!result.value.has_value()) {
+        return makeErr(req,ErrorCode::INTERNAL,"offline ack result has no value");
+    }
+    const auto deletedCount = result.value.value();
+    return makeOk(req,MsgType::OFFLINE_ACK_RESP,nlohmann::json{{"requestedCount", msgIds.size()},{"deletedCount", deletedCount},{"ignoredCount", msgIds.size() - deletedCount}});
 }
 
 
@@ -1500,12 +1486,7 @@ Response Imservice::handleLogin(const Request& req,[[maybe_unused]]ConnKey key,S
         }
         if(result.status==auth::AuthStatus::BadPassword){
             //限制登录失败频率
-            if(rateLimiter_){
-                auto limitResult=rateLimiter_->checkLoginFail(accountId,nowMs());
-                auto resultOpt=checkRateLimitOrError(req,limitResult);
-                if(resultOpt){
-                    return resultOpt.value();
-                }
+            if(rateLimiter_){auto limitResult=rateLimiter_->checkLoginFail(accountId,nowMs());auto resultOpt=checkRateLimitOrError(req,limitResult);if(resultOpt){    return resultOpt.value();}
             }
             
             return makeErr(req,ErrorCode::BAD_PASSWORD,"Password is incorrect");
@@ -2020,16 +2001,13 @@ Response Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKey key,Se
     }
     for(const auto& cursor:cursorsResult.cursors){
         if(cursor.type==storage::ConversationType::Direct){
-            if(!repos_.userRepo->userExists(cursor.targetId)){
-                return makeErr(req,ErrorCode::USER_NOT_FOUND,"the user is not found");
+            if(!repos_.userRepo->userExists(cursor.targetId)){return makeErr(req,ErrorCode::USER_NOT_FOUND,"the user is not found");
             }
-            if(!repos_.friendRepo->areFriends(session.accountId_,cursor.targetId)){
-                return makeErr(req,ErrorCode::NOT_FRIENDS,"the user is not your friend");
+            if(!repos_.friendRepo->areFriends(session.accountId_,cursor.targetId)){return makeErr(req,ErrorCode::NOT_FRIENDS,"the user is not your friend");
             }
         }
         else if(cursor.type==storage::ConversationType::Group){
-            if(!groupManager_.isMember(cursor.targetId,session.accountId_)){
-                return makeErr(req,ErrorCode::NOT_IN_GROUP,"the user is not in the group");
+            if(!groupManager_.isMember(cursor.targetId,session.accountId_)){return makeErr(req,ErrorCode::NOT_IN_GROUP,"the user is not in the group");
             }
         }
     }
@@ -2272,11 +2250,9 @@ std::vector<net::ConnKey> Imservice::collectGroupTargets(const std::string& grou
     for(const auto& member:members){
         auto keys=sessionManager_.connKeysByAccountId(member.accountId);
         for(const auto& key:keys){
-            if(key==excludedKey){
-                continue;
+            if(key==excludedKey){continue;
             }
-            if(targetKeys.insert(key).second){
-                finalKeys.push_back(key);
+            if(targetKeys.insert(key).second){finalKeys.push_back(key);
             }
         }
     }
@@ -2291,6 +2267,7 @@ net::BatchSendResult Imservice::sendEncodedPayload(const std::vector<ConnKey>& t
     if(!batchSend_){
         net::BatchSendResult result;
         result.failed=targets.size();
+        return result;
     }
     //移动payload
     auto sharedPayload=std::make_shared<const std::string>(std::move(payload));

@@ -5,8 +5,7 @@
 #include "common/ConversationKey.h"
 #include <stdexcept>
 
-namespace storage{
-
+namespace{
 std::vector<std::uint64_t> normalizeIds(std::vector<std::uint64_t> ids){
     std::sort(ids.begin(),ids.end());
     ids.erase(std::unique(ids.begin(),ids.end()),ids.end());
@@ -17,6 +16,10 @@ std::string encodeIdsAsJson(const std::vector<std::uint64_t>& ids){
     nlohmann::json json(ids);
     return json.dump();
 }
+}
+namespace storage{
+
+
 SqlMessageRepo::SqlMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 

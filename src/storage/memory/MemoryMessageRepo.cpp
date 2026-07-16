@@ -118,8 +118,8 @@ std::vector<storage::DirectMessageRecord> storage::MemoryMessageRepo::listDirect
 std::vector<storage::MessageRecord> storage::MemoryMessageRepo::listGroupMessagesAfter([[maybe_unused]]const std::string& groupId,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
     return {};
 }
-storage::RepoValueResult<size_t> storage::MemoryMessageRepo::markDelivered([[maybe_unused]]const std::string&accountId,[[maybe_unused]]const std::vector<uint64_t>& msgIds,[[maybe_unused]]int64_t deliveredAtMs){
-    return RepoValueResult<size_t>{};
+storage::RepoValueResult<storage::MessageAckResult> storage::MemoryMessageRepo::markDeliveredBatch([[maybe_unused]]const std::string&accountId,[[maybe_unused]]const std::vector<uint64_t>& msgIds,[[maybe_unused]]int64_t deliveredAtMs){
+    return {};
 }
 storage::RepoValueResult<size_t> storage::MemoryMessageRepo::markReadBefore([[maybe_unused]]const std::string&accountId,[[maybe_unused]]ConversationType type,[[maybe_unused]]const std::string& targetId,[[maybe_unused]]uint64_t readMsgId,[[maybe_unused]]int64_t readAtMs){
     return RepoValueResult<size_t>{};

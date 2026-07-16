@@ -31,7 +31,7 @@ storage::RepoValueResult<storage::MessageAckResult> im::MessageAckService::ackMe
     return {.status=storage::RepoStatus::Ok,.value=result.value.value()};
 
 }
-storage::RepoResult im::MessageAckService::ackOfflineMessages(const std::string&accountId,const std::vector<uint64_t>& offlineMsgIds){
+storage::RepoValueResult<size_t> im::MessageAckService::ackOfflineMessages(const std::string&accountId,const std::vector<uint64_t>& offlineMsgIds){
     if(accountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument,.message="accountId is empty"};
     }

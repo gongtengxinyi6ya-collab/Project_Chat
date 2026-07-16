@@ -3,10 +3,10 @@
 #include "storage/sql/SqlConnection.h"
 #include "storage/sql/SqlErrorMapper.h"
 #include "storage/sql/SqlTransaction.h"
-
-namespace storage{
-
-std::vector<std::uint64_t> normalizeIds(std::vector<std::uint64_t> ids){
+#include <algorithm>
+#include "third_party/json.hpp"
+namespace {
+    std::vector<std::uint64_t> normalizeIds(std::vector<std::uint64_t> ids){
     std::sort(ids.begin(),ids.end());
     ids.erase(std::unique(ids.begin(),ids.end()),ids.end());
     return ids;
@@ -16,11 +16,13 @@ std::string encodeIdsAsJson(const std::vector<std::uint64_t>& ids){
     nlohmann::json json(ids);
     return json.dump();
 }
+
+}
+namespace storage{
 SqlOfflineMessageRepo::SqlOfflineMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
 }
-
 RepoResult SqlOfflineMessageRepo::saveOfflineMessage(const std::string& accountId,uint64_t msgId,const std::string& groupId){
     if(accountId.empty()||groupId.empty()){
         return RepoResult{.status=RepoStatus::InvalidArgument,.message="Invalid argument"};

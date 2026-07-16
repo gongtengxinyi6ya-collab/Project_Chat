@@ -5,7 +5,7 @@
 #include <string>
 #include <stddef.h>
 #include <mysql/jdbc.h>
-
+#include <string_view>
 namespace storage{
 
 /*管理单个MySQL连接上的PreparedStatement缓存，基于LRU淘汰策略
