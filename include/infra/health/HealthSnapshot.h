@@ -46,6 +46,12 @@ struct HealthSnapshot {
     bool messageExecutorSaturated{false};
     bool messageExecutorRejectedIncreased{false};
 
+    bool messageSqlEnabled{false};
+    bool messageSqlHealthy{true};
+    bool messageSqlAcquireTimeoutIncreased{false};
+
+    storage::SqlConnectionPoolStats messageSqlStats{};
+
     infra::thread::ThreadPoolStats messageExecutorStats{};
 };
 

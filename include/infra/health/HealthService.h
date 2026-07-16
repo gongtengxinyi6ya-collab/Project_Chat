@@ -25,6 +25,10 @@ public:
     explicit HealthService(const HealthConfig& config);
     void setConfig(const HealthConfig& config);
     void setSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool);//注入SQL连接池
+    void setMessageSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool);
+
+    std::weak_ptr<storage::SqlConnectionPool> messageSqlPool_;
+    std::uint64_t lastMessageSqlAcquireTimeouts_{0};
     void setRedisClient(std::weak_ptr<infra::redis::RedisClient> redisClient);//注入Redis客户端
     void setOnlineConnectionProvider(std::function<size_t()> provider);//注入在线连接获取函数
     void setMaintenanceProvider(MaintenanceProvider provider,int64_t exceptedIntervalMs);//注入维护快照获取函数
@@ -36,6 +40,9 @@ private:
     std::chrono::steady_clock::time_point startedAt_;//健康服务创建时间
 
     std::weak_ptr<storage::SqlConnectionPool> sqlPool_;//指向SQL连接池，同时weak_ptr避免延长生命周期
+    std::weak_ptr<storage::SqlConnectionPool> messageSqlPool_;
+    std::uint64_t lastMessageSqlAcquireTimeouts_{0};
+
     std::weak_ptr<infra::redis::RedisClient> redisClient_;//指向Redis客户端
 
     std::function<size_t()> onlineConnectionProvider_;//获取当前在线连接数

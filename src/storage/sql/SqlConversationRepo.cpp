@@ -198,24 +198,59 @@ std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConv
         return {};
     }
     std::string sql=R"(
-    SELECT 
-        owner_account_id,
-        conversation_type,
-       target_id,
-       last_msg_id,
-       last_preview,
-       last_sender_account_id,
-       last_sender_username,
-       last_ts_ms,
-       unread_count,
-       last_read_msg_id,
-       last_read_at_ms
-    FROM conversations
-    WHERE owner_account_id = ?
+    SELECT *
+    FROM (
+        SELECT
+            owner_account_id,
+            conversation_type,
+            target_id,
+            last_msg_id,
+            last_preview,
+            last_sender_account_id,
+            last_sender_username,
+            last_ts_ms,
+            unread_count,
+            last_read_msg_id,
+            last_read_at_ms
+        FROM conversations
+        WHERE owner_account_id = ?
+        AND conversation_type = 1
+
+        UNION ALL
+
+        SELECT
+            cursor.account_id AS owner_account_id,
+            2 AS conversation_type,
+            cursor.group_id AS target_id,
+            head.last_msg_id,
+            head.last_preview,
+            head.last_sender_account_id,
+            head.last_sender_username,
+            head.last_ts_ms,
+            CASE
+                WHEN head.last_seq >
+                    GREATEST(
+                        cursor.last_read_seq,
+                        cursor.joined_seq
+                    )
+                THEN head.last_seq -
+                    GREATEST(
+                        cursor.last_read_seq,
+                        cursor.joined_seq
+                    )
+                ELSE 0
+            END AS unread_count,
+            cursor.last_read_msg_id,
+            cursor.last_read_at_ms
+        FROM user_group_cursors AS cursor
+        JOIN group_conversation_heads AS head
+        ON head.group_id = cursor.group_id
+        WHERE cursor.account_id = ?
+    ) AS combined
     ORDER BY last_ts_ms DESC
-    LIMIT ?
+    LIMIT ?;
     )";
-    auto result=conn->queryPrepared(sql,{ownerAccountId,limit});
+    auto result=conn->queryPrepared("conversation.select_list",sql,{ownerAccountId,ownerAccountId,limit});
     if(!result.ok()){
         return {};
     }
@@ -248,12 +283,63 @@ storage::RepoResult storage::SqlConversationRepo::markConversationRead(const std
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
     }
-    auto result=conn->executePrepared("UPDATE conversations SET unread_count=0,last_read_msg_id=GREATEST(last_read_msg_id,?),last_read_at_ms=? WHERE owner_account_id=? AND conversation_type=? AND target_id=?",{readMsgId,readAtMs,ownerAccountId,static_cast<uint64_t>(type),targetId});
-    if(!result.ok()){
-        return {.status=RepoStatus::SqlError,.message=result.error};
+    if(type==ConversationType::Direct){
+    //私聊会话
+        auto result=conn->executePrepared("conversation.update_direct_cursor",
+            R"(
+            UPDATE conversations 
+            SET unread_count=0,
+            last_read_msg_id=GREATEST(last_read_msg_id,?),
+            last_read_at_ms=? 
+            WHERE owner_account_id=?
+             AND conversation_type=? 
+             AND target_id=?)",
+            {readMsgId,readAtMs,ownerAccountId,static_cast<uint64_t>(type),targetId});
+        if(!result.ok()){
+            return {.status=RepoStatus::SqlError,.message=result.error};
+        }
+        if(result.affectedRows==0){//幂ok
+            return {.status=RepoStatus::Ok};
+        }
     }
-    if(result.affectedRows==0){//幂ok
-        return {.status=RepoStatus::Ok};
+    else if(type==ConversationType::Group){
+        auto groupResult=conn->executePrepared("conversation.update_group_cursor",
+        R"(
+        UPDATE user_group_cursors AS cursor
+        JOIN messages AS message
+        ON message.group_id = cursor.group_id
+        AND message.msg_id = ?
+        SET
+            cursor.last_read_msg_id =
+                CASE
+                    WHEN message.group_seq >= cursor.last_read_seq
+                    THEN message.msg_id
+                    ELSE cursor.last_read_msg_id
+                END,
+            cursor.last_read_at_ms =
+                CASE
+                    WHEN message.group_seq >= cursor.last_read_seq
+                    THEN ?
+                    ELSE cursor.last_read_at_ms
+                END,
+            cursor.last_read_seq =
+                GREATEST(
+                    cursor.last_read_seq,
+                    message.group_seq
+                )
+        WHERE cursor.account_id = ?
+        AND cursor.group_id = ?;
+        )",
+        {readMsgId,readAtMs,ownerAccountId,targetId});
+        if(!groupResult.ok()){
+            return {.status=RepoStatus::SqlError,.message=groupResult.error};
+        }
+        if(groupResult.affectedRows==0){//幂ok
+            return {.status=RepoStatus::Ok};
+        }
+    }
+    else{
+        return {.status=RepoStatus::InvalidArgument,.message="unknown conversation type"};
     }
     return {.status=RepoStatus::Ok};
 }

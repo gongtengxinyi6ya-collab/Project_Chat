@@ -12,6 +12,7 @@
 封装MySql/C++,API
 统一错误处理*/
 namespace storage{
+class PreparedStatementCache;
 class SqlConnection{
 public:
     explicit SqlConnection(const DatabaseConfig& config);
@@ -29,6 +30,11 @@ public:
     uint64_t fetchLastInsertId();//获取最近插入Id
     SqlResult executePreParedInsert(const std::string& sql,const std::vector<SqlParam>& params);
 
+    SqlConnection(const DatabaseConfig& config,std::size_t statementCacheSize);
+    //PreparedStatementCache缓存接口
+    SqlResult executePrepared(std::string_view statementName,const std::string& sql,const std::vector<SqlParam>& params);
+    SqlResult queryPrepared(std::string_view statementName,const std::string& sql,const std::vector<SqlParam>& params);
+    //事务接口
     SqlResult beginTransaction();//关闭自动提交，进入事务
     SqlResult commit();//提交事务并恢复自动提交
     SqlResult rollback();//回滚事务并恢复自动提交
@@ -48,6 +54,7 @@ private:
     bool connected_{false};
     std::unique_ptr<sql::Connection> conn_;//MySql连接对象
     sql::Driver* driver_{nullptr};//驱动入口
+    std::unique_ptr<PreparedStatementCache> statementCache_;
 
     SqlResult readResultSet(sql::ResultSet* resultSet);
 

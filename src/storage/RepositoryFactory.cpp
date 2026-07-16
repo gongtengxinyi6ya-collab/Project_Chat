@@ -18,30 +18,56 @@
 #include "storage/sql/SqlGroupJoinRequestRepo.h"
 #include "storage/sql/SqlGroupMessageWriteStore.h"
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& dbConfig){
-    auto pool=std::make_shared<SqlConnectionPool>(dbConfig);
-    if(!pool->start()){
-        throw std::runtime_error("Failed to start SQL connection pool");
+    //创建通用连接池
+    SqlConnectionPoolOptions commonOptions{
+        .name="common",
+        .poolSize=dbConfig.poolSize(),
+        .acquireTimeout=std::chrono::milliseconds(dbConfig.acquireTimeoutMs()),
+        .statementCacheSize=dbConfig.preparedStatementCacheSize()};
+    auto commonPool=std::make_shared<SqlConnectionPool>(dbConfig,commonOptions);
+
+    //创建消息连接池
+    SqlConnectionPoolOptions messageOptions{
+    .name = "message",
+    .poolSize = dbConfig.messagePoolSize(),
+    .acquireTimeout =std::chrono::milliseconds(dbConfig.messageAcquireTimeoutMs()),
+    .statementCacheSize =dbConfig.preparedStatementCacheSize()
+};
+    auto messagePool=std::make_shared<SqlConnectionPool>(dbConfig,messageOptions);
+    if(!commonPool->start()){
+        throw std::runtime_error("Failed to start common SQL connection pool");
     }
-    if(!pool->healthy()){
-        throw std::runtime_error("SqlConnection is not healthy");
+    if(!messagePool->start()){
+        commonPool->stop();
+        throw std::runtime_error("Failed to start message SQL connection pool");
     }
+    
     RepositoryBundle bundle;
-    bundle.userRepo=std::make_shared<SqlUserRepo>(pool);
-    bundle.groupRepo=std::make_shared<SqlGroupRepo>(pool);
-    bundle.messageRepo=std::make_shared<SqlMessageRepo>(pool);
-    bundle.offlineMessageRepo=std::make_shared<SqlOfflineMessageRepo>(pool);
-    bundle.userSessionRepo=std::make_shared<SqlUserSessionRepo>(pool);
-    bundle.userProfileRepo=std::make_shared<SqlUserProfileRepo>(pool);
-    bundle.friendRepo=std::make_shared<SqlFriendRepo>(pool);
-    bundle.friendRequestRepo=std::make_shared<SqlFriendRequestRepo>(pool);
-    bundle.conversationRepo=std::make_shared<SqlConversationRepo>(pool);
-    bundle.groupJoinRequestRepo=std::make_shared<SqlGroupJoinRequestRepo>(pool);
-    bundle.groupMessageWriteStore=std::make_shared<SqlGroupMessageWriteStore>(pool);
-    bundle.sqlPool=pool;
-    auto stats = pool->stats();
-    LOG_INFO("SQL pool started total=" + std::to_string(stats.total) +
-            " idle=" + std::to_string(stats.idle) +
-            " acquireTimeoutMs=" + std::to_string(stats.acquireTimeoutMs));
+    //通用池注入
+    bundle.userRepo=std::make_shared<SqlUserRepo>(commonPool);
+    bundle.groupRepo=std::make_shared<SqlGroupRepo>(commonPool);
+    bundle.userSessionRepo=std::make_shared<SqlUserSessionRepo>(commonPool);
+    bundle.userProfileRepo=std::make_shared<SqlUserProfileRepo>(commonPool);
+    bundle.friendRepo=std::make_shared<SqlFriendRepo>(commonPool);
+    bundle.friendRequestRepo=std::make_shared<SqlFriendRequestRepo>(commonPool);
+    bundle.groupJoinRequestRepo=std::make_shared<SqlGroupJoinRequestRepo>(commonPool);
+    bundle.sqlPool=commonPool;
+    //消息池注入
+    bundle.messageRepo=std::make_shared<SqlMessageRepo>(messagePool);
+    bundle.offlineMessageRepo=std::make_shared<SqlOfflineMessageRepo>(messagePool);
+    bundle.conversationRepo=std::make_shared<SqlConversationRepo>(messagePool);
+    bundle.groupMessageWriteStore=std::make_shared<SqlGroupMessageWriteStore>(messagePool);
+    bundle.messageSqlPool=messagePool;
+
+    auto commonPoolStats = commonPool->stats();
+    auto messagePoolStats=messagePool->stats();
+    LOG_INFO("common SQL pool started total=" + std::to_string(commonPoolStats.total) +
+            " idle=" + std::to_string(commonPoolStats.idle) +
+            " acquireTimeoutMs=" + std::to_string(commonPoolStats.acquireTimeoutMs)+
+            " message SQL pool started total=" + std::to_string(messagePoolStats.total) +
+            " idle=" + std::to_string(messagePoolStats.idle) +
+            " acquireTimeoutMs=" + std::to_string(messagePoolStats.acquireTimeoutMs)
+        );
         return bundle;
     }
 #else

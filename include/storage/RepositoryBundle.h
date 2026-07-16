@@ -15,6 +15,7 @@ class ConversationRepo;
 class GroupJoinRequestRepo;
 class GroupMessageWriteStore;
 class SqlConnectionPool;
+
 class RepositoryBundle{
 public:
     std::shared_ptr<UserRepo> userRepo;
@@ -30,9 +31,11 @@ public:
     std::shared_ptr<GroupMessageWriteStore> groupMessageWriteStore;//群消息核心事务接口
 
     std::shared_ptr<SqlConnectionPool> sqlPool;
+    std::shared_ptr<SqlConnectionPool> messageSqlPool;//消息独立线程池
 
     bool valid()const{return userRepo&&groupRepo&&messageRepo;};
     bool hasSqlPool()const{return sqlPool!=nullptr;}
     void shutdown();
+    bool hasMessageSqlPool() const noexcept {return messageSqlPool != nullptr;}
 };
 }

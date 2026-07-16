@@ -48,8 +48,22 @@ void DatabaseConfig::loadFromEnv(){
     }
     auto envAcquireTimeoutMs = ConfigParseHelper::getEnv("DB_ACQUIRE_TIMEOUT_MS");
     if (envAcquireTimeoutMs.has_value()) {
-        acquireTimeoutMs_ =
-            ConfigParseHelper::parseEnvUInt(envAcquireTimeoutMs.value(), "DB_ACQUIRE_TIMEOUT_MS", 60000);
+        acquireTimeoutMs_ =ConfigParseHelper::parseEnvUInt(envAcquireTimeoutMs.value(), "DB_ACQUIRE_TIMEOUT_MS", 60000);
+    }
+    if (auto value =ConfigParseHelper::getEnv("DB_MESSAGE_POOL_SIZE")) {
+        messagePoolSize_ =ConfigParseHelper::parseEnvUInt(*value,"DB_MESSAGE_POOL_SIZE",128);
+    }
+
+    if (auto value =ConfigParseHelper::getEnv("DB_MESSAGE_ACQUIRE_TIMEOUT_MS")) {
+        messageAcquireTimeoutMs_ =ConfigParseHelper::parseEnvUInt(*value,"DB_MESSAGE_ACQUIRE_TIMEOUT_MS",60000);
+    }
+
+    if (auto value =ConfigParseHelper::getEnv("DB_PREPARED_STATEMENT_CACHE_SIZE")) {
+        preparedStatementCacheSize_ =ConfigParseHelper::parseEnvUInt(*value,"DB_PREPARED_STATEMENT_CACHE_SIZE",4096);
+    }
+
+    if (auto value =ConfigParseHelper::getEnv("DB_SLOW_QUERY_MS")) {
+        slowQueryMs_ =ConfigParseHelper::parseEnvUInt(*value,"DB_SLOW_QUERY_MS",600000);
     }
 }
 void DatabaseConfig::validate() const{
@@ -66,6 +80,11 @@ void DatabaseConfig::validate() const{
     ConfigParseHelper::checkRange("pool_size", poolSize_, 1, 1000);
     ConfigParseHelper::checkRange("connect_timeout_ms", connectTimeoutMs_, 1000, 60000);
     ConfigParseHelper::checkRange("acquire_timeout_ms", acquireTimeoutMs_, 100, 60000);
+    ConfigParseHelper::checkRange("message_pool_size",messagePoolSize_,1,128);
+
+    ConfigParseHelper::checkRange("message_acquire_timeout_ms",messageAcquireTimeoutMs_,10,60000);
+    ConfigParseHelper::checkRange("prepared_statement_cache_size",preparedStatementCacheSize_,1,4096);
+    ConfigParseHelper::checkRange("slow_query_ms",slowQueryMs_,1,600000);
 }
 const std::string& DatabaseConfig::host() const{
     return host_;

@@ -24,7 +24,7 @@ RepoValueResult<std::uint64_t> SqlGroupMessageWriteStore::commit(const im::Group
         //开启事务处理
         SqlTransaction transation(*conn);
         //锁定对应群的会话头
-        auto headResult=conn->queryPrepared(R"(
+        auto headResult=conn->queryPrepared("group_message.select_head_for_update",R"(
             SELECT last_seq
             FROM group_conversation_heads
             WHERE group_id = ?
@@ -41,7 +41,7 @@ RepoValueResult<std::uint64_t> SqlGroupMessageWriteStore::commit(const im::Group
         auto row=headResult.rows.front();
         auto groupSeq=getUInt64(row,"last_seq")+1;
         //插入消息
-        auto insertResult=conn->executePrepared(R"(
+        auto insertResult=conn->executePrepared("group_message.insert_message",R"(
             INSERT INTO messages (
                 msg_id,
                 group_id,
@@ -65,7 +65,7 @@ RepoValueResult<std::uint64_t> SqlGroupMessageWriteStore::commit(const im::Group
         if(finalPreview.size()>200){
             finalPreview=finalPreview.substr(0,200);
         }
-        auto updateResult=conn->executePrepared(R"(
+        auto updateResult=conn->executePrepared("group_message.update_head",R"(
             UPDATE group_conversation_heads
                 SET
                     last_seq = ?,
@@ -83,6 +83,24 @@ RepoValueResult<std::uint64_t> SqlGroupMessageWriteStore::commit(const im::Group
         if(updateResult.affectedRows==0){
             return {.status=RepoStatus::NotFound,.message=updateResult.error};
         }
+        //更新发送者游标
+        auto cursorResult=conn->executePrepared("group_message.update_sender_cursor",R"(
+            UPDATE user_group_cursors
+            SET
+                last_read_seq = GREATEST(last_read_seq, ?),
+                last_read_msg_id = ?,
+                last_read_at_ms = GREATEST(last_read_at_ms, ?)
+            WHERE account_id = ?
+            AND group_id = ?;
+            )",
+        {groupSeq,command.msgId,command.serverTsMs,command.senderAccountId,command.groupId});
+        if(!cursorResult.ok()){
+            return {.status=RepoStatus::SqlError,.message=cursorResult.error};
+        }
+        if(cursorResult.affectedRows==0){
+            return {.status=RepoStatus::NotFound,.message=updateResult.error};
+        }
+        
         //提交事务
         transation.commit();
         return {.status=RepoStatus::Ok,.value=groupSeq};

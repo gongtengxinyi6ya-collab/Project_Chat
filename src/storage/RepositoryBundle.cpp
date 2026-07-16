@@ -6,5 +6,8 @@ namespace storage{
         if(sqlPool){
             sqlPool->stop();
         }
+        if(messageSqlPool){
+            messageSqlPool->stop();
+        }
     }
 }

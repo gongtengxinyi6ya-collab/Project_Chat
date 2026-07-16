@@ -5,6 +5,17 @@
 #include "storage/sql/SqlTransaction.h"
 
 namespace storage{
+
+std::vector<std::uint64_t> normalizeIds(std::vector<std::uint64_t> ids){
+    std::sort(ids.begin(),ids.end());
+    ids.erase(std::unique(ids.begin(),ids.end()),ids.end());
+    return ids;
+}
+
+std::string encodeIdsAsJson(const std::vector<std::uint64_t>& ids){
+    nlohmann::json json(ids);
+    return json.dump();
+}
 SqlOfflineMessageRepo::SqlOfflineMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
@@ -71,30 +82,42 @@ std::vector<OfflineMessageIndex> SqlOfflineMessageRepo::listOfflineMessage(const
     return {};
 }
 
-RepoResult SqlOfflineMessageRepo::ackOfflineMessages(const std::string& accountId,const std::vector<uint64_t>& msgIds){
+RepoValueResult<size_t> SqlOfflineMessageRepo::ackOfflineMessagesBatch(const std::string& accountId,const std::vector<uint64_t>& msgIds){
     if(accountId.empty()){
-        return RepoResult{.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
+        return {.status=RepoStatus::InvalidArgument,.message="accountId is empty"};
     }
-    if(msgIds.empty()){
-        return RepoResult{.status=RepoStatus::Ok};
+    if(msgIds.empty()){//幂等
+        return {.status=RepoStatus::Ok,.value=0};
     }
+    //排序去重
+    auto clearIds=normalizeIds(msgIds);
+    auto idsJson=encodeIdsAsJson(clearIds);
     auto conn=pool_->acquire();
-    if(!conn){
-        return RepoResult{.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::SqlError,.message="Failed to acquire a conn"};
     }
-    if(conn->connected()){
-        //开启事务
-        SqlTransaction transaction(*conn);
-        for(auto msgId:msgIds){
-            auto result=conn->executePrepared("DELETE FROM offline_messages WHERE account_id=? AND msg_id=?",{accountId,msgId});
-            if(!result.ok()){
-                return RepoResult{.status=RepoStatus::SqlError,.message="Failed to delete message"};
-            }
-        }
-        transaction.commit();
-        return RepoResult{.status=RepoStatus::Ok};
+
+    auto result=conn->executePrepared("offline_message.delete_batch",
+    R"(
+        DELETE offline
+        FROM offline_messages AS offline
+        JOIN JSON_TABLE(
+            CAST(? AS JSON),
+            '$[*]' COLUMNS(
+                msg_id BIGINT UNSIGNED PATH '$'
+            )
+        ) AS ids
+        ON ids.msg_id = offline.msg_id
+        WHERE offline.account_id = ?;
+    )",{idsJson,accountId});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
     }
-    return RepoResult{.status=RepoStatus::SqlError};
+    if(result.affectedRows==0){
+        return {.status=RepoStatus::NotFound,.message=result.error};
+    }
+    return {.status=RepoStatus::Ok,.value=result.affectedRows};
+    
 
 }
 

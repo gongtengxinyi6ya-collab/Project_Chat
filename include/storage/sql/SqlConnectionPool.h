@@ -8,6 +8,7 @@
 #include "config/DatabaseConfig.h"
 #include "SqlConnectionGuard.h"
 #include "storage/sql/SqlPoolStats.h"
+#include "storage/sql/SqlConnectionPoolOptions.h"
 /*维护固定数量SQL连接*/
 namespace storage{
     class SqlConnection;
@@ -16,6 +17,12 @@ class SqlConnectionPool{
 public:
 
     explicit SqlConnectionPool(const DatabaseConfig& config);
+    SqlConnectionPool(const DatabaseConfig& databaseConfig,SqlConnectionPoolOptions options);
+
+    const std::string& name() const noexcept {
+        return options_.name;
+    }
+
     bool start();//创建连接
     void stop();//关闭连接并清空连接
     SqlConnectionGuard acquire();//获取一个连接
@@ -28,6 +35,7 @@ public:
 private:
     friend class SqlConnectionGuard;
     DatabaseConfig config_;//数据库配置
+    SqlConnectionPoolOptions options_;//连接池选择
     std::vector<std::shared_ptr<SqlConnection>> connections_;//保存所有数据库连接
     std::queue<std::shared_ptr<SqlConnection>> idle_;//空闲连接队列
     mutable std::mutex mutex_;

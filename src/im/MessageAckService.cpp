@@ -20,15 +20,15 @@ storage::RepoValueResult<storage::MessageAckResult> im::MessageAckService::ackMe
     if(!messageRepo_){
         return {.status=storage::RepoStatus::Internal,.message="messageRepo is not avaiable"};
     }
-    auto result=messageRepo_->markDelivered(accountId,msgIds,ackAtMs);
+    auto result=messageRepo_->markDeliveredBatch(accountId,msgIds,ackAtMs);
     if(!result.ok()){
         return {.status=result.status,.message=result.message};
     }
     if(!result.value.has_value()){
         return {.status=storage::RepoStatus::Internal,.message="value from markDelivered valiad"};
     }
-    auto ackedCount=result.value.value();
-    return {.status=storage::RepoStatus::Ok,.value=storage::MessageAckResult{.requestedCount=msgIds.size(),.ackedCount=ackedCount,.ignoredCount=msgIds.size()-ackedCount}};
+
+    return {.status=storage::RepoStatus::Ok,.value=result.value.value()};
 
 }
 storage::RepoResult im::MessageAckService::ackOfflineMessages(const std::string&accountId,const std::vector<uint64_t>& offlineMsgIds){
@@ -42,7 +42,7 @@ storage::RepoResult im::MessageAckService::ackOfflineMessages(const std::string&
     if(!offlineMessageRepo_){
         return {.status=storage::RepoStatus::Internal,.message="offlineMessageRepo is not avaiable"};
     }
-    return offlineMessageRepo_->ackOfflineMessages(accountId,offlineMsgIds);
+    return offlineMessageRepo_->ackOfflineMessagesBatch(accountId,offlineMsgIds);
 }
 storage::RepoValueResult<storage::ConversationReadResult> im::MessageAckService::markConversationRead(const std::string&accountId,storage::ConversationType type,const std::string&targetId,uint64_t readMsgId,int64_t readAtMs){
     if(accountId.empty()||targetId.empty()){

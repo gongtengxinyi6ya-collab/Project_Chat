@@ -4,11 +4,24 @@
 #include "storage/sql/SqlTransaction.h"
 #include "common/ConversationKey.h"
 #include <stdexcept>
-storage::SqlMessageRepo::SqlMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
+
+namespace storage{
+
+std::vector<std::uint64_t> normalizeIds(std::vector<std::uint64_t> ids){
+    std::sort(ids.begin(),ids.end());
+    ids.erase(std::unique(ids.begin(),ids.end()),ids.end());
+    return ids;
+}
+
+std::string encodeIdsAsJson(const std::vector<std::uint64_t>& ids){
+    nlohmann::json json(ids);
+    return json.dump();
+}
+SqlMessageRepo::SqlMessageRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
 }
-storage::SaveMessageResult storage::SqlMessageRepo::saveGroupMessage(uint64_t msgId,const std::string&groupId,const std::string&senderAccountId,const std::string&senderUsername,const std::string& content,uint64_t serverTsmS){
+SaveMessageResult SqlMessageRepo::saveGroupMessage(uint64_t msgId,const std::string&groupId,const std::string&senderAccountId,const std::string&senderUsername,const std::string& content,uint64_t serverTsmS){
     if(groupId.empty()){
         return SaveMessageResult{.status=RepoStatus::InvalidArgument,.message="groupId is empty"};
     }
@@ -31,7 +44,7 @@ storage::SaveMessageResult storage::SqlMessageRepo::saveGroupMessage(uint64_t ms
     }
     return SaveMessageResult{.status=RepoStatus::SqlError,.message="Failed to connect to the database"};
 }
-std::vector<storage::MessageRecord> storage::SqlMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
+std::vector<MessageRecord> SqlMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
     if(groupId.empty()){
         return {};
     }
@@ -70,7 +83,7 @@ std::vector<storage::MessageRecord> storage::SqlMessageRepo::listGroupMessages(c
     return {};
 }
 
-storage::SaveMessageResult storage::SqlMessageRepo::saveDirectMessage(uint64_t msgId,const std::string&conversationKey,const std::string&senderAccountId,const std::string& receiverAccountId,const std::string& senderUsername,const std::string&content,uint64_t serverTsMs){
+SaveMessageResult SqlMessageRepo::saveDirectMessage(uint64_t msgId,const std::string&conversationKey,const std::string&senderAccountId,const std::string& receiverAccountId,const std::string& senderUsername,const std::string&content,uint64_t serverTsMs){
     if(msgId==0||conversationKey.empty()||senderAccountId.empty()||receiverAccountId.empty()||content.empty()){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -85,7 +98,7 @@ storage::SaveMessageResult storage::SqlMessageRepo::saveDirectMessage(uint64_t m
     return {.status=RepoStatus::Ok,.messageId=msgId};
 
 }
-std::vector<storage::DirectMessageRecord> storage::SqlMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
+std::vector<DirectMessageRecord> SqlMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
     if(conversationKey.empty()){
         return {};
     }
@@ -124,7 +137,7 @@ std::vector<storage::DirectMessageRecord> storage::SqlMessageRepo::listDirectMes
     return messages;
 }
 
-std::vector<storage::DirectMessageRecord> storage::SqlMessageRepo::listDirectMessagesAfter(const std::string& conversationKey,uint64_t lastMsgId,size_t limit){
+std::vector<DirectMessageRecord> SqlMessageRepo::listDirectMessagesAfter(const std::string& conversationKey,uint64_t lastMsgId,size_t limit){
     if(conversationKey.empty()){
         return {};
     }
@@ -160,7 +173,7 @@ std::vector<storage::DirectMessageRecord> storage::SqlMessageRepo::listDirectMes
     }
     return messages;
 }
-std::vector<storage::MessageRecord> storage::SqlMessageRepo::listGroupMessagesAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit){
+std::vector<MessageRecord> SqlMessageRepo::listGroupMessagesAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit){
     if(groupId.empty()){
         return {};
     }
@@ -192,7 +205,7 @@ std::vector<storage::MessageRecord> storage::SqlMessageRepo::listGroupMessagesAf
     return messages;
 }
 
-storage::RepoValueResult<size_t> storage::SqlMessageRepo::markDelivered(const std::string&accountId,const std::vector<uint64_t>& msgIds,int64_t deliveredAtMs){
+RepoValueResult<MessageAckResult> SqlMessageRepo::markDeliveredBatch(const std::string&accountId,const std::vector<uint64_t>& msgIds,int64_t deliveredAtMs){
     if(accountId.empty()){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -200,36 +213,79 @@ storage::RepoValueResult<size_t> storage::SqlMessageRepo::markDelivered(const st
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
     }
+    //对msgIds排序去重
+    auto clearIds=normalizeIds(msgIds);
+    //转换为JSON数组
+    auto idsJson=encodeIdsAsJson(clearIds);
     try{
+        //开启事务
         SqlTransaction transation(*conn);
+        //批量查询合法消息
         std::string sql=R"(
+        SELECT COUNT(DISTINCT ids.msg_id) AS eligible_count
+        FROM JSON_TABLE(
+            CAST(? AS JSON),
+            '$[*]' COLUMNS(
+                msg_id BIGINT UNSIGNED PATH '$'
+            )
+        ) AS ids
+        JOIN direct_messages AS dm
+        ON dm.msg_id = ids.msg_id
+        AND dm.receiver_account_id = ?;
+        )";
+        auto result=conn->queryPrepared("message_ack.count_deliverable",sql,{idsJson,accountId});
+        if(!result.ok()){
+            return {.status=RepoStatus::SqlError,.message=result.error};
+        }
+        if(result.rows.empty()){
+            return {.status=RepoStatus::NotFound,.message=result.error};
+        }
+        auto row=result.rows.front();
+        auto count=getUInt64(row,"eligible_count");
+        //批量写入回执
+        auto upsertResult=conn->executePrepared("message_ack.upsert_delivered",
+        R"(
         INSERT INTO message_receipts (
             msg_id,
             account_id,
             delivered_at_ms,
             read_at_ms
         )
-        VALUES (?, ?, ?, 0)
+        SELECT
+            ids.msg_id,
+            ?,
+            ?,
+            0
+        FROM JSON_TABLE(
+            CAST(? AS JSON),
+            '$[*]' COLUMNS(
+                msg_id BIGINT UNSIGNED PATH '$'
+            )
+        ) AS ids
+        JOIN direct_messages AS dm
+        ON dm.msg_id = ids.msg_id
+        AND dm.receiver_account_id = ?
         ON DUPLICATE KEY UPDATE
-            delivered_at_ms = GREATEST(delivered_at_ms, VALUES(delivered_at_ms))
-        )";
-        size_t count=0;
-        for(const auto& msgId:msgIds){
-            auto result=conn->executePrepared(sql,{msgId,accountId,deliveredAtMs});
-            if(!result.ok()){
-                return {.status=RepoStatus::SqlError,.message=result.error};
-            }
-            count++;
+            delivered_at_ms = GREATEST(
+                message_receipts.delivered_at_ms,
+                VALUES(delivered_at_ms)
+            );
+        )",{accountId,deliveredAtMs,idsJson,accountId});
+        if(!upsertResult.ok()){
+            return {.status=RepoStatus::SqlError,.message=upsertResult.error};
+        }
+        if(result.affectedRows==0){
+            return {.status=RepoStatus::NotFound,.message=upsertResult.error};
         }
         //提交事务
         transation.commit();
-        return {.status=RepoStatus::Ok,.value=count};
+        return {.status=RepoStatus::Ok,.value=MessageAckResult{.requestedCount=count,.ackedCount=upsertResult.affectedRows,.ignoredCount=count-upsertResult.affectedRows}};
     }catch(const std::exception&e){
         return {.status=RepoStatus::Internal,.message=e.what()};
     }
 
 }
-storage::RepoValueResult<size_t> storage::SqlMessageRepo::markReadBefore(const std::string&accountId,ConversationType type,const std::string& targetId,uint64_t readMsgId,int64_t readAtMs){
+RepoValueResult<size_t> SqlMessageRepo::markReadBefore(const std::string&accountId,ConversationType type,const std::string& targetId,uint64_t readMsgId,int64_t readAtMs){
     auto conn=pool_->acquire();
     if(!conn||!conn->connected()){
         return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
@@ -289,4 +345,5 @@ storage::RepoValueResult<size_t> storage::SqlMessageRepo::markReadBefore(const s
     }
     return {.status=RepoStatus::Ok,.value=static_cast<size_t>(result.affectedRows)};
 }
-    
+
+}

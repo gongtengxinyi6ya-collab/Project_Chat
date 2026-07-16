@@ -19,6 +19,11 @@ void HealthService::setConfig(const HealthConfig& config){
 void HealthService::setSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool){
     sqlPool_=std::move(sqlPool);
 }
+void HealthService::setMessageSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool){
+    messageSqlPool_=std::move(sqlPool);
+}
+
+
 void HealthService::setRedisClient(std::weak_ptr<infra::redis::RedisClient> redisClient){
     redisClient_=std::move(redisClient);
 }

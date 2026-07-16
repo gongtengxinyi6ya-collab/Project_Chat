@@ -21,7 +21,8 @@ sql::PreparedStatement* PreparedStatementCache::getOrPrepare(sql::Connection& co
         }
         else{
             //找到但Sql文本不同
-
+            entries_.erase(name);
+            throw std::logic_error("PreparedStatementCache: statementName '" +std::string(statementName) +"' reused with different SQL.");
         }
 
     }
@@ -29,8 +30,19 @@ sql::PreparedStatement* PreparedStatementCache::getOrPrepare(sql::Connection& co
     if(entries_.size()>=capacity_){//缓存已满
         evictOne();
     }
-    auto statement=std::make_unique<sql::PreparedStatement>(connection.prepareStatement(sqlText))
-    Entry entry{.sqlText}
+    auto statement=std::make_unique<sql::PreparedStatement>(connection.prepareStatement(sqlText));
+
+    Entry entry{.sqlText=sqlText,.statement=std::move(statement),.lruIterator=lru_.begin()};
+    auto [insertedIt,inserted]=entries_.emplace(std::move(name),std::move(entry));
+    lru_.push_front(name);
+    if (!inserted) {
+        lru_.pop_front();
+        throw std::logic_error(
+            "failed to insert prepared statement cache entry"
+        );
+    }
+
+    return insertedIt->second.statement.get();
 }
 void PreparedStatementCache::clear(){
     entries_.clear();

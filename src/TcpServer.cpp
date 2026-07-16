@@ -58,6 +58,9 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     if(repos.hasSqlPool()){
         healthService_->setSqlPool(repos.sqlPool);
     }
+    if(repos.hasMessageSqlPool()){
+         healthService_->setMessageSqlPool(repos.messageSqlPool);
+    }
     imService_->setRepositories(std::move(repos));
     imService_->loadFromRepositories();
     //注入在线连接数provider

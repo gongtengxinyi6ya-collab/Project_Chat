@@ -1,7 +1,11 @@
 #include "storage/sql/SqlConnection.h"
-
+#include "storage/sql/PreparedStatementCache.h"
 namespace storage{
 SqlConnection::SqlConnection(const DatabaseConfig& config):config_(config){
+
+}
+SqlConnection::SqlConnection(const DatabaseConfig& config,std::size_t statementCacheSize)
+:config_(config),statementCache_(std::make_unique<PreparedStatementCache>(statementCacheSize)){
 
 }
 SqlConnection::~SqlConnection(){
@@ -24,6 +28,10 @@ bool SqlConnection::connect(){
 void SqlConnection::close(){
     connected_=false;
     if(conn_){
+        if(statementCache_){
+            statementCache_->clear();
+        }
+        
         conn_->close();
     }
 }
@@ -142,6 +150,61 @@ SqlResult SqlConnection::queryPrepared(const std::string& sql,const std::vector<
     }
     return SqlResult{.success=false,.error="unknown error"};
 }
+
+SqlResult SqlConnection::executePrepared(std::string_view statementName,const std::string& sql,const std::vector<SqlParam>& params){
+    if(statementName.empty()){
+        return {.success=false,.error="statementName  is empty"};
+    }
+    if(!ensureConnected()){
+        return {.success=false,.error="not connected"};
+    }
+    try{
+        auto stmt=statementCache_->getOrPrepare(*conn_,statementName,sql);
+        if(stmt==nullptr){
+            return {.success=false,.error="failed to obtain prepared statement"};
+        }
+        for(size_t i=0;i<params.size();i++){
+            params[i].bind(stmt,static_cast<int>(i+1));
+        }
+        uint64_t affectedRows=static_cast<std::uint64_t>(stmt->executeUpdate());
+        return SqlResult{.success=true,.affectedRows=affectedRows};
+    }catch(const sql::SQLException& e){
+        if (isConnectionError(e)) {
+            markBroken();
+        }
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
+    }catch(...){
+        return SqlResult{.success=false,.error="unknown error"};
+    }
+}
+SqlResult SqlConnection::queryPrepared(std::string_view statementName,const std::string& sql,const std::vector<SqlParam>& params){
+    if(statementName.empty()){
+        return {.success=false,.error="statementName  is empty"};
+    }
+    if(!ensureConnected()){
+        return {.success=false,.error="not connected"};
+    }
+    try{
+        auto stmt=statementCache_->getOrPrepare(*conn_,statementName,sql);
+        if(stmt==nullptr){
+            return {.success=false,.error="failed to obtain prepared statement"};
+        }
+        for(size_t i=0;i<params.size();i++){
+            params[i].bind(stmt,static_cast<int>(i+1));
+        }
+        auto ResultSet=std::unique_ptr<sql::ResultSet>(stmt->executeQuery());
+        return readResultSet(ResultSet.get());
+    }catch(const sql::SQLException& e){
+        if (isConnectionError(e)) {
+            markBroken();
+        }
+        return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
+    }catch(...){
+        return SqlResult{.success=false,.error="unknown error"};
+    }
+}
+
+
 SqlResult SqlConnection::beginTransaction(){
     if(!ensureConnected()){
         return SqlResult{.success=false,.error="not connected"};
@@ -237,6 +300,9 @@ bool SqlConnection::ensureConnected(){
     return false;
 }
 bool SqlConnection::reconnect(){
+    if(statementCache_){
+        statementCache_->clear();
+    }
     //清理旧连接
     close();
     if(connect()){
@@ -275,6 +341,9 @@ bool SqlConnection::resetSessionStateSafe(){
 void SqlConnection::markBroken(){
     broken_=true;
     connected_=false;
+    if(statementCache_){
+        statementCache_->clear();
+    }
 }
 bool SqlConnection::broken() const{
     return broken_;

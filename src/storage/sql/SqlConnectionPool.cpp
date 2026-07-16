@@ -6,13 +6,16 @@ namespace storage{
 SqlConnectionPool::SqlConnectionPool(const DatabaseConfig& config)
 :config_(config),acquireTimeout_(std::chrono::milliseconds(config_.acquireTimeoutMs())){
 }
+SqlConnectionPool::SqlConnectionPool(const DatabaseConfig& config,SqlConnectionPoolOptions options)
+:config_(config),options_(options),acquireTimeout_(options_.acquireTimeout){
+}
 bool SqlConnectionPool::start(){
     std::lock_guard lock(mutex_);
     if(started_.load(std::memory_order_acquire)){
         return true;
     }
-    for(size_t i=0;i<config_.poolSize();++i){
-        auto conn=std::make_shared<SqlConnection>(config_);
+    for(size_t i=0;i<options_.poolSize;++i){
+        auto conn=std::make_shared<SqlConnection>(config_,options_.statementCacheSize);
         if(!conn->connect()){
             return false;
         }
@@ -119,7 +122,7 @@ bool SqlConnectionPool::replaceConnection(const std::shared_ptr<SqlConnection>& 
         return false;
     }
     //创建新连接
-    auto newConn=std::make_shared<SqlConnection>(config_);
+    auto newConn=std::make_shared<SqlConnection>(config_,options_.statementCacheSize);
     if(!newConn->connect()){
         replaceFailures_.fetch_add(1, std::memory_order_relaxed);
         return false;
