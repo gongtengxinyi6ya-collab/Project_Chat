@@ -8,6 +8,7 @@
 #include "config/AppConfig.h"
 #include "storage/RepositoryFactory.h"
 #include "timer/TimerId.h"
+#include "net/SendTypes.h"
 
 class EventLoop;
 class EventLoopThreadPool;
@@ -26,6 +27,9 @@ namespace infra::maintenance {
 }
 namespace infra::thread{
     class KeyedSerialExecutor;
+}
+namespace net{
+    class OutboundFrame;
 }
 //管理所有客户端连接，创建TcpConnection,删除/关闭连接，处理聊天逻辑
 //在主线程中监听新连接，分发到IO线程处理，IO线程中创建TcpConnection对象，保存到connections_中
@@ -46,6 +50,9 @@ public:
     bool isStopping()const {return stopping_.load(std::memory_order_relaxed);}
 
     void setQuitCallback(std::function<void()> cb);
+
+    //批量广播接口
+    net::BatchSendResult sendBatchToConnKeys(const std::vector<net::ConnKey>& keys, net::SharedPayload payload);//完成一次批量发送
 private:
     EventLoop* baseloop_;
     //配置
@@ -58,6 +65,7 @@ private:
     std::atomic<bool> stopping_{false};//标识服务正在关闭
     // 使用 unique_ptr 让连接自动释放，避免手动 delete
     std::unordered_map<int,std::shared_ptr<TcpConnection>> connections_;//管理所有连接，key为fd，value为TcpConnection对象指针
+    
     std::unique_ptr<infra::thread::ThreadPool> threadPool_;//线程池，处理消息转发等耗时操作
     std::unique_ptr<infra::thread::KeyedSerialExecutor> messageExecutor_;//异步消息处理线程池
     
@@ -86,4 +94,8 @@ private:
     std::unique_ptr<infra::maintenance::MaintenanceService> maintenanceService_;
     
     TimerId maintenanceTimerId_;
+
+    //批量广播接口
+    
+    void enqueueFrameBatch(EventLoop* ioLoop, std::vector<std::shared_ptr<TcpConnection>> connections, std::shared_ptr<const net::OutboundFrame> frame);//封装每个IO loop的批量投递
 };

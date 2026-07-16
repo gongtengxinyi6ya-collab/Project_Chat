@@ -4,7 +4,7 @@
 #include <string>
 #include <stddef.h>
 namespace net{
-using Connkey=std::uint64_t;//连接标识类型
+using ConnKey=std::uint64_t;//连接标识类型
 
 using SharedPayload=std::shared_ptr<const std::string>;//多个连接共享同一编码后的JSON
 

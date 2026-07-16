@@ -6,23 +6,30 @@
 #include "EventLoop.h"
 #include "Channel.h"
 #include "Buffer.h"
-
+#include "net/SendTypes.h"
 #include "config/AppConfig.h"
 //向前声明
 class ThreadPool;
 class TcpServer;
-
+namespace net{
+    class OutboundFrame;
+}
 
 const int BUFFERSIZE=4096;
 //管理一个客户端连接对象，处理读写数据，关闭连接
 //所有TcpConnection对象都保存在IO线程中，保证线程安全，非IO线程通过runInLoop将任务转发到IO线程执行
 class TcpConnection
 :public std::enable_shared_from_this<TcpConnection>{
+    friend class TcpServer;//允许TcpServer访问private接口；
+
     using CloseCallback=std::function<void(const std::shared_ptr<TcpConnection>&)>;//连接关闭回调，参数为当前连接对象的shared_ptr
     using MessageCallback=std::function<void(const std::shared_ptr<TcpConnection>&,const std::string&)>;//消息回调，参数为fd和消息内容
 
     using HighWaterCallback=std::function<void(const std::shared_ptr<TcpConnection>&,size_t)>;//高水位回调
     using LowWaterCallback=std::function<void(const std::shared_ptr<TcpConnection>&,size_t)>;//低水位回调
+
+    //
+    using SharedFrame = std::shared_ptr<const net::OutboundFrame>;
 public:
     TcpConnection(EventLoop* loop,int fd,TcpServer* server,const AppConfig& config);
     ~TcpConnection();
@@ -67,6 +74,7 @@ public:
     uint32_t overloadDropCount()const;//返回脸书过载丢弃次数
     void recordDrop(size_t payloadByres);//
 private:
+
     EventLoop* loop_;//
     int fd_;//客户端socket
 
@@ -111,4 +119,12 @@ private:
     void updatePendingEstimate();//同步获取outputBuffer可读字节
 
     void forceCloseInLoop();
+
+    //批量广播接口
+    std::atomic<std::size_t> queuedFrameBytes_{0};//记录当前在baseLoop被接受但还没有进入IO线程outputBuffer_的字节数
+    net::SendResult tryReserveFrame(std::size_t frameBytes) noexcept;//真正发送之前，尝试预留发送额度
+    void sendReservedFrameInLoop(SharedFrame frame);//真正进入IO线程以后开始发送
+    void releaseReservedFrame(std::size_t frameBytes) noexcept;//连接关闭、批量任务取消或frame无效时撤销预留
+    std::size_t totalPendingEstimate() const noexcept{return queuedFrameBytes_.load(std::memory_order_relaxed)+outputBuffer_.readableBytes();};//返回连接真实待发送数据量
+    void recordOverloadDrop();//统一完成丢弃消息计数，连续过载计数，设置过载状态，超过阈值后调度关闭
 };

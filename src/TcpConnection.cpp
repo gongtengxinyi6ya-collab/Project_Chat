@@ -2,13 +2,15 @@
 #include "TcpServer.h"
 
 #include "logger/LogMacros.h"
-
+#include "net/OutbountFrame.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <cstring>
 #include <stdexcept>
 #include <system_error>
+
+
 TcpConnection::TcpConnection(EventLoop* loop,int fd,TcpServer* server,const AppConfig& config)
 :loop_(loop),fd_(fd),server_(server),connected_(true),heartbeatInterval_(config.net().heartBeatMs),heartbeatTimeout_(config.net().heartbeatTimeoutMs),maxFrameLen(config.net().maxFrameLen),highWaterMark_(config.net().connHighWaterMark),lowWaterMark_(config.net().connLowWaterMark),hardLimit_(config.net().connHardLimit),maxOverloadDropCount_(config.net().maxOverloadDropCount){
     //获取peer地址
@@ -393,4 +395,74 @@ void TcpConnection::scheduleCloseInLoop(){
 }
 void TcpConnection::updatePendingEstimate(){
     pendingBytesEstimate_.store(outputBuffer_.readableBytes(),std::memory_order_relaxed);
+}
+
+//批量广播接口实现
+
+net::SendResult TcpConnection::tryReserveFrame(std::size_t frameBytes) noexcept{
+    //baseLoop线程调用：
+    if(!connected_.load(std::memory_order_acquire)){
+        return net::SendResult::Closed;
+    }
+    while(true){//CAS失败则重新读取并判断
+        //读取pendingBytesEstimate_和queuedFrameBytes_
+        auto pending=pendingBytesEstimate_.load(std::memory_order_relaxed);
+        auto queued=queuedFrameBytes_.load(std::memory_order_relaxed);
+        if(pending+queued+frameBytes>hardLimit_){//超过硬限制
+            recordOverloadDrop();
+            return net::SendResult::Overloaded;
+        }
+        //CAS增加
+        if(queuedFrameBytes_.compare_exchange_weak(queued,queued+frameBytes,std::memory_order_acq_rel,std::memory_order_acquire)){
+            //预留成功返回ok
+            return net::SendResult::Ok;
+        }
+    }
+}
+void TcpConnection::sendReservedFrameInLoop(SharedFrame frame){
+    //连接所属IO Loop
+    loop_->assertInLoopThread();
+    if(!frame){
+        return;
+    }
+    auto frameBytes=frame->frameBytes();
+    if(!connected_.load(std::memory_order_acquire)){//连接关闭
+        releaseReservedFrame(frameBytes);
+        return;
+    }
+    //向outputBuffer_追加
+    outputBuffer_.append(frame->headerData(),frame->headerBytes());//追加四字节header
+    outputBuffer_.append(frame->payload().data(),frame->payloadBytes());//追加payload内容
+    updatePendingEstimate();
+    releaseReservedFrame(frameBytes);
+    //判断高水位
+    if(!overloaded_.load(std::memory_order_acquire)&&totalPendingEstimate()>highWaterMark_){
+        overloaded_.store(true,std::memory_order_relaxed);
+        if(highWaterCallback_){
+            highWaterCallback_(shared_from_this(),pendingBytes());
+        }
+        LOG_WARN("Connection " + std::to_string(fd_) + " is overloaded, pending bytes: " + std::to_string(totalPendingEstimate()));
+    }
+    if(channel_&&!channel_->enableWriting()){//注册写事件，等待发送机会
+        //失败则记录错误并关闭连接
+        LOG_ERROR("Failed to enableWritting");
+        handleClose();
+    }
+}
+void TcpConnection::releaseReservedFrame(std::size_t frameBytes) noexcept{
+    const auto previous=queuedFrameBytes_.fetch_sub(frameBytes,std::memory_order_relaxed);
+    if(previous<frameBytes){//防止下溢
+        //预留与释放不匹配
+        queuedFrameBytes_.store(0,std::memory_order_relaxed);
+        LOG_ERROR("queuedFrameBytes underflow");
+    }
+}
+
+void TcpConnection::recordOverloadDrop(){
+    droppedMessage_.fetch_add(1,std::memory_order_relaxed);
+    auto dropCount=overloadDropCount_.fetch_add(1,std::memory_order_relaxed)+1;
+    overloaded_.store(true,std::memory_order_release);
+    if(dropCount>maxOverloadDropCount_){//达到关闭阈值
+        scheduleCloseInLoop();
+    }
 }

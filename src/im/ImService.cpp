@@ -372,31 +372,10 @@ Imservice::BroadcastResult Imservice::broadcastToGroup(const std::string& groupI
     }
     decorate(push,msgId);//群推送消息也需要decorate添加msg_id和server_ts_ms等字段
     auto payload=encodeResponse(push);
-    const auto& users=groupManager_.memberInfos(groupId);//根据群id取成员用户名列表
-    for(const auto& user:users){
-        const auto& keys=sessionManager_.connKeysByAccountId(user.accountId);
-        for(const auto& key:keys){
-            if(key!=senderkey){
-                SendResult res=sendPush(key,payload);
-                switch(res){
-                    case SendResult::Ok:
-                        result.sent++;
-                        break;
-                    case SendResult::NoSuchConnection:
-                        result.noSuchConnection++;
-                        break;
-                    case SendResult::Closed:
-                        result.closed++;
-                        break;
-                    case SendResult::Overloaded:
-                        result.overloaded++;
-                        break;
-                }
-            }
-        }
-    }
+
+    auto targets=collectGroupTargets(groupId,senderkey);
+    auto result=sendEncodedPayload(targets,payload);
     return result;
-   
 }
 
 Response Imservice::handleJoin(const Request & req,[[maybe_unused]]ConnKey key,Session& session){
@@ -1032,12 +1011,22 @@ LogLevel Imservice::mapErrorToLogLevel(ErrorCode code) const{
 Imservice::SendResult Imservice::sendResponseWithLog(ConnKey key,const Request& req,Response& resp,const Session& session,const std::string& outEvet){
     decorate(resp,std::nullopt,req.req_id);
     auto payload=encodeResponse(resp);
+
+    std::vector<net::ConnKey> target;
+    target.push_back(key);
+    auto batchResult=sendEncodedPayload(target,payload);
     SendResult result;
-    if(sendToConnKey_){
-        result=sendToConnKey_(key,payload);
+    if(batchResult.closed>0){
+        result=SendResult::Closed;
+    }
+    else if(batchResult.overloaded>0){
+        result=SendResult::Overloaded;
+    }
+    else if(batchResult.noSuchConnection>0){
+        result=SendResult::NoSuchConnection;
     }
     else{
-        result=SendResult::NoSuchConnection;
+        result=SendResult::Ok;
     }
     auto ctx=makeRespCtx(key,req,resp,session,outEvet);
     ctx.sendResult=std::string(sendResultToString(result));
@@ -1782,27 +1771,13 @@ Imservice::AccountPushResult Imservice::pushToAccount(const std::string& targetA
     decorate(push);
     //获取协议字符串
     auto pushString=encodeResponse(push);
+    auto result=sendEncodedPayload(keys,pushString);
+
     AccountPushResult pushResult;
-    for(const auto& key:keys){//遍历key进行推送
-        auto sendResult=sendPush(key,pushString);
-        switch (sendResult)
-        {//根据SendResult累加统计
-        case SendResult::Ok:
-            pushResult.sent++;
-            break;
-        case SendResult::Closed:
-            pushResult.closed++;
-            break;
-        case SendResult::NoSuchConnection:
-            pushResult.noSuchConnection++;
-            break;
-        case SendResult::Overloaded:
-            pushResult.overloaded++;
-            break;
-        default:
-            break;
-        }
-    }
+    pushResult.sent=result.sent;
+    pushResult.noSuchConnection=result.noSuchConnection;
+    pushResult.overloaded=result.overloaded;
+    pushResult.closed=result.closed;
     return pushResult;
 }
 
@@ -2144,6 +2119,12 @@ void Imservice::stopAcceptingAsyncMessages(){
     acceptingAsyncMessages_.store(false,std::memory_order_release);
     
 }
+void Imservice::setBatchSender(BatchSendFn fn){
+    batchSend_=std::move(fn);
+    if(!batchSend_){
+        throw std::invalid_argument("Batch send function invalid");
+    }
+}
 DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
 auto err=guardAuthenticated(req,session);//校验登录
     if(err.has_value()){
@@ -2294,5 +2275,38 @@ void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMes
             {"persisUs",result.persistUs},
         });
     sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"GROUP_MSG_RESP_OUT");
+}
+
+std::vector<net::ConnKey> Imservice::collectGroupTargets(const std::string& groupId, ConnKey excludedKey) const{
+    //获取群成员
+    auto members=groupManager_.memberInfos(groupId);
+    //获取在线连接
+    std::unordered_set<net::ConnKey> targetKeys;//set去重
+    std::vector<net::ConnKey> finalKeys;
+    for(const auto& member:members){
+        auto keys=sessionManager_.connKeysByAccountId(member.accountId);
+        for(const auto& key:keys){
+            if(key==excludedKey){
+                continue;
+            }
+            if(targetKeys.insert(key).second){
+                finalKeys.push_back(key);
+            }
+        }
+    }
+    return finalKeys;
+}
+
+net::BatchSendResult Imservice::sendEncodedPayload(const std::vector<ConnKey>& targets, std::string payload){
+    
+    if(targets.empty()){
+        return {};
+    }
+    if(!batchSend_){
+        return {};
+    }
+    //移动payload
+    auto sharedPayload=std::make_shared<const std::string>(std::move(payload));
+    return batchSend_(targets,std::move(sharedPayload));
 }
 }

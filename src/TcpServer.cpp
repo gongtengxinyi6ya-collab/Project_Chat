@@ -9,12 +9,14 @@
 #include "infra/maintenance/MaintenanceService.h"
 #include "infra/thread/ThreadPool.h"
 #include "infra/thread/KeyedSerialExecutor.h"
+#include "net/OutbountFrame.h"
 #ifdef PROJECT_CHAT_ENABLE_REDIS
 #include "infra/redis/RedisClient.h"
 #include "security/rate_limit/RedisRateLimitStore.h"
 #include "security/rate_limit/RateLimiter.h"
 #endif
 #include <vector>
+#include <unordered_map>
 TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 :baseloop_(loop),config_(config),acceptor_(baseloop_,config_.server().host,port,config_.server().backlog,config_.net().tcpNoDelay,config_.net().keepAlive),threadNum_(config.server().ioThreads),started_(false){
     iothreadPool_ = std::make_unique<EventLoopThreadPool>(baseloop_);
@@ -358,4 +360,69 @@ void TcpServer::finalizeStopInBaseLoop(){
     if(quitCallback_){
         quitCallback_();
     }
+}
+
+//批量广播接口
+
+net::BatchSendResult TcpServer::sendBatchToConnKeys(const std::vector<net::ConnKey>& keys, net::SharedPayload payload){
+    //baseLoop执行
+    net::BatchSendResult result;
+    if(!payload){
+        return result;
+    }
+    auto frame=net::OutboundFrame::create(std::move(payload),kMaxFrameLen);//整批创建一次
+    if(!frame){
+        return result;
+    }
+    std::unordered_map<EventLoop*,std::vector<std::shared_ptr<TcpConnection>>> batches;
+    //遍历连接
+    for(const auto key:keys){
+        auto it=connections_.find(key);
+        if(it==connections_.end()){
+            //找不到连接
+            result.add(net::SendResult::NoSuchConnection);
+            continue;
+        }
+        if(it->second->isClosed()){//连接关闭
+            result.add(net::SendResult::Closed);
+            continue;
+        }
+        if(it->second->tryReserveFrame(frame->frameBytes())==net::SendResult::Overloaded){
+            //尝试预留过载
+            result.add(net::SendResult::Overloaded);
+            continue;
+        }
+        //预留成功
+        result.add(net::SendResult::Ok);
+        batches.emplace(it->second->getLoop(),std::move(it->second));//根据loop加入对应batch
+
+    }
+    //遍历batches
+    for(const auto& batch:batches){
+        enqueueFrameBatch(batch.first,batch.second,frame);
+    }
+    return result;
+}
+
+void TcpServer::enqueueFrameBatch(EventLoop* ioLoop, std::vector<std::shared_ptr<TcpConnection>> connections, std::shared_ptr<const net::OutboundFrame> frame){
+    if(!ioLoop||!frame||connections_.empty()){
+        if(frame){//若之前预留成功则撤销预留
+            for(const auto&conn:connections){
+                if(conn){
+                    conn->releaseReservedFrame(frame->frameBytes());
+                }
+            }
+        }
+        return;
+    }
+    ioLoop->queueInLoop([connections=std::move(connections),frame=std::move(frame)]()mutable{
+        //遍历连接调用
+        for(auto& conn:connections){
+            if(!conn){
+                continue;
+            }
+            conn->sendReservedFrameInLoop(frame);
+        }
+    });
+
 }

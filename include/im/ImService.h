@@ -28,6 +28,8 @@
 #include "im/GroupMessagePersistenceTypes.h"
 
 #include "infra/thread/ThreadTypes.h"
+
+#include "net/SendTypes.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -77,19 +79,22 @@ public:
         size_t failed()const{return noSuchConnection+closed+overloaded;}//返回失败设备总数
         bool delivered()const{return sent>0;}//是否至少投递到一个设备
     };
-    //回调
-    using ConnKey=std::uint64_t;//连接标识
+    //回调类型
+    using ConnKey=net::ConnKey;//连接标识
     using SendToConnKeyFn=std::function<SendResult (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
     using MessageTask = std::function<void()>;//异步任务接口
     using SubmitMessageTaskFn =std::function<infra::thread::TaskSubmitResult(const std::string& orderingKey,MessageTask)>;//提交消息持久化任务到工作线程池
     using PostToBaseLoopFn =std::function<bool(MessageTask)>;//投递持久化的结果任务到baseLoop线程
+    using BatchSendFn = std::function<net::BatchSendResult(const std::vector<ConnKey>&, net::SharedPayload)>;
 
     explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig(),const IdConfig& idconfig=IdConfig());
     ~Imservice();
+
     //回调设置
     void setSendToConnKey(SendToConnKeyFn fn);
     void setMessageAsyncExecutor(SubmitMessageTaskFn submitFn,PostToBaseLoopFn postFn);//注入群消息异步处理所需的两个执行器
     void stopAcceptingAsyncMessages();//服务关闭时禁止再接受新的异步消息任务
+    void setBatchSender(BatchSendFn fn);
 
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
@@ -238,6 +243,12 @@ private:
         std::uint64_t serverTsMs{0};
     };
     void completeGroupMessage(PendingGroupMessageContext context,GroupMessageWriteCommand command,GroupMessageWriteResult result);//持久化完成并回到baseLoop,根据持久化结果完成群消息业务
+
+    //批量广播接口
+    BatchSendFn batchSend_;//由TcpServer注入实际网络发送能力
+    std::vector<ConnKey> collectGroupTargets(const std::string& groupId, ConnKey excludedKey) const;//获取群成员在线连接
+    net::BatchSendResult sendEncodedPayload(const std::vector<ConnKey>& targets, std::string payload);//接收一份已经完成的JSON编码字符串，构造共享payload,并批量发送给多个连接
+    
 
 };
 }
