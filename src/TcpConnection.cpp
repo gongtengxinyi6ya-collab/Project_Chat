@@ -2,7 +2,7 @@
 #include "TcpServer.h"
 
 #include "logger/LogMacros.h"
-#include "net/OutbountFrame.h"
+#include "net/OutboundFrame.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -97,7 +97,7 @@ void TcpConnection::handleWrite(){
         if(n>0){//发送成功，清除outputBuffer_中字节
             outputBuffer_.retrieve(n);//回收已发送字节
             updatePendingEstimate();//每次成功发送并清除后，同步更新估算值
-            size_t pending=pendingBytesEstimate_.load(std::memory_order_relaxed);
+            const auto pending=totalPendingEstimate();
             size_t overload=overloaded_.load(std::memory_order_relaxed);
             if(overload&&pending<lowWaterMark_){//如果之前过载且已降到低水位，记录日志并恢复正常状态
                 overloaded_.store(false,std::memory_order_relaxed);
@@ -307,11 +307,6 @@ void TcpConnection::closeFd(){
         fd_=-1;
     }
 }
-bool TcpConnection::canSend(size_t payloadBytes)const{
-    size_t frameBytes=4+payloadBytes;//4+未加长度头的JSON字符串长度
-    size_t pending=pendingBytesEstimate_.load(std::memory_order_relaxed);
-    return connected_.load(std::memory_order_relaxed)&&pending+frameBytes<=hardLimit_;
-}
 
 //心跳检测接口
 void TcpConnection::startHeartbeat(){
@@ -371,20 +366,7 @@ uint64_t TcpConnection::droppedMessage()const{
 uint32_t TcpConnection::overloadDropCount()const{
     return overloadDropCount_.load(std::memory_order_relaxed);
 }
-void TcpConnection::recordDrop([[maybe_unused]]size_t payloadBytes){
-    droppedMessage_.fetch_add(1,std::memory_order_relaxed);
-    size_t drops=overloadDropCount_.fetch_add(1,std::memory_order_relaxed)+1;
-    bool wasOverload=overloaded_.exchange(true,std::memory_order_relaxed);
-    if(!wasOverload&&highWaterCallback_){//未过载
-        overloaded_.store(true,std::memory_order_relaxed);
-        size_t pending=pendingBytesEstimate_.load(std::memory_order_relaxed);
-        highWaterCallback_(shared_from_this(),pending);
-    }
-    if(drops>=maxOverloadDropCount_){
-        scheduleCloseInLoop();
-        LOG_WARN("Connection " + std::to_string(fd_) + " has dropped " +std::to_string(overloadDropCount_.load(std::memory_order_relaxed)) + " messages due to overload, exceeding max overload drop count of " + std::to_string(maxOverloadDropCount_)+", closing connection");
-    }
-}
+
 void TcpConnection::scheduleCloseInLoop(){
     std::weak_ptr<TcpConnection> weakptr=shared_from_this();
     loop_->runInLoop([weakptr](){
@@ -462,7 +444,7 @@ void TcpConnection::recordOverloadDrop(){
     droppedMessage_.fetch_add(1,std::memory_order_relaxed);
     auto dropCount=overloadDropCount_.fetch_add(1,std::memory_order_relaxed)+1;
     overloaded_.store(true,std::memory_order_release);
-    if(dropCount>maxOverloadDropCount_){//达到关闭阈值
+    if(dropCount>=maxOverloadDropCount_){//达到关闭阈值
         scheduleCloseInLoop();
     }
 }

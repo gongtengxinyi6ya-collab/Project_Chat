@@ -58,7 +58,7 @@ public:
     void connectionDestroyed();//连接销毁，取消事件,最终释放fd
     void closeFd();
     bool isClosed() const{return !connected_.load();}//连接是否已关闭
-    bool canSend(size_t payloadBytes)const;//可发送判断
+    
     //心跳检测接口
     
     void startHeartbeat();//在建立连接后启动心跳周期任务
@@ -72,7 +72,7 @@ public:
     bool canAccept(size_t nextBytes)const;//返回是否能接受下一条消息，判断条件是pendingBytes()+nextBytes<=hardLimit
     uint64_t droppedMessage()const;//返回已丢弃消息数
     uint32_t overloadDropCount()const;//返回脸书过载丢弃次数
-    void recordDrop(size_t payloadByres);//
+    
 private:
 
     EventLoop* loop_;//

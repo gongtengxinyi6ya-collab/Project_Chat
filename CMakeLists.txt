@@ -14,7 +14,7 @@ option(ENABLE_REDIS "Enable Redis cache backend" ON)
 # =========================
 # 库（核心代码）
 # =========================
-file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/security/*.cpp src/auth/*.cpp src/id/*.cpp src/infra/health/*.cpp src/infra/signal/*.cpp src/timer/*.cpp src/infra/maintenance/*.cpp src/infra/thread/*.cpp)
+file(GLOB SRC_FILES src/*.cpp src/im/*.cpp src/config/*.cpp src/logger/*.cpp src/storage/*.cpp src/storage/memory/*.cpp src/security/*.cpp src/auth/*.cpp src/id/*.cpp src/infra/health/*.cpp src/infra/signal/*.cpp src/timer/*.cpp src/infra/maintenance/*.cpp src/infra/thread/*.cpp src/net/*.cpp)
 file(GLOB RATE_LIMIT_SRC_FILES
     src/security/rate_limit/RateLimiter.cpp
 )
@@ -74,16 +74,18 @@ target_include_directories(chat_lib
 if(ENABLE_SQL)
     find_package(mysql-concpp CONFIG REQUIRED)
     target_link_libraries(chat_lib PUBLIC mysql::concpp-jdbc)
-    target_include_directories(chat_lib
-    PUBLIC
-        /usr/include/mysql-cppconn/jdbc
-)
+
     target_compile_definitions(chat_lib PUBLIC PROJECT_CHAT_ENABLE_SQL)
     add_executable(sql_repo_test tools/sql_repo_test.cpp)
     target_link_libraries(sql_repo_test PRIVATE chat_lib)
 endif()
 find_package(OpenSSL REQUIRED)
-target_link_libraries(chat_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+find_package(Threads REQUIRED)
+target_link_libraries(chat_lib 
+    PUBLIC 
+        Threads::Threads
+        OpenSSL::SSL 
+        OpenSSL::Crypto)
 if(MSVC)
     target_compile_options(chat_lib PRIVATE /W4)
 else()

@@ -13,7 +13,8 @@ enum class SendResult{
     Ok,//成功入队
     NoSuchConnection,//连接不存在
     Closed,//连接关闭
-    Overloaded//输出缓冲区过载
+    Overloaded,
+    Failed//输出缓冲区过载
 };
 
 struct BatchSendResult{
@@ -21,6 +22,7 @@ struct BatchSendResult{
     size_t noSuchConnection{0};//没有连接数量
     size_t closed{0};//连接已关闭数量
     size_t overloaded{0};//输出缓冲区过载数量
+    size_t failed{0};
     void add(SendResult result) noexcept{
         switch(result){
             case SendResult::Ok:
@@ -35,12 +37,30 @@ struct BatchSendResult{
             case SendResult::Overloaded:
                 overloaded++;
                 return;
+            case SendResult::Failed:
+                failed++;
+                return;
             default:
                 return;
         }
     };//根据发送结果累计相应字段。
-    std::size_t dropped() const noexcept{return noSuchConnection+closed+overloaded;};//返回 noSuchConnection + closed + overloaded。
+    std::size_t dropped() const noexcept{return noSuchConnection+closed+overloaded+failed;};//返回 noSuchConnection + closed + overloaded。
     std::size_t total() const noexcept{sent+dropped();};//返回 sent + dropped()。
+    SendResult singleResult() const noexcept {
+        if (sent > 0) {
+            return SendResult::Ok;
+        }
+        if (overloaded > 0) {
+            return SendResult::Overloaded;
+        }
+        if (closed > 0) {
+            return SendResult::Closed;
+        }
+        if (noSuchConnection > 0) {
+            return SendResult::NoSuchConnection;
+        }
+        return SendResult::Failed;
+    }
 };
 
 

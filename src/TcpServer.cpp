@@ -9,7 +9,7 @@
 #include "infra/maintenance/MaintenanceService.h"
 #include "infra/thread/ThreadPool.h"
 #include "infra/thread/KeyedSerialExecutor.h"
-#include "net/OutbountFrame.h"
+#include "net/OutboundFrame.h"
 #ifdef PROJECT_CHAT_ENABLE_REDIS
 #include "infra/redis/RedisClient.h"
 #include "security/rate_limit/RedisRateLimitStore.h"
@@ -28,21 +28,10 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
         messageExecutor_=std::make_unique<infra::thread::KeyedSerialExecutor>(config_.messageAsync().workerThreads,config_.messageAsync().queueCapacity);
     }
     imService_ = std::make_unique<im::Imservice>(1,config_.im(),config_.id());
-    imService_->setSendToConnKey([this](im::Imservice::ConnKey key,const std::string& payload){
-            auto it=connections_.find(key);
-            if(it==connections_.end()){
-                return im::Imservice::SendResult::NoSuchConnection;
-            }
-            if(it->second->isClosed()){
-                return im::Imservice::SendResult::Closed;
-            }
-            if(!it->second->canSend(payload.size())){
-                it->second->recordDrop(payload.size());
-                return im::Imservice::SendResult::Overloaded;
-            }
-            it->second->send(payload);
-            return im::Imservice::SendResult::Ok;
-}); 
+    imService_->setBatchSender([this](const std::vector<net::ConnKey>& keys,net::SharedPayload payload){
+        baseloop_->assertInLoopThread();
+        return sendBatchToConnKeys(keys,std::move(payload));
+    });
     if(messageExecutor_){
         imService_->setMessageAsyncExecutor(
             [this](const std::string& groupId,std::function<void()>task)->infra::thread::TaskSubmitResult{
@@ -368,44 +357,43 @@ net::BatchSendResult TcpServer::sendBatchToConnKeys(const std::vector<net::ConnK
     //baseLoop执行
     net::BatchSendResult result;
     if(!payload){
+        result.failed=keys.size();
         return result;
     }
-    auto frame=net::OutboundFrame::create(std::move(payload),kMaxFrameLen);//整批创建一次
+    auto frame=net::OutboundFrame::create(std::move(payload),config_.net().maxFrameLen);//整批创建一次
     if(!frame){
+        result.failed=keys.size();
         return result;
     }
     std::unordered_map<EventLoop*,std::vector<std::shared_ptr<TcpConnection>>> batches;
     //遍历连接
     for(const auto key:keys){
-        auto it=connections_.find(key);
+        auto it=connections_.find(static_cast<int>(key));
         if(it==connections_.end()){
             //找不到连接
             result.add(net::SendResult::NoSuchConnection);
             continue;
         }
-        if(it->second->isClosed()){//连接关闭
-            result.add(net::SendResult::Closed);
+        const auto& connection=it->second;
+        const auto reserveResult=connection->tryReserveFrame(frame->frameBytes());
+
+        result.add(reserveResult);
+        if(reserveResult!=net::SendResult::Ok){
             continue;
         }
-        if(it->second->tryReserveFrame(frame->frameBytes())==net::SendResult::Overloaded){
-            //尝试预留过载
-            result.add(net::SendResult::Overloaded);
-            continue;
-        }
-        //预留成功
-        result.add(net::SendResult::Ok);
-        batches.emplace(it->second->getLoop(),std::move(it->second));//根据loop加入对应batch
+
+        batches[connection->getLoop()].push_back(connection);//根据loop加入对应batch
 
     }
     //遍历batches
-    for(const auto& batch:batches){
-        enqueueFrameBatch(batch.first,batch.second,frame);
+    for(auto& batch:batches){
+        enqueueFrameBatch(batch.first,std::move(batch.second),frame);
     }
     return result;
 }
 
 void TcpServer::enqueueFrameBatch(EventLoop* ioLoop, std::vector<std::shared_ptr<TcpConnection>> connections, std::shared_ptr<const net::OutboundFrame> frame){
-    if(!ioLoop||!frame||connections_.empty()){
+    if(!ioLoop||!frame||connections.empty()){
         if(frame){//若之前预留成功则撤销预留
             for(const auto&conn:connections){
                 if(conn){

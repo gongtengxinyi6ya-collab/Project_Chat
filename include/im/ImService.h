@@ -52,24 +52,7 @@ namespace im{
     class GroupMessagePersistenceService;//消息一致性服务
 class Imservice{
 public:
-    class BroadcastResult{
-        public:
-        size_t sent{0};//成功发送数量
-        size_t noSuchConnection{0};//没有连接数量
-        size_t closed{0};//连接已关闭数量
-        size_t overloaded{0};//输出缓冲区过载数量
-        size_t dropped()const{//返回未成功发送数量，包括连接不存在、已关闭和过载的情况
-            return noSuchConnection+closed+overloaded;
-        }
-    };
-    //SendResult:区分连接存在，输出缓冲区过载，成功入队
-    enum class SendResult{
-        Ok,//成功入队
-        NoSuchConnection,//连接不存在
-        Closed,//连接关闭
-        Overloaded//输出缓冲区过载
-    };
-
+    
     //账号级推送结果
     struct AccountPushResult{
         size_t sent{0};//成功推送的设备数量
@@ -81,7 +64,8 @@ public:
     };
     //回调类型
     using ConnKey=net::ConnKey;//连接标识
-    using SendToConnKeyFn=std::function<SendResult (ConnKey,const std::string &payload)>;//回调通过Key由TcpServer代发
+    using SendResult=net::SendResult;
+    
     using MessageTask = std::function<void()>;//异步任务接口
     using SubmitMessageTaskFn =std::function<infra::thread::TaskSubmitResult(const std::string& orderingKey,MessageTask)>;//提交消息持久化任务到工作线程池
     using PostToBaseLoopFn =std::function<bool(MessageTask)>;//投递持久化的结果任务到baseLoop线程
@@ -91,7 +75,6 @@ public:
     ~Imservice();
 
     //回调设置
-    void setSendToConnKey(SendToConnKeyFn fn);
     void setMessageAsyncExecutor(SubmitMessageTaskFn submitFn,PostToBaseLoopFn postFn);//注入群消息异步处理所需的两个执行器
     void stopAcceptingAsyncMessages();//服务关闭时禁止再接受新的异步消息任务
     void setBatchSender(BatchSendFn fn);
@@ -115,7 +98,7 @@ public:
     void setRateLimiter(std::unique_ptr<security::RateLimiter> limiter);
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
-    SendToConnKeyFn sendToConnKey_;
+
     SessionManager sessionManager_;
     
     GroupManager groupManager_;//房间管理
@@ -130,12 +113,11 @@ private:
     uint64_t nowMs() const;//获取当前时间戳
     uint64_t nextMessageId();
     void decorate(Response& resp,std::optional<uint64_t> msgId=std::nullopt,std::optional<uint64_t> clientReqId=std::nullopt);//给任何响应/错误/推送加trace字段
-    SendResult sendPush(ConnKey,const std::string &);//统一对push做decorate,encode,sendToConnKey
 
     //群聊
     std::unique_ptr<GroupService> groupService_;
     Response handleCreateGroup(const Request&,[[maybe_unused]]ConnKey,Session&);//创建群并加入群主，设置为当前活跃群
-    BroadcastResult broadcastToGroup(const std::string&,[[maybe_unused]]ConnKey,Response&push);//对房间内其他成员推送事件；
+    net::BatchSendResult broadcastToGroup(const std::string&,[[maybe_unused]]ConnKey,Response&push);//对房间内其他成员推送事件；
     Response handleJoin(const Request& req,ConnKey key,Session& session);//加入群
     Response handleLeave(const Request&,ConnKey,Session&);//退出群
     Response handleGroupMsg(const Request&,ConnKey,Session&);//提交房间消息

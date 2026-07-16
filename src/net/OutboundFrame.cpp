@@ -1,4 +1,4 @@
-#include "net/OutbountFrame.h"
+#include "net/OutboundFrame.h"
 #include <arpa/inet.h>
 #include <cstring>
 namespace net{
@@ -19,7 +19,7 @@ std::shared_ptr<const OutboundFrame> OutboundFrame::create(SharedPayload payload
 }
 
 OutboundFrame::OutboundFrame(SharedPayload payload,std::array<char,4> header)
-:payload_(std::move(payload)),header_(std::move(header)){
-    frameBytes_=payload->size()+header.size();
+:payload_(std::move(payload)),header_(std::move(header)),frameBytes_(payload_->size()+header_.size()){
+    
 }
 }

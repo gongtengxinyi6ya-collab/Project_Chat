@@ -31,9 +31,7 @@
 namespace im{
 Imservice::Imservice(uint32_t supportedVer,const ImConfig& config,const IdConfig& idconfig):supportedVer_(supportedVer),imConfig_(config),idConfig_(idconfig),idGenerator_(idConfig_.snowflakeNodeId,idConfig_.snowflakeEpochMs){}
 
-void Imservice::setSendToConnKey(SendToConnKeyFn fn){
-    sendToConnKey_=std::move(fn);
-}
+
 Imservice::~Imservice()=default;
 void Imservice::onMessage(const std::shared_ptr<TcpConnection>&conn,const std::string &payload){
     ConnKey key=conn->fd();
@@ -325,15 +323,7 @@ void Imservice::decorate(Response& resp,std::optional<uint64_t> msgId,std::optio
         resp.data["clientReqId"]=clientReqId.value();
     }
 }
- Imservice::SendResult Imservice::sendPush(ConnKey target,const std::string& payload){
-    
-    if(sendToConnKey_){
-        SendResult res=sendToConnKey_(target,payload);
-        return res;
-    }
-    return SendResult::NoSuchConnection;
-    
-}
+
 
 //房间接口
 
@@ -363,8 +353,8 @@ Response Imservice::handleCreateGroup(const Request& req,[[maybe_unused]]ConnKey
     session.joinedGroupIds_.insert(resultCreate.value.value().groupId);
     return makeOk(req,MsgType::CREATE_GROUP_RESP,nlohmann::json{{"groupId",resultCreate.value.value().groupId},{"groupName",groupName},{"ownerAccountId",owner},{"ownerUsername",session.username_}});
 }
-Imservice::BroadcastResult Imservice::broadcastToGroup(const std::string& groupId,ConnKey senderkey,Response& push){
-    BroadcastResult result;
+net::BatchSendResult Imservice::broadcastToGroup(const std::string& groupId,ConnKey senderkey,Response& push){
+    net::BatchSendResult result;
     push.req_id=0;//群推送消息不需要req_id，由服务器生成唯一msg_id
     std::optional<uint64_t> msgId=std::nullopt;
     if(push.data.contains("msgId")){
@@ -374,8 +364,7 @@ Imservice::BroadcastResult Imservice::broadcastToGroup(const std::string& groupI
     auto payload=encodeResponse(push);
 
     auto targets=collectGroupTargets(groupId,senderkey);
-    auto result=sendEncodedPayload(targets,payload);
-    return result;
+    return result=sendEncodedPayload(targets,payload);
 }
 
 Response Imservice::handleJoin(const Request & req,[[maybe_unused]]ConnKey key,Session& session){
@@ -507,7 +496,7 @@ Response Imservice::handleGroupMsg(const Request &req ,[[maybe_unused]]ConnKey k
     }
     //广播在线成员
     Response pushMsg{.ver=1,.req_id=0,.type=MsgType::GROUP_MSG_PUSH,.ok=true,.code=ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId},{"content",content},{"msgId",msgId}}};
-    BroadcastResult result=broadcastToGroup(groupId,key,pushMsg);
+    auto result=broadcastToGroup(groupId,key,pushMsg);
     saveOfflineForGroupMembers(groupId,session.accountId_,msgId);
     return makeOk(req,MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
@@ -1060,13 +1049,10 @@ Imservice::SendResult Imservice::sendResponseWithLog(ConnKey key,const Request& 
 Imservice::SendResult Imservice::sendParseErrorWithLog(ConnKey key,Response& resp,const Session& session){
     decorate(resp);
     auto payload=encodeResponse(resp);
-    SendResult result;
-    if(sendToConnKey_){
-        result=sendToConnKey_(key,payload);
-    }
-    else{
-        result=SendResult::NoSuchConnection;
-    }
+    std::vector<ConnKey> targets{key};
+    auto batchResult=sendEncodedPayload(targets,payload);
+    const auto result=batchResult.singleResult();
+    
     auto ctx=makeRespCtx(key,Request{},resp,session,"PARSE_ERR_RESP");
     LogLevel level=mapErrorToLogLevel(resp.code);
     if(level==LogLevel::ERROR){
@@ -2303,7 +2289,8 @@ net::BatchSendResult Imservice::sendEncodedPayload(const std::vector<ConnKey>& t
         return {};
     }
     if(!batchSend_){
-        return {};
+        net::BatchSendResult result;
+        result.failed=targets.size();
     }
     //移动payload
     auto sharedPayload=std::make_shared<const std::string>(std::move(payload));
