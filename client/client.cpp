@@ -965,6 +965,7 @@ struct BatchRegisterOptions {
     std::string host{"127.0.0.1"};
     int port{8080};
     int count{0};
+    int startIndex{1};
     std::string usernamePrefix;
     std::string password;
     std::string groupId;
@@ -976,6 +977,7 @@ struct BatchRegisterOptions {
     std::string reviewerAccount;
     std::string reviewerPassword;
     int approvalIntervalMs{20};
+    bool resume{false};
 };
 
 static void printBatchRegisterUsage(const char* program) {
@@ -985,12 +987,14 @@ static void printBatchRegisterUsage(const char* program) {
         << "Required options:\n"
         << "  --count N                    Number of accounts to register\n"
         << "  --username-prefix PREFIX     Generated username prefix\n"
-        << "  --group-id ID                Group to apply to join\n"
         << "  --password PASSWORD          Shared password for generated accounts\n\n"
         << "Optional options:\n"
         << "  --host HOST                  Default 127.0.0.1\n"
         << "  --port PORT                  Default 8080\n"
+        << "  --start-index N              First generated account index, default 1\n"
+        << "  --group-id ID                Apply generated accounts to this group\n"
         << "  --output PATH                Default tools/load_test_accounts.json\n"
+        << "  --resume                     Continue from an existing output file\n"
         << "  --interval-ms N              Delay between registrations, default 6500\n"
         << "  --timeout-ms N               Per-request timeout, default 5000\n"
         << "  --max-rate-limit-retries N   Default 3\n"
@@ -1028,6 +1032,10 @@ static std::optional<BatchRegisterOptions> parseBatchRegisterOptions(int argc,ch
             printBatchRegisterUsage(argv[0]);
             return std::nullopt;
         }
+        if(option=="--resume"){
+            options.resume=true;
+            continue;
+        }
         if(index+1>=argc){
             std::cerr<<"missing value for "<<option<<std::endl;
             return std::nullopt;
@@ -1045,6 +1053,12 @@ static std::optional<BatchRegisterOptions> parseBatchRegisterOptions(int argc,ch
         else if(option=="--count"){
             if(!parsePositiveInt(value,options.count)){
                 std::cerr<<"invalid --count\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--start-index"){
+            if(!parsePositiveInt(value,options.startIndex)){
+                std::cerr<<"invalid --start-index\n";
                 return std::nullopt;
             }
         }
@@ -1115,13 +1129,17 @@ static std::optional<BatchRegisterOptions> parseBatchRegisterOptions(int argc,ch
         }
     }
     if(options.count<=0||options.usernamePrefix.empty()||options.password.empty()||
-       options.groupId.empty()||options.outputPath.empty()){
-        std::cerr<<"--count, --username-prefix, --password and --group-id are required\n";
+       options.outputPath.empty()){
+        std::cerr<<"--count, --username-prefix and --password are required\n";
         printBatchRegisterUsage(argv[0]);
         return std::nullopt;
     }
     if(options.reviewerAccount.empty()!=options.reviewerPassword.empty()){
         std::cerr<<"--reviewer-account and --reviewer-password must be provided together\n";
+        return std::nullopt;
+    }
+    if(options.groupId.empty()&&!options.reviewerAccount.empty()){
+        std::cerr<<"reviewer credentials require --group-id\n";
         return std::nullopt;
     }
     if(options.intervalMs<6000){
@@ -1424,14 +1442,18 @@ static bool writeBatchRegisterResult(const BatchRegisterOptions& options,
                                      const nlohmann::json& registeredNotApplied,
                                      const nlohmann::json& failures,
                                      const nlohmann::json& approvalFailures){
-    size_t groupReady=0;
-    for(const auto& account:accounts){
-        const std::string status=account.value("applicationStatus","");
-        if(status=="approved"||status=="already_approved"||status=="already_in"){
-            ++groupReady;
+    size_t groupReady=accounts.size();
+    if(!options.groupId.empty()){
+        groupReady=0;
+        for(const auto& account:accounts){
+            const std::string status=account.value("applicationStatus","");
+            if(status=="approved"||status=="already_approved"||status=="already_in"){
+                ++groupReady;
+            }
         }
     }
     nlohmann::json document{
+        {"mode",options.groupId.empty()?"accounts_only":"group_application"},
         {"groupId",options.groupId},
         {"reviewerAccountId",options.reviewerAccount},
         {"accounts",accounts},
@@ -1440,6 +1462,8 @@ static bool writeBatchRegisterResult(const BatchRegisterOptions& options,
         {"approvalFailures",approvalFailures},
         {"summary",{
             {"requested",options.count},
+            {"startIndex",options.startIndex},
+            {"registered",accounts.size()+registeredNotApplied.size()},
             {"applicationAccepted",accounts.size()},
             {"groupReady",groupReady},
             {"registeredNotApplied",registeredNotApplied.size()},
@@ -1465,10 +1489,45 @@ static bool writeBatchRegisterResult(const BatchRegisterOptions& options,
     return output.good();
 }
 
+static bool loadBatchRegisterResume(const BatchRegisterOptions& options,
+                                    nlohmann::json& accounts,
+                                    nlohmann::json& registeredNotApplied){
+    if(!options.resume||!std::filesystem::exists(options.outputPath)){
+        return true;
+    }
+    std::ifstream input(options.outputPath);
+    if(!input){
+        std::cerr<<"failed to open resume file: "<<options.outputPath<<std::endl;
+        return false;
+    }
+    try{
+        nlohmann::json document;
+        input>>document;
+        if(!document.is_object()||!document.contains("accounts")||
+           !document["accounts"].is_array()){
+            std::cerr<<"resume file does not contain an accounts array\n";
+            return false;
+        }
+        accounts=document["accounts"];
+        if(document.contains("registeredNotApplied")&&
+           document["registeredNotApplied"].is_array()){
+            registeredNotApplied=document["registeredNotApplied"];
+        }
+    }
+    catch(const std::exception& exception){
+        std::cerr<<"failed to parse resume file: "<<exception.what()<<std::endl;
+        return false;
+    }
+    std::cout<<"Resuming from "<<options.outputPath
+             <<", existing accounts="<<accounts.size()
+             <<", registered_not_applied="<<registeredNotApplied.size()<<std::endl;
+    return true;
+}
+
 static bool approveBatchApplications(const BatchRegisterOptions& options,
                                      nlohmann::json& accounts,
                                      nlohmann::json& approvalFailures){
-    if(options.reviewerAccount.empty()){
+    if(options.groupId.empty()||options.reviewerAccount.empty()){
         return true;
     }
 
@@ -1562,24 +1621,46 @@ static int runBatchRegister(int argc,char** argv){
     nlohmann::json registeredNotApplied=nlohmann::json::array();
     nlohmann::json failures=nlohmann::json::array();
     nlohmann::json approvalFailures=nlohmann::json::array();
-    const int width=std::max(3,static_cast<int>(std::to_string(options.count).size()));
+    if(!loadBatchRegisterResume(options,accounts,registeredNotApplied)){
+        return 3;
+    }
+    std::unordered_set<std::string> completedUsernames;
+    for(const auto* list:{&accounts,&registeredNotApplied}){
+        for(const auto& credential:*list){
+            if(credential.is_object()&&credential.contains("username")&&
+               credential["username"].is_string()){
+                completedUsernames.insert(credential["username"].get<std::string>());
+            }
+        }
+    }
+    const int lastIndex=options.startIndex+options.count-1;
+    const int width=std::max(3,static_cast<int>(std::to_string(lastIndex).size()));
 
     std::cout<<"Batch registration started: count="<<options.count
+             <<" startIndex="<<options.startIndex
+             <<" mode="<<(options.groupId.empty()?"accounts_only":"group_application")
              <<" groupId="<<options.groupId
              <<" intervalMs="<<options.intervalMs<<std::endl;
     std::cout<<"Credentials contain plaintext test passwords; protect the output file.\n";
 
-    for(int index=1;index<=options.count;++index){
+    for(int offset=0;offset<options.count;++offset){
+        const int index=options.startIndex+offset;
+        const int progress=offset+1;
         std::ostringstream usernameStream;
         usernameStream<<options.usernamePrefix<<std::setw(width)<<std::setfill('0')<<index;
         const std::string username=usernameStream.str();
+        if(completedUsernames.contains(username)){
+            std::cout<<"["<<progress<<'/'<<options.count<<"] "<<username
+                     <<" already persisted, skipping\n";
+            continue;
+        }
         bool finished=false;
 
         for(int attempt=0;attempt<=options.maxRateLimitRetries&&!finished;++attempt){
             BatchConnection connection;
             if(!connection.connectTo(options.host,options.port)){
                 failures.push_back({{"username",username},{"step","connect"},{"error",connection.lastError()}});
-                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username<<" connect failed: "
+                std::cerr<<"["<<progress<<'/'<<options.count<<"] "<<username<<" connect failed: "
                          <<connection.lastError()<<std::endl;
                 finished=true;
                 break;
@@ -1592,14 +1673,14 @@ static int runBatchRegister(int argc,char** argv){
                 builder.buildRegisterReq(state,username,options.password),options.timeoutMs);
             if(!registerResponse){
                 failures.push_back({{"username",username},{"step","register"},{"error",connection.lastError()}});
-                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username<<" register failed: "
+                std::cerr<<"["<<progress<<'/'<<options.count<<"] "<<username<<" register failed: "
                          <<connection.lastError()<<std::endl;
                 finished=true;
                 break;
             }
             if(isRateLimited(*registerResponse)&&attempt<options.maxRateLimitRetries){
                 const int waitMs=retryAfterMs(*registerResponse,options.intervalMs)+200;
-                std::cerr<<"["<<index<<'/'<<options.count<<"] registration rate limited; retrying in "
+                std::cerr<<"["<<progress<<'/'<<options.count<<"] registration rate limited; retrying in "
                          <<waitMs<<" ms"<<std::endl;
                 std::this_thread::sleep_for(std::chrono::milliseconds(waitMs));
                 continue;
@@ -1608,7 +1689,7 @@ static int runBatchRegister(int argc,char** argv){
                 failures.push_back({{"username",username},{"step","register"},
                                     {"code",registerResponse->value("code",-1)},
                                     {"error",responseMessage(*registerResponse)}});
-                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username<<" register rejected: "
+                std::cerr<<"["<<progress<<'/'<<options.count<<"] "<<username<<" register rejected: "
                          <<responseMessage(*registerResponse)<<std::endl;
                 finished=true;
                 break;
@@ -1617,7 +1698,7 @@ static int runBatchRegister(int argc,char** argv){
                !(*registerResponse)["data"].contains("accountId")||
                !(*registerResponse)["data"]["accountId"].is_string()){
                 failures.push_back({{"username",username},{"step","register"},{"error","missing accountId"}});
-                std::cerr<<"["<<index<<'/'<<options.count<<"] register response missing accountId\n";
+                std::cerr<<"["<<progress<<'/'<<options.count<<"] register response missing accountId\n";
                 finished=true;
                 break;
             }
@@ -1625,14 +1706,24 @@ static int runBatchRegister(int argc,char** argv){
             const std::string accountId=(*registerResponse)["data"]["accountId"].get<std::string>();
             state.accountId=accountId;
             nlohmann::json credential{{"accountId",accountId},{"password",options.password},
-                                      {"username",username},{"groupId",options.groupId}};
+                                      {"username",username}};
+            if(options.groupId.empty()){
+                credential["applicationStatus"]="not_requested";
+                accounts.push_back(std::move(credential));
+                completedUsernames.insert(username);
+                std::cout<<"["<<progress<<'/'<<options.count<<"] registered "<<username
+                         <<" accountId="<<accountId<<std::endl;
+                finished=true;
+                break;
+            }
+            credential["groupId"]=options.groupId;
             auto loginResponse=connection.request(
                 builder.buildLoginReq(state,accountId,options.password),options.timeoutMs);
             if(!loginResponse||!loginResponse->value("ok",false)){
                 credential["step"]="login";
                 credential["error"]=loginResponse?responseMessage(*loginResponse):connection.lastError();
                 registeredNotApplied.push_back(std::move(credential));
-                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username
+                std::cerr<<"["<<progress<<'/'<<options.count<<"] "<<username
                          <<" registered but login failed\n";
                 finished=true;
                 break;
@@ -1648,7 +1739,7 @@ static int runBatchRegister(int argc,char** argv){
                     credential["code"]=applyResponse->value("code",-1);
                 }
                 registeredNotApplied.push_back(std::move(credential));
-                std::cerr<<"["<<index<<'/'<<options.count<<"] "<<username
+                std::cerr<<"["<<progress<<'/'<<options.count<<"] "<<username
                          <<" registered but group application failed\n";
                 finished=true;
                 break;
@@ -1667,7 +1758,8 @@ static int runBatchRegister(int argc,char** argv){
             }
             credential["applicationStatus"]=applicationStatus;
             accounts.push_back(std::move(credential));
-            std::cout<<"["<<index<<'/'<<options.count<<"] registered "<<username
+            completedUsernames.insert(username);
+            std::cout<<"["<<progress<<'/'<<options.count<<"] registered "<<username
                      <<" accountId="<<accountId<<" application="<<applicationStatus<<std::endl;
             finished=true;
         }
@@ -1679,7 +1771,7 @@ static int runBatchRegister(int argc,char** argv){
         if(!writeBatchRegisterResult(options,accounts,registeredNotApplied,failures,approvalFailures)){
             return 3;
         }
-        if(index<options.count&&options.intervalMs>0){
+        if(progress<options.count&&options.intervalMs>0){
             std::this_thread::sleep_for(std::chrono::milliseconds(options.intervalMs));
         }
     }
@@ -1694,7 +1786,7 @@ static int runBatchRegister(int argc,char** argv){
               <<" failures="<<failures.size()
               <<" approval_failures="<<approvalFailures.size()<<std::endl;
     std::cout<<"Result file: "<<options.outputPath<<std::endl;
-    if(options.reviewerAccount.empty()){
+    if(!options.groupId.empty()&&options.reviewerAccount.empty()){
         std::cout<<"Approve pending applications before using the accounts for load testing.\n";
     }
     return failures.empty()&&registeredNotApplied.empty()&&approvalsOk?0:4;

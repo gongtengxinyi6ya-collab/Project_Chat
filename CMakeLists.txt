@@ -111,6 +111,13 @@ target_link_libraries(client PRIVATE chat_lib)
 add_executable(load_test tools/load_test.cpp)
 
 target_link_libraries(load_test PRIVATE chat_lib)
+
+# =========================
+# connection load test
+# =========================
+add_executable(connection_load_test tools/connection_load_test.cpp)
+
+target_link_libraries(connection_load_test PRIVATE chat_lib)
 # =========================
 # ASAN
 # =========================
