@@ -121,7 +121,7 @@ private:
     net::BatchSendResult broadcastToGroup(const std::string&,[[maybe_unused]]ConnKey,Response&push);//对房间内其他成员推送事件；
     Response handleJoin(const Request& req,ConnKey key,Session& session);//加入群
     Response handleLeave(const Request&,ConnKey,Session&);//退出群
-    Response handleGroupMsg(const Request&,ConnKey,Session&);//提交房间消息
+
     Response handleGroupMembers(const Request&,[[maybe_unused]]ConnKey,Session&);//获取群聊成员列表
     Response handleListGroups(const Request&,[[maybe_unused]]ConnKey,Session&);//返回当前用户加入的群列表
     Response handleKickGroupMember(const Request& req, ConnKey key, Session& session);//踢出群成员
@@ -155,7 +155,7 @@ private:
     ErrorCode repoStatusToErrorCode(storage::RepoStatus status)const;//把存储层错误转换为IM协议错误码
     Response makeRepoError(const Request&req,storage::RepoStatus,const std::string&fallbackMsg)const;//把repo错误统一转换为Response
     Response handleGroupHistory(const Request& req,ConnKey key,Session& session);//获取群聊历史消息
-    void saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromUser,uint64_t msgId);//群消息发送后，为离线群成员记录离线索引
+    
     Response handleOfflinelist(const Request& req,ConnKey key,Session& session);//客户端拉取自己的离线消息索引
     Response handleOfflineAck(const Request& req,ConnKey key,Session& session);//客户端确认离线消息已经处理，服务端删除离线索引
     Response handleDmHistory(const Request& req,ConnKey key,Session& session);//获取私聊历史消息

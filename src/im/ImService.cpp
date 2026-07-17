@@ -436,72 +436,7 @@ Response Imservice::handleLeave(const Request& req,[[maybe_unused]]ConnKey key,S
 
     return makeOk(req,MsgType::LEAVE_GROUP_RESP,nlohmann::json{{"groupId",groupId},{"left",true},{"alreadyLeft",false}});
 }
-Response Imservice::handleGroupMsg(const Request &req ,[[maybe_unused]]ConnKey key,Session& session){
-    auto err=guardAuthenticated(req,session);//校验登录
-    if(err.has_value()){
-        return err.value();
-    }
-    //发消息限流
-    if(rateLimiter_){
-        auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
-        auto resultOpt=checkRateLimitOrError(req,limitResult);
-        if(resultOpt){
-            return resultOpt.value();
-        }    
-    }
-    
-    if(imConfig_.requireGroupIdForSend){//如果配置要求必须提供groupId字段
-        if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
-            return makeErr(req,ErrorCode::MISSING_FIELD,"groupId can not be empty");
-        }
-    }
-    std::string groupId;
-    auto getGroupId=getStringField(req,"groupId",groupId);
-    if(getGroupId){
-        return getGroupId.value();
-    }
-    auto errInGroup=guardInGroup(req,session,groupId);
-    if(errInGroup.has_value()){
-        return errInGroup.value();
-    }
-    if(!req.body.contains("content")||!req.body["content"].is_string()){
-        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing message content");
-    }
-    std::string content=req.body["content"].get<std::string>();
-    if(content.size()>imConfig_.maxMessageLen){
-        return makeErr(req,ErrorCode::BAD_REQUEST,"Message content is too long");
-    }
-    if(!groupManager_.isMember(groupId,session.accountId_)){
-        return makeErr(req,ErrorCode::NOT_IN_GROUP,"The user is not in the group");
-    }
-    uint64_t serverTsMs=nowMs();
-    uint64_t msgId=nextMessageId();
-    if(hasRepositories()){//保存消息
-        auto result=repos_.messageRepo->saveGroupMessage(msgId,groupId,session.accountId_,session.username_,content,serverTsMs);
-        if(!result.ok()){
-            return makeRepoError(req,result.status,"failed to save group message");
-        }
-    }
-    //更新群聊会话列表
-    if(conversationService_){
-        auto memberInfos=groupManager_.memberInfos(groupId);
-        std::vector<std::string> memberAccountIds;
-        memberAccountIds.reserve(memberInfos.size());
-        for(const auto& memberInfo:memberInfos){
-            memberAccountIds.push_back(memberInfo.accountId);
-        }
-        auto conversationResult=conversationService_->recordGroupMessage(groupId,memberAccountIds,session.accountId_,session.username_,msgId,content,serverTsMs);
-        if(!conversationResult.ok()){
-            LOG_WARN("Failed to update group conversation");
-        }
-    }
-    //广播在线成员
-    Response pushMsg{.ver=1,.req_id=0,.type=MsgType::GROUP_MSG_PUSH,.ok=true,.code=ErrorCode::OK,.msg="New room message",.data=nlohmann::json{{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"groupId",groupId},{"content",content},{"msgId",msgId}}};
-    auto result=broadcastToGroup(groupId,key,pushMsg);
-    saveOfflineForGroupMembers(groupId,session.accountId_,msgId);
-    return makeOk(req,MsgType::GROUP_MSG_RESP,nlohmann::json{{"groupId",groupId},{"sent",result.sent},{"dropped",result.dropped()},{"noSuchConnection",result.noSuchConnection},{"closed",result.closed},{"overloaded",result.overloaded}});
 
-}
 Response Imservice::handleGroupMembers(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
@@ -1323,23 +1258,7 @@ Response Imservice::handleDmHistory(const Request& req,[[maybe_unused]]ConnKey k
     return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"conversationKey",conversationKey},{"mode",historyQuery.query.mode},{"beforeMsgId",historyQuery.query.beforeMsgId},{"lastMsgId",historyQuery.query.lastMsgId},{"limit",historyQuery.query.limit},{"messages",messagesJson}});
     
 }
-void Imservice::saveOfflineForGroupMembers(const std::string& groupId,const std::string& fromAccountId,uint64_t msgId){
-    if(groupId.empty()||fromAccountId.empty()){
-        return;
-    }
-    if(!repos_.offlineMessageRepo){
-        return;
-    }
-    auto members=groupManager_.memberInfos(groupId);//获取群成员
-    for(auto member:members){
-        if(member.accountId!=fromAccountId){//跳过发送者
-            auto keys=sessionManager_.connKeysByAccountId(member.accountId);
-            if(keys.empty()){//用户各端都不在线auto result=repos_.offlineMessageRepo->saveOfflineMessage(member.accountId,msgId,groupId);if(!result.ok()){    LOG_WARN("Failed to save offlineMessage for"+member.accountId);}
-            }
-        }
-    }
 
-}
 Response Imservice::handleOfflinelist(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);//校验已登录
     if(err){

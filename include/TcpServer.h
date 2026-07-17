@@ -27,6 +27,7 @@ namespace infra::maintenance {
 }
 namespace infra::thread{
     class KeyedSerialExecutor;
+    class ThreadPool;
 }
 namespace net{
     class OutboundFrame;

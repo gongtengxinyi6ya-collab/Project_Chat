@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -61,12 +62,15 @@ struct Args {
     int durationSec{60};
     double ratePerClient{5.0};
     int connectTimeoutMs{3000};
-    int requestTimeoutMs{5000};
-    int drainMs{3000};
+    int requestTimeoutMs{10000};
+    int drainMs{15000};
+    int fanoutSettleMs{2000};
     int progressSec{5};
     size_t maxInflight{128};
     size_t payloadBytes{64};
     bool verifyGroup{true};
+    bool allowPartialReady{false};
+    bool allowAccountReuse{false};
     int accountRateLimit{kDefaultAccountRateLimit};
     int serverPid{-1};
 
@@ -141,6 +145,7 @@ struct Metrics {
     std::atomic<uint64_t> serverOverloaded{0};
     std::atomic<uint64_t> serverClosed{0};
     std::atomic<uint64_t> serverNoSuchConnection{0};
+    std::atomic<uint64_t> serverFanoutFailed{0};
 
     std::atomic<uint64_t> appBytesSent{0};
     std::atomic<uint64_t> appBytesRecv{0};
@@ -149,6 +154,10 @@ struct Metrics {
 
     std::mutex latencyMutex;
     std::vector<double> successLatenciesMs;
+
+    std::mutex persistenceMutex;
+    std::vector<double> queueWaitMs;
+    std::vector<double> persistMs;
 
     std::mutex errorMutex;
     std::map<int, uint64_t> errorCodes;
@@ -244,12 +253,15 @@ void printUsage(const char* program) {
         << "  --payload-bytes N          Approximate message size, default 64\n"
         << "  --max-inflight N           Per-client pending limit, default 128\n"
         << "  --connect-timeout-ms N     Default 3000\n"
-        << "  --request-timeout-ms N     Default 5000\n"
-        << "  --drain-ms N               Default 3000\n"
+        << "  --request-timeout-ms N     Default 10000\n"
+        << "  --drain-ms N               Default 15000\n"
+        << "  --fanout-settle-ms N       Keep receiving pushes after responses, default 2000\n"
         << "  --progress-sec N           Progress interval, 0 disables\n"
         << "  --account-rate-limit N     Warning threshold, default 20 msg/s/account\n"
         << "  --server-pid PID           Sample server CPU and RSS from /proc\n"
         << "  --no-group-check           Skip pre-test membership check\n"
+        << "  --allow-partial-ready      Run even if some clients fail setup\n"
+        << "  --allow-account-reuse      Permit multiple clients to share one account\n"
         << "  --json-out PATH            Default load_test_result.json\n"
         << "  --csv-out PATH             Append one summary row\n"
         << "  --help\n\n"
@@ -313,6 +325,14 @@ bool parseArgs(int argc, char** argv, Args& args) {
             args.verifyGroup = false;
             continue;
         }
+        if (option == "--allow-partial-ready") {
+            args.allowPartialReady = true;
+            continue;
+        }
+        if (option == "--allow-account-reuse") {
+            args.allowAccountReuse = true;
+            continue;
+        }
 
         const auto value = nextValue();
         if (!value) {
@@ -338,6 +358,8 @@ bool parseArgs(int argc, char** argv, Args& args) {
             if (!parseInteger(*value, args.requestTimeoutMs)) return false;
         } else if (option == "--drain-ms") {
             if (!parseInteger(*value, args.drainMs)) return false;
+        } else if (option == "--fanout-settle-ms") {
+            if (!parseInteger(*value, args.fanoutSettleMs)) return false;
         } else if (option == "--progress-sec") {
             if (!parseInteger(*value, args.progressSec)) return false;
         } else if (option == "--max-inflight") {
@@ -377,6 +399,7 @@ bool parseArgs(int argc, char** argv, Args& args) {
     if (args.port <= 0 || args.port > 65535 || args.clients <= 0 ||
         args.warmupSec < 0 || args.durationSec <= 0 || args.ratePerClient <= 0.0 ||
         args.connectTimeoutMs <= 0 || args.requestTimeoutMs <= 0 || args.drainMs < 0 ||
+        args.fanoutSettleMs < 0 ||
         args.progressSec < 0 || args.maxInflight == 0 || args.payloadBytes > 4096) {
         std::cerr << "invalid numeric argument\n";
         return false;
@@ -627,6 +650,16 @@ uint64_t jsonUnsigned(const json& object, std::string_view key) {
     if (iterator->is_number_integer()) {
         const int64_t value = iterator->get<int64_t>();
         return value > 0 ? static_cast<uint64_t>(value) : 0;
+    }
+    return 0;
+}
+
+uint64_t jsonUnsignedAny(const json& object,
+                         std::initializer_list<std::string_view> keys) {
+    for (const std::string_view key : keys) {
+        if (object.contains(std::string(key))) {
+            return jsonUnsigned(object, key);
+        }
     }
     return 0;
 }
@@ -1063,12 +1096,38 @@ private:
 
         if (message.contains("data") && message.at("data").is_object()) {
             const json& data = message.at("data");
-            metrics_.serverFanoutSent.fetch_add(jsonUnsigned(data, "sent"), std::memory_order_relaxed);
-            metrics_.serverDropped.fetch_add(jsonUnsigned(data, "dropped"), std::memory_order_relaxed);
-            metrics_.serverOverloaded.fetch_add(jsonUnsigned(data, "overloaded"), std::memory_order_relaxed);
-            metrics_.serverClosed.fetch_add(jsonUnsigned(data, "closed"), std::memory_order_relaxed);
-            metrics_.serverNoSuchConnection.fetch_add(jsonUnsigned(data, "noSuchConnection"),
+            const uint64_t fanoutSent = jsonUnsignedAny(data, {"fanoutSent", "sent"});
+            const uint64_t fanoutDropped = jsonUnsignedAny(data, {"fanoutDropped", "dropped"});
+            const uint64_t fanoutClosed = jsonUnsignedAny(data, {"fanoutClosed", "closed"});
+            const uint64_t fanoutOverloaded = jsonUnsignedAny(data, {"fanoutOverloaded", "overloaded"});
+            const uint64_t fanoutFailed = jsonUnsignedAny(data, {"fanoutFailed", "failed"});
+            uint64_t fanoutNoSuchConnection =
+                jsonUnsignedAny(data, {"fanoutNoSuchConnection", "noSuchConnection"});
+            if (fanoutNoSuchConnection == 0 &&
+                fanoutDropped > fanoutClosed + fanoutOverloaded + fanoutFailed) {
+                fanoutNoSuchConnection =
+                    fanoutDropped - fanoutClosed - fanoutOverloaded - fanoutFailed;
+            }
+
+            metrics_.serverFanoutSent.fetch_add(fanoutSent, std::memory_order_relaxed);
+            metrics_.serverDropped.fetch_add(fanoutDropped, std::memory_order_relaxed);
+            metrics_.serverOverloaded.fetch_add(fanoutOverloaded, std::memory_order_relaxed);
+            metrics_.serverClosed.fetch_add(fanoutClosed, std::memory_order_relaxed);
+            metrics_.serverFanoutFailed.fetch_add(fanoutFailed, std::memory_order_relaxed);
+            metrics_.serverNoSuchConnection.fetch_add(fanoutNoSuchConnection,
                                                        std::memory_order_relaxed);
+
+            if (data.contains("queueWaitUs") || data.contains("persistUs")) {
+                std::lock_guard<std::mutex> lock(metrics_.persistenceMutex);
+                if (data.contains("queueWaitUs")) {
+                    metrics_.queueWaitMs.push_back(
+                        static_cast<double>(jsonUnsigned(data, "queueWaitUs")) / 1000.0);
+                }
+                if (data.contains("persistUs")) {
+                    metrics_.persistMs.push_back(
+                        static_cast<double>(jsonUnsigned(data, "persistUs")) / 1000.0);
+                }
+            }
         }
 
         const double latencyMs =
@@ -1084,24 +1143,26 @@ private:
         const TimePoint drainDeadline = Clock::now() + std::chrono::milliseconds(args_.drainMs);
         while (running_.load(std::memory_order_acquire) && Clock::now() < drainDeadline) {
             expirePending(Clock::now());
-            if (pendingSize() == 0) {
-                break;
-            }
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         expireAllPending();
+        const TimePoint settleDeadline =
+            Clock::now() + std::chrono::milliseconds(args_.fanoutSettleMs);
+        while (running_.load(std::memory_order_acquire) && Clock::now() < settleDeadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
         stop();
     }
 
     void expireAllPending() {
         std::lock_guard<std::mutex> lock(pendingMutex_);
         for (const auto& [requestId, request] : pending_) {
-            (void)requestId;
             if (request.measured) {
                 metrics_.timeout.fetch_add(1, std::memory_order_relaxed);
             } else {
                 metrics_.warmupTimeout.fetch_add(1, std::memory_order_relaxed);
             }
+            timedOut_.insert(requestId);
         }
         pending_.clear();
     }
@@ -1157,12 +1218,7 @@ double percentile(const std::vector<double>& sorted, double fraction) {
     return sorted[lower] * (1.0 - weight) + sorted[upper] * weight;
 }
 
-LatencyStats calculateLatencyStats(Metrics& metrics) {
-    std::vector<double> values;
-    {
-        std::lock_guard<std::mutex> lock(metrics.latencyMutex);
-        values = metrics.successLatenciesMs;
-    }
+LatencyStats calculateStats(std::vector<double> values) {
     if (values.empty()) {
         return {};
     }
@@ -1177,6 +1233,28 @@ LatencyStats calculateLatencyStats(Metrics& metrics) {
                         percentile(values, 0.95),
                         percentile(values, 0.99),
                         percentile(values, 0.999)};
+}
+
+LatencyStats calculateLatencyStats(Metrics& metrics) {
+    std::lock_guard<std::mutex> lock(metrics.latencyMutex);
+    return calculateStats(metrics.successLatenciesMs);
+}
+
+std::pair<LatencyStats, LatencyStats> calculatePersistenceStats(Metrics& metrics) {
+    std::lock_guard<std::mutex> lock(metrics.persistenceMutex);
+    return {calculateStats(metrics.queueWaitMs), calculateStats(metrics.persistMs)};
+}
+
+json statsToJson(const LatencyStats& stats) {
+    return json{{"samples", stats.samples},
+                {"min", stats.minimumMs},
+                {"avg", stats.averageMs},
+                {"p50", stats.p50Ms},
+                {"p90", stats.p90Ms},
+                {"p95", stats.p95Ms},
+                {"p99", stats.p99Ms},
+                {"p999", stats.p999Ms},
+                {"max", stats.maximumMs}};
 }
 
 ProcessSnapshot readProcessSnapshot(int pid) {
@@ -1251,15 +1329,26 @@ void appendCsv(const std::string& path, const json& result) {
     }
     ensureParentDirectory(path);
     const bool needsHeader = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0;
+    const std::string header =
+        "timestamp,run_id,clients_requested,clients_ready,duration_s,rate_per_client,"
+        "sent,response_ok,success_rate,ok_qps,p50_ms,p95_ms,p99_ms,timeout,"
+        "server_error,push_recv,fanout_sent,fanout_dropped,push_delivery_ratio,"
+        "queue_wait_p95_ms,persist_p95_ms,server_cpu_pct,server_rss_peak_kb";
+    if (!needsHeader) {
+        std::ifstream existing(path);
+        std::string existingHeader;
+        std::getline(existing, existingHeader);
+        if (existingHeader != header) {
+            throw std::runtime_error(
+                "CSV schema mismatch; use a new --csv-out file for this load-test version");
+        }
+    }
     std::ofstream output(path, std::ios::app);
     if (!output) {
         throw std::runtime_error("cannot open CSV output: " + path);
     }
     if (needsHeader) {
-        output << "timestamp,run_id,clients_requested,clients_ready,duration_s,rate_per_client,"
-                  "sent,response_ok,success_rate,ok_qps,p50_ms,p95_ms,p99_ms,timeout,"
-                  "server_error,push_recv,fanout_sent,push_delivery_ratio,server_cpu_pct,"
-                  "server_rss_peak_kb\n";
+        output << header << '\n';
     }
     output << result.at("timestamp").get<std::string>() << ','
            << result.at("run_id").get<std::string>() << ','
@@ -1278,13 +1367,17 @@ void appendCsv(const std::string& path, const json& result) {
            << result.at("requests").at("server_error_response") << ','
            << result.at("fanout").at("push_recv") << ','
            << result.at("fanout").at("server_reported_sent") << ','
+           << result.at("fanout").at("server_reported_dropped") << ','
            << result.at("fanout").at("push_delivery_ratio") << ','
+           << result.at("persistence_ms").at("queue_wait").at("p95") << ','
+           << result.at("persistence_ms").at("sql_transaction").at("p95") << ','
            << result.at("process").at("server").at("cpu_percent") << ','
            << result.at("process").at("server").at("rss_peak_kb") << '\n';
 }
 
 json buildResult(const Args& args, Metrics& metrics, int readyClients,
                  double elapsedSeconds, const LatencyStats& latency,
+                 const LatencyStats& queueWait, const LatencyStats& persist,
                  const ProcessSnapshot& loadBegin, const ProcessSnapshot& loadEnd,
                  uint64_t loadPeakRss, const ProcessSnapshot& serverBegin,
                  const ProcessSnapshot& serverEnd, uint64_t serverPeakRss,
@@ -1293,12 +1386,25 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
     const uint64_t ok = metrics.responseOk.load();
     const uint64_t serverErrors = metrics.serverErrorResponses.load();
     const uint64_t timeouts = metrics.timeout.load();
+    const uint64_t transportErrors = metrics.sendFail.load() + metrics.recvFail.load() +
+                                     metrics.workerExceptions.load();
     const uint64_t push = metrics.pushRecv.load();
     const uint64_t fanoutSent = metrics.serverFanoutSent.load();
+    const uint64_t fanoutDropped = metrics.serverDropped.load();
+    const uint64_t fanoutAttempted = fanoutSent + fanoutDropped;
+    const uint64_t theoreticalFanout = readyClients > 1
+        ? ok * static_cast<uint64_t>(readyClients - 1)
+        : 0;
     const double duration = static_cast<double>(args.durationSec);
     const double successRate = sent > 0 ? static_cast<double>(ok) / static_cast<double>(sent) : 0.0;
     const double pushDelivery = fanoutSent > 0
         ? static_cast<double>(push) / static_cast<double>(fanoutSent)
+        : 0.0;
+    const double pushVsTheoretical = theoreticalFanout > 0
+        ? static_cast<double>(push) / static_cast<double>(theoreticalFanout)
+        : 0.0;
+    const double fanoutCoverage = theoreticalFanout > 0
+        ? static_cast<double>(fanoutAttempted) / static_cast<double>(theoreticalFanout)
         : 0.0;
 
     std::map<std::string, uint64_t> errorCodes;
@@ -1311,6 +1417,7 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
 
     json result{
         {"timestamp", nowTimestamp()},
+        {"schema_version", 2},
         {"run_id", args.runId},
         {"warnings", warnings},
         {"config", {
@@ -1327,7 +1434,10 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
             {"payload_bytes", args.payloadBytes},
             {"max_inflight_per_client", args.maxInflight},
             {"request_timeout_ms", args.requestTimeoutMs},
-            {"drain_ms", args.drainMs}
+            {"drain_ms", args.drainMs},
+            {"fanout_settle_ms", args.fanoutSettleMs},
+            {"allow_partial_ready", args.allowPartialReady},
+            {"allow_account_reuse", args.allowAccountReuse}
         }},
         {"connections", {
             {"ready", readyClients},
@@ -1347,8 +1457,9 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
             {"success_rate", successRate},
             {"server_error_response", serverErrors},
             {"timeout", timeouts},
-            {"error_total", metrics.sendFail.load() + serverErrors + timeouts +
-                                metrics.parseFail.load()},
+            {"error_total", transportErrors + serverErrors + timeouts +
+                                metrics.parseFail.load() + metrics.unmatchedResponses.load()},
+            {"transport_error_total", transportErrors},
             {"late_response", metrics.lateResponses.load()},
             {"unmatched_response", metrics.unmatchedResponses.load()},
             {"send_fail", metrics.sendFail.load()},
@@ -1365,16 +1476,10 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
             {"timeout", metrics.warmupTimeout.load()},
             {"push_recv", metrics.warmupPushRecv.load()}
         }},
-        {"latency_ms", {
-            {"samples", latency.samples},
-            {"min", latency.minimumMs},
-            {"avg", latency.averageMs},
-            {"p50", latency.p50Ms},
-            {"p90", latency.p90Ms},
-            {"p95", latency.p95Ms},
-            {"p99", latency.p99Ms},
-            {"p999", latency.p999Ms},
-            {"max", latency.maximumMs}
+        {"latency_ms", statsToJson(latency)},
+        {"persistence_ms", {
+            {"queue_wait", statsToJson(queueWait)},
+            {"sql_transaction", statsToJson(persist)}
         }},
         {"throughput", {
             {"attempted_qps", duration > 0 ? metrics.attempted.load() / duration : 0.0},
@@ -1387,11 +1492,16 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
             {"push_recv", push},
             {"other_push_recv", metrics.otherPushRecv.load()},
             {"server_reported_sent", fanoutSent},
-            {"server_reported_dropped", metrics.serverDropped.load()},
+            {"server_reported_dropped", fanoutDropped},
+            {"server_reported_attempted", fanoutAttempted},
             {"server_reported_overloaded", metrics.serverOverloaded.load()},
             {"server_reported_closed", metrics.serverClosed.load()},
             {"server_reported_no_such_connection", metrics.serverNoSuchConnection.load()},
-            {"push_delivery_ratio", pushDelivery}
+            {"server_reported_failed", metrics.serverFanoutFailed.load()},
+            {"theoretical_fanout", theoreticalFanout},
+            {"push_delivery_ratio", pushDelivery},
+            {"push_vs_theoretical_ratio", pushVsTheoretical},
+            {"target_coverage_ratio", fanoutCoverage}
         }},
         {"traffic", {
             {"app_bytes_sent_total", metrics.appBytesSent.load()},
@@ -1419,6 +1529,20 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
                 {"rss_end_kb", serverEnd.rssKb},
                 {"rss_peak_kb", std::max({serverPeakRss, serverEnd.highWaterKb, serverEnd.rssKb})}
             }}
+        }},
+        {"quality_gate", {
+            {"all_clients_ready", readyClients == args.clients},
+            {"request_success_ge_99_9pct", successRate >= 0.999},
+            {"no_server_errors", serverErrors == 0},
+            {"no_timeouts", timeouts == 0},
+            {"no_transport_errors", metrics.sendFail.load() == 0 &&
+                                    metrics.recvFail.load() == 0 &&
+                                    metrics.workerExceptions.load() == 0},
+            {"no_fanout_drop", fanoutDropped == 0},
+            {"fanout_target_coverage_ge_99pct", theoreticalFanout == 0 ||
+                                                fanoutCoverage >= 0.99},
+            {"push_delivery_ge_99pct", theoreticalFanout == 0 ||
+                                       (fanoutSent > 0 && pushDelivery >= 0.99)}
         }}
     };
     return result;
@@ -1444,6 +1568,12 @@ int main(int argc, char** argv) {
     for (const Credential& credential : credentials) {
         uniqueAccounts.insert(credential.accountId);
     }
+    if (!args.allowAccountReuse && uniqueAccounts.size() < static_cast<size_t>(args.clients)) {
+        std::cerr << "benchmark requires at least one unique account per client: clients="
+                  << args.clients << " unique_accounts=" << uniqueAccounts.size()
+                  << "; use --allow-account-reuse only for explicit multi-device tests\n";
+        return 2;
+    }
     if (!args.createGroupName.empty() && uniqueAccounts.size() != 1) {
         std::cerr << "--create-group supports one logical account only; use --group-id for multiple accounts\n";
         return 2;
@@ -1453,6 +1583,14 @@ int main(int argc, char** argv) {
     }
 
     std::vector<std::string> warnings;
+    if (args.serverPid <= 0) {
+        warnings.emplace_back(
+            "server process was not sampled; pass --server-pid to record server CPU and RSS");
+    }
+    if (args.drainMs < args.requestTimeoutMs) {
+        warnings.emplace_back(
+            "drain-ms is shorter than request-timeout-ms and may create artificial timeouts");
+    }
     std::unordered_map<std::string, int> clientsPerAccount;
     for (int index = 0; index < args.clients; ++index) {
         ++clientsPerAccount[credentials[static_cast<size_t>(index) % credentials.size()].accountId];
@@ -1487,12 +1625,13 @@ int main(int argc, char** argv) {
     }
 
     const int readyClients = gate.waitUntilReported();
-    if (readyClients == 0) {
+    if (readyClients == 0 || (!args.allowPartialReady && readyClients != args.clients)) {
         gate.open(Clock::now(), true);
         for (auto& thread : threads) {
             thread.join();
         }
-        std::cerr << "no client completed login/group validation\n";
+        std::cerr << "client setup incomplete: ready=" << readyClients
+                  << '/' << args.clients << '\n';
         return 4;
     }
 
@@ -1539,10 +1678,13 @@ int main(int argc, char** argv) {
     }
     const double fullElapsed = std::chrono::duration<double>(Clock::now() - fullBegin).count();
     const LatencyStats latency = calculateLatencyStats(metrics);
+    const auto [queueWait, persist] = calculatePersistenceStats(metrics);
     json result = buildResult(args, metrics, readyClients, fullElapsed, latency,
+                              queueWait, persist,
                               loadBegin, loadEnd, loadPeakRss,
                               serverBegin, serverEnd, serverPeakRss, warnings);
     result["config"]["credential_count"] = credentials.size();
+    result["config"]["unique_account_count"] = uniqueAccounts.size();
 
     std::cout << result.dump(2) << std::endl;
     try {

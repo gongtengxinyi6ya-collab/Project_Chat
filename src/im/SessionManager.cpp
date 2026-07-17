@@ -1,6 +1,6 @@
 #include "im/SessionManager.h"
 
-im::Session& im::SessionManager::getOrCreate(ConnKey key){
+im::Session& im::SessionManager::getOrCreate(net::ConnKey key){
     auto it=sessions_.find(key);
     if(it!=sessions_.end()){
         return it->second;
@@ -9,21 +9,21 @@ im::Session& im::SessionManager::getOrCreate(ConnKey key){
     sessions_[key]=session;
     return sessions_[key];
 }
-const im::Session* im::SessionManager::find(ConnKey key)const{
+const im::Session* im::SessionManager::find(net::ConnKey key)const{
     auto it=sessions_.find(key);
     if(it!=sessions_.end()){
         return &it->second;
     }
     return nullptr;
 }
-im::Session* im::SessionManager::find(ConnKey key){
+im::Session* im::SessionManager::find(net::ConnKey key){
     auto it=sessions_.find(key);
     if(it!=sessions_.end()){
         return &it->second;
     }
     return nullptr;
 }
-bool im::SessionManager::bindUser(ConnKey key,uint64_t userId,std::string accountId,std::string name){
+bool im::SessionManager::bindUser(net::ConnKey key,uint64_t userId,std::string accountId,std::string name){
     sessions_[key].userId_=userId;
     sessions_[key].accountId_=accountId;
     sessions_[key].username_=name;
@@ -32,7 +32,7 @@ bool im::SessionManager::bindUser(ConnKey key,uint64_t userId,std::string accoun
     connAccountMap_[key]=accountId;
     return true;
 }
-void im::SessionManager::unbindConn(ConnKey key){
+void im::SessionManager::unbindConn(net::ConnKey key){
     auto it=connAccountMap_.find(key);
     if(it==connAccountMap_.end()){
         return;
@@ -43,16 +43,16 @@ void im::SessionManager::unbindConn(ConnKey key){
     }
     connAccountMap_.erase(key);
 }
-std::vector<im::SessionManager::ConnKey> im::SessionManager::connKeysByAccountId(const std::string& accountId) const{
+std::vector<net::ConnKey> im::SessionManager::connKeysByAccountId(const std::string& accountId) const{
     auto it=accountConnMap_.find(accountId);
     if(it!=accountConnMap_.end()){
-        std::vector<ConnKey> keys;
+        std::vector<net::ConnKey> keys;
         keys.insert(keys.end(),it->second.begin(),it->second.end());
         return keys;
     }
     return {};
 }
-std::optional<std::string> im::SessionManager::accountIdByConn(ConnKey key)const{
+std::optional<std::string> im::SessionManager::accountIdByConn(net::ConnKey key)const{
     auto it=connAccountMap_.find(key);
     if(it==connAccountMap_.end()){
         return std::nullopt;
@@ -73,7 +73,7 @@ std::vector<std::string> im::SessionManager::onLineUsers()const{
     }
     return accountIds;
 }
-void im::SessionManager::erase(ConnKey key){
+void im::SessionManager::erase(net::ConnKey key){
     auto it=sessions_.find(key);
     if(it!=sessions_.end()){
         sessions_.erase(key);

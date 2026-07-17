@@ -45,7 +45,7 @@ struct BatchSendResult{
         }
     };//根据发送结果累计相应字段。
     std::size_t dropped() const noexcept{return noSuchConnection+closed+overloaded+failed;};//返回 noSuchConnection + closed + overloaded。
-    std::size_t total() const noexcept{sent+dropped();};//返回 sent + dropped()。
+    std::size_t total() const noexcept{return sent+dropped();};//返回 sent + dropped()。
     SendResult singleResult() const noexcept {
         if (sent > 0) {
             return SendResult::Ok;
