@@ -1,0 +1,4 @@
+timestamp,mode,clients_requested,ready_start,ready_end,setup_success_rate,survival_rate,unexpected_close,ping_recv,pong_sent,pong_fail,connect_p95_ms,login_p95_ms,server_cpu_pct,server_rss_peak_kb,server_fd_peak,passed
+2026-07-17 16:59:30,authenticated,100,100,100,1.0,1.0,0,300,300,0,0.25253115,5.749309949999999,0.09341520287299743,14856,138,1
+2026-07-17 17:05:30,authenticated,500,500,500,1.0,1.0,0,2499,2499,0,0.23630155,3.6354946,0.255743347142012,16136,538,1
+2026-07-17 17:15:59,authenticated,1000,1000,1000,1.0,1.0,0,9999,9999,0,0.26042355,4.0136838,0.37541443810684977,18056,1038,1

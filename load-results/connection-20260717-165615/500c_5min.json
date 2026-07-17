@@ -1,0 +1,89 @@
+{
+  "config": {
+    "account_reuse": false,
+    "clients_requested": 500,
+    "connect_rate_per_s": 100.0,
+    "connect_timeout_ms": 5000,
+    "credential_count": 1000,
+    "elapsed_s": 304.993271073,
+    "hold_s": 300,
+    "host": "127.0.0.1",
+    "login_timeout_ms": 10000,
+    "mode": "authenticated",
+    "port": 8080
+  },
+  "connections": {
+    "attempted": 500,
+    "connect_fail": 0,
+    "connect_ok": 500,
+    "connect_timeout": 0,
+    "login_error_codes": {},
+    "login_fail": 0,
+    "login_ok": 500,
+    "login_timeout": 0,
+    "other_frames": 0,
+    "parse_fail": 0,
+    "ready_at_hold_end": 500,
+    "ready_at_hold_start": 500,
+    "ready_peak": 500,
+    "setup_success_rate": 1.0,
+    "socket_errors": 0,
+    "survival_rate": 1.0,
+    "unexpected_close": 0
+  },
+  "heartbeat": {
+    "ping_recv": 2499,
+    "pong_fail": 0,
+    "pong_queued": 2499,
+    "pong_sent": 2499
+  },
+  "interrupted": false,
+  "latency_ms": {
+    "connect": {
+      "avg": 0.18905209399999998,
+      "max": 1.547762,
+      "min": 0.104816,
+      "p50": 0.18653999999999998,
+      "p95": 0.23630155,
+      "p99": 0.2915451099999997,
+      "samples": 500
+    },
+    "login": {
+      "avg": 2.9884184100000026,
+      "max": 12.779991,
+      "min": 1.913397,
+      "p50": 2.918241,
+      "p95": 3.6354946,
+      "p99": 4.514114569999998,
+      "samples": 500
+    }
+  },
+  "passed": true,
+  "process": {
+    "load_generator": {
+      "cpu_percent": 0.2983672383323473,
+      "fd_end": 7,
+      "fd_peak": 507,
+      "fd_start": 7,
+      "rss_end_kb": 7160,
+      "rss_peak_kb": 7160,
+      "rss_start_kb": 6732,
+      "sampled": true,
+      "threads_end": 1,
+      "threads_start": 1
+    },
+    "server": {
+      "cpu_percent": 0.255743347142012,
+      "fd_end": 38,
+      "fd_peak": 538,
+      "fd_start": 38,
+      "rss_end_kb": 16136,
+      "rss_peak_kb": 16136,
+      "rss_start_kb": 14856,
+      "sampled": true,
+      "threads_end": 12,
+      "threads_start": 12
+    }
+  },
+  "timestamp": "2026-07-17 17:05:30"
+}
