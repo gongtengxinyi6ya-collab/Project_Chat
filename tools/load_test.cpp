@@ -49,6 +49,31 @@ namespace {
 constexpr uint32_t kMaxFrameLength = 1024U * 1024U;
 constexpr int kDefaultAccountRateLimit = 20;
 
+enum class PacingMode {
+    Staggered,
+    Synchronized
+};
+
+std::string_view pacingModeToString(PacingMode mode) {
+    switch (mode) {
+        case PacingMode::Staggered:
+            return "staggered";
+        case PacingMode::Synchronized:
+            return "synchronized";
+    }
+    return "unknown";
+}
+
+std::optional<PacingMode> parsePacingMode(std::string_view value) {
+    if (value == "staggered") {
+        return PacingMode::Staggered;
+    }
+    if (value == "synchronized") {
+        return PacingMode::Synchronized;
+    }
+    return std::nullopt;
+}
+
 struct Credential {
     std::string accountId;
     std::string password;
@@ -71,6 +96,7 @@ struct Args {
     bool verifyGroup{true};
     bool allowPartialReady{false};
     bool allowAccountReuse{false};
+    PacingMode pacingMode{PacingMode::Staggered};
     int accountRateLimit{kDefaultAccountRateLimit};
     int serverPid{-1};
 
@@ -250,6 +276,7 @@ void printUsage(const char* program) {
         << "  --warmup SEC               Default 5\n"
         << "  --duration SEC             Default 60\n"
         << "  --rate RPS                 Per-client request rate, default 5\n"
+        << "  --pacing MODE              staggered (default) or synchronized\n"
         << "  --payload-bytes N          Approximate message size, default 64\n"
         << "  --max-inflight N           Per-client pending limit, default 128\n"
         << "  --connect-timeout-ms N     Default 3000\n"
@@ -352,6 +379,14 @@ bool parseArgs(int argc, char** argv, Args& args) {
             if (!parseInteger(*value, args.durationSec)) return false;
         } else if (option == "--rate") {
             if (!parseDouble(*value, args.ratePerClient)) return false;
+        } else if (option == "--pacing") {
+            const auto mode = parsePacingMode(*value);
+            if (!mode) {
+                std::cerr << "invalid pacing mode: " << *value
+                          << "; expected staggered or synchronized\n";
+                return false;
+            }
+            args.pacingMode = *mode;
         } else if (option == "--connect-timeout-ms") {
             if (!parseInteger(*value, args.connectTimeoutMs)) return false;
         } else if (option == "--request-timeout-ms") {
@@ -858,12 +893,23 @@ private:
         return sendFrame(fd_, payload, args_.requestTimeoutMs, &running_) == IoStatus::Ok;
     }
 
+    Clock::duration initialPacingOffset() const {
+        if (args_.pacingMode == PacingMode::Synchronized || args_.clients <= 1) {
+            return Clock::duration::zero();
+        }
+        const double offsetSeconds =
+            static_cast<double>(id_) /
+            (static_cast<double>(args_.clients) * args_.ratePerClient);
+        return std::chrono::duration_cast<Clock::duration>(
+            std::chrono::duration<double>(offsetSeconds));
+    }
+
     void sendLoop(TimePoint start) {
         const TimePoint measurementStart = start + std::chrono::seconds(args_.warmupSec);
         const TimePoint end = measurementStart + std::chrono::seconds(args_.durationSec);
         const auto interval = std::chrono::duration_cast<Clock::duration>(
             std::chrono::duration<double>(1.0 / args_.ratePerClient));
-        TimePoint nextSend = start;
+        TimePoint nextSend = start + initialPacingOffset();
         TimePoint nextSweep = start;
 
         while (running_.load(std::memory_order_acquire) && Clock::now() < end) {
@@ -1330,7 +1376,7 @@ void appendCsv(const std::string& path, const json& result) {
     ensureParentDirectory(path);
     const bool needsHeader = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0;
     const std::string header =
-        "timestamp,run_id,clients_requested,clients_ready,duration_s,rate_per_client,"
+        "timestamp,run_id,clients_requested,clients_ready,duration_s,rate_per_client,pacing_mode,"
         "sent,response_ok,success_rate,ok_qps,p50_ms,p95_ms,p99_ms,timeout,"
         "server_error,push_recv,fanout_sent,fanout_dropped,push_delivery_ratio,"
         "queue_wait_p95_ms,persist_p95_ms,server_cpu_pct,server_rss_peak_kb";
@@ -1356,6 +1402,7 @@ void appendCsv(const std::string& path, const json& result) {
            << result.at("connections").at("ready") << ','
            << result.at("config").at("duration_s") << ','
            << result.at("config").at("rate_per_client") << ','
+           << result.at("config").at("pacing_mode").get<std::string>() << ','
            << result.at("requests").at("sent") << ','
            << result.at("requests").at("response_ok") << ','
            << result.at("requests").at("success_rate") << ','
@@ -1406,6 +1453,10 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
     const double fanoutCoverage = theoreticalFanout > 0
         ? static_cast<double>(fanoutAttempted) / static_cast<double>(theoreticalFanout)
         : 0.0;
+    const double phaseSpreadMs = args.pacingMode == PacingMode::Staggered && args.clients > 1
+        ? 1000.0 / args.ratePerClient *
+              static_cast<double>(args.clients - 1) / static_cast<double>(args.clients)
+        : 0.0;
 
     std::map<std::string, uint64_t> errorCodes;
     {
@@ -1417,7 +1468,7 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
 
     json result{
         {"timestamp", nowTimestamp()},
-        {"schema_version", 2},
+        {"schema_version", 3},
         {"run_id", args.runId},
         {"warnings", warnings},
         {"config", {
@@ -1431,6 +1482,8 @@ json buildResult(const Args& args, Metrics& metrics, int readyClients,
             {"elapsed_s", elapsedSeconds},
             {"rate_per_client", args.ratePerClient},
             {"target_qps", readyClients * args.ratePerClient},
+            {"pacing_mode", std::string(pacingModeToString(args.pacingMode))},
+            {"phase_spread_ms", phaseSpreadMs},
             {"payload_bytes", args.payloadBytes},
             {"max_inflight_per_client", args.maxInflight},
             {"request_timeout_ms", args.requestTimeoutMs},
@@ -1591,6 +1644,10 @@ int main(int argc, char** argv) {
         warnings.emplace_back(
             "drain-ms is shorter than request-timeout-ms and may create artificial timeouts");
     }
+    if (args.pacingMode == PacingMode::Synchronized && args.clients > 1) {
+        warnings.emplace_back(
+            "synchronized pacing creates periodic client bursts; compare with staggered results");
+    }
     std::unordered_map<std::string, int> clientsPerAccount;
     for (int index = 0; index < args.clients; ++index) {
         ++clientsPerAccount[credentials[static_cast<size_t>(index) % credentials.size()].accountId];
@@ -1641,7 +1698,8 @@ int main(int argc, char** argv) {
     gate.open(start, false);
     std::cerr << "ready=" << readyClients << '/' << args.clients
               << " group=" << args.groupId
-              << " target_qps=" << readyClients * args.ratePerClient << '\n';
+              << " target_qps=" << readyClients * args.ratePerClient
+              << " pacing=" << pacingModeToString(args.pacingMode) << '\n';
 
     std::this_thread::sleep_until(measurementStart);
     const ProcessSnapshot loadBegin = readProcessSnapshot(0);
