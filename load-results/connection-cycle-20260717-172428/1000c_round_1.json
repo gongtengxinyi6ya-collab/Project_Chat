@@ -1,0 +1,89 @@
+{
+  "config": {
+    "account_reuse": false,
+    "clients_requested": 1000,
+    "connect_rate_per_s": 100.0,
+    "connect_timeout_ms": 5000,
+    "credential_count": 1000,
+    "elapsed_s": 309.993448274,
+    "hold_s": 300,
+    "host": "127.0.0.1",
+    "login_timeout_ms": 15000,
+    "mode": "authenticated",
+    "port": 8080
+  },
+  "connections": {
+    "attempted": 1000,
+    "connect_fail": 0,
+    "connect_ok": 1000,
+    "connect_timeout": 0,
+    "login_error_codes": {},
+    "login_fail": 0,
+    "login_ok": 1000,
+    "login_timeout": 0,
+    "other_frames": 0,
+    "parse_fail": 0,
+    "ready_at_hold_end": 1000,
+    "ready_at_hold_start": 1000,
+    "ready_peak": 1000,
+    "setup_success_rate": 1.0,
+    "socket_errors": 0,
+    "survival_rate": 1.0,
+    "unexpected_close": 0
+  },
+  "heartbeat": {
+    "ping_recv": 4999,
+    "pong_fail": 0,
+    "pong_queued": 4999,
+    "pong_sent": 4999
+  },
+  "interrupted": false,
+  "latency_ms": {
+    "connect": {
+      "avg": 0.19480689400000006,
+      "max": 0.820388,
+      "min": 0.099116,
+      "p50": 0.188483,
+      "p95": 0.27207254999999997,
+      "p99": 0.36419771,
+      "samples": 1000
+    },
+    "login": {
+      "avg": 3.167581456000001,
+      "max": 15.746879,
+      "min": 1.99214,
+      "p50": 3.0229179999999998,
+      "p95": 4.1169942,
+      "p99": 5.651939879999997,
+      "samples": 1000
+    }
+  },
+  "passed": true,
+  "process": {
+    "load_generator": {
+      "cpu_percent": 0.5613021854778143,
+      "fd_end": 7,
+      "fd_peak": 1007,
+      "fd_start": 7,
+      "rss_end_kb": 7396,
+      "rss_peak_kb": 7396,
+      "rss_start_kb": 6712,
+      "sampled": true,
+      "threads_end": 1,
+      "threads_start": 1
+    },
+    "server": {
+      "cpu_percent": 0.49678469289415755,
+      "fd_end": 38,
+      "fd_peak": 1038,
+      "fd_start": 38,
+      "rss_end_kb": 18056,
+      "rss_peak_kb": 18056,
+      "rss_start_kb": 18056,
+      "sampled": true,
+      "threads_end": 12,
+      "threads_start": 12
+    }
+  },
+  "timestamp": "2026-07-17 17:29:38"
+}
