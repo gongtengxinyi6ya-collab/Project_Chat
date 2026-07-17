@@ -1,0 +1,89 @@
+{
+  "config": {
+    "account_reuse": false,
+    "clients_requested": 5000,
+    "connect_rate_per_s": 300.0,
+    "connect_timeout_ms": 5000,
+    "credential_count": 0,
+    "elapsed_s": 616.663746512,
+    "hold_s": 600,
+    "host": "127.0.0.1",
+    "login_timeout_ms": 5000,
+    "mode": "transport",
+    "port": 8080
+  },
+  "connections": {
+    "attempted": 5000,
+    "connect_fail": 0,
+    "connect_ok": 5000,
+    "connect_timeout": 0,
+    "login_error_codes": {},
+    "login_fail": 0,
+    "login_ok": 0,
+    "login_timeout": 0,
+    "other_frames": 0,
+    "parse_fail": 0,
+    "ready_at_hold_end": 5000,
+    "ready_at_hold_start": 5000,
+    "ready_peak": 5000,
+    "setup_success_rate": 1.0,
+    "socket_errors": 0,
+    "survival_rate": 1.0,
+    "unexpected_close": 0
+  },
+  "heartbeat": {
+    "ping_recv": 50003,
+    "pong_fail": 0,
+    "pong_queued": 50003,
+    "pong_sent": 50003
+  },
+  "interrupted": false,
+  "latency_ms": {
+    "connect": {
+      "avg": 0.25105936020000075,
+      "max": 10.121576,
+      "min": 0.045285,
+      "p50": 0.228313,
+      "p95": 0.36043705000000004,
+      "p99": 0.4892121700000007,
+      "samples": 5000
+    },
+    "login": {
+      "avg": 0.0,
+      "max": 0.0,
+      "min": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "samples": 0
+    }
+  },
+  "passed": true,
+  "process": {
+    "load_generator": {
+      "cpu_percent": 2.95623021510723,
+      "fd_end": 7,
+      "fd_peak": 5007,
+      "fd_start": 7,
+      "rss_end_kb": 7600,
+      "rss_peak_kb": 7600,
+      "rss_start_kb": 5776,
+      "sampled": true,
+      "threads_end": 1,
+      "threads_start": 1
+    },
+    "server": {
+      "cpu_percent": 1.4627096291973238,
+      "fd_end": 38,
+      "fd_peak": 5038,
+      "fd_start": 38,
+      "rss_end_kb": 29576,
+      "rss_peak_kb": 29576,
+      "rss_start_kb": 18056,
+      "sampled": true,
+      "threads_end": 12,
+      "threads_start": 12
+    }
+  },
+  "timestamp": "2026-07-17 17:52:36"
+}

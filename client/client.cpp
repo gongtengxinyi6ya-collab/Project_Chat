@@ -23,6 +23,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -2172,6 +2173,636 @@ static int runBatchPrepareGroups(int argc,char** argv){
     return allReady?0:6;
 }
 
+static bool parsePositiveSize(const std::string& value,size_t& output,bool allowZero=false){
+    try{
+        size_t consumed=0;
+        const unsigned long long parsed=std::stoull(value,&consumed);
+        if(consumed!=value.size()||(!allowZero&&parsed==0)||
+           parsed>std::numeric_limits<size_t>::max()){
+            return false;
+        }
+        output=static_cast<size_t>(parsed);
+        return true;
+    }
+    catch(const std::exception&){
+        return false;
+    }
+}
+
+struct MixedPrepareOptions {
+    std::string host{"127.0.0.1"};
+    int port{8080};
+    std::string accountsPath{"tools/long_connection_accounts_1000.json"};
+    std::string outputPath{"tools/mixed_load_manifest_1000.json"};
+    std::string groupNamePrefix{"mixed_load"};
+    size_t groupCount{20};
+    size_t membersPerGroup{50};
+    size_t friendDegree{10};
+    int timeoutMs{10000};
+    int requestIntervalMs{20};
+    size_t checkpointEvery{50};
+    bool resume{false};
+};
+
+struct MixedAccountRecord {
+    ReusableCredential credential;
+    std::unordered_set<std::string> groupIds;
+    std::unordered_set<std::string> friendAccountIds;
+};
+
+struct MixedGroupRecord {
+    size_t groupIndex{0};
+    std::string groupId;
+    std::string groupName;
+    std::string ownerAccountId;
+    std::vector<std::string> members;
+};
+
+static void printMixedPrepareUsage(const char* program){
+    std::cout
+        <<"Usage:\n"
+        <<"  "<<program<<" --batch-prepare-mixed [options]\n\n"
+        <<"Options:\n"
+        <<"  --host HOST                  Default 127.0.0.1\n"
+        <<"  --port PORT                  Default 8080\n"
+        <<"  --accounts-file PATH         Default tools/long_connection_accounts_1000.json\n"
+        <<"  --output PATH                Default tools/mixed_load_manifest_1000.json\n"
+        <<"  --groups N                   Disjoint groups to create, default 20\n"
+        <<"  --members-per-group N        Members per group including owner, default 50\n"
+        <<"  --friend-degree N            Even friend degree per account, default 10\n"
+        <<"  --group-name-prefix PREFIX   Default mixed_load\n"
+        <<"  --timeout-ms N               Per-request timeout, default 10000\n"
+        <<"  --request-interval-ms N      Delay between write requests, default 20\n"
+        <<"  --checkpoint-every N         Persist after N friend edges, default 50\n"
+        <<"  --resume                     Continue from an existing output manifest\n"
+        <<"  --help\n";
+}
+
+static std::optional<MixedPrepareOptions> parseMixedPrepareOptions(int argc,char** argv){
+    MixedPrepareOptions options;
+    for(int index=2;index<argc;++index){
+        const std::string option=argv[index];
+        if(option=="--help"){
+            printMixedPrepareUsage(argv[0]);
+            return std::nullopt;
+        }
+        if(option=="--resume"){
+            options.resume=true;
+            continue;
+        }
+        if(index+1>=argc){
+            std::cerr<<"missing value for "<<option<<std::endl;
+            return std::nullopt;
+        }
+        const std::string value=argv[++index];
+        if(option=="--host"){
+            options.host=value;
+        }
+        else if(option=="--port"){
+            if(!parsePositiveInt(value,options.port)||options.port>65535){
+                std::cerr<<"invalid --port\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--accounts-file"){
+            options.accountsPath=value;
+        }
+        else if(option=="--output"){
+            options.outputPath=value;
+        }
+        else if(option=="--groups"){
+            if(!parsePositiveSize(value,options.groupCount)){
+                std::cerr<<"invalid --groups\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--members-per-group"){
+            if(!parsePositiveSize(value,options.membersPerGroup)||options.membersPerGroup<2){
+                std::cerr<<"invalid --members-per-group\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--friend-degree"){
+            if(!parsePositiveSize(value,options.friendDegree,true)){
+                std::cerr<<"invalid --friend-degree\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--group-name-prefix"){
+            options.groupNamePrefix=value;
+        }
+        else if(option=="--timeout-ms"){
+            if(!parsePositiveInt(value,options.timeoutMs)){
+                std::cerr<<"invalid --timeout-ms\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--request-interval-ms"){
+            if(!parsePositiveInt(value,options.requestIntervalMs,true)){
+                std::cerr<<"invalid --request-interval-ms\n";
+                return std::nullopt;
+            }
+        }
+        else if(option=="--checkpoint-every"){
+            if(!parsePositiveSize(value,options.checkpointEvery)){
+                std::cerr<<"invalid --checkpoint-every\n";
+                return std::nullopt;
+            }
+        }
+        else{
+            std::cerr<<"unknown mixed preparation option: "<<option<<std::endl;
+            return std::nullopt;
+        }
+    }
+    if(options.accountsPath.empty()||options.outputPath.empty()||options.groupNamePrefix.empty()||
+       options.friendDegree%2!=0){
+        std::cerr<<"paths and group prefix cannot be empty; --friend-degree must be even\n";
+        return std::nullopt;
+    }
+    return options;
+}
+
+static std::optional<std::vector<ReusableCredential>> loadMixedCredentials(
+    const std::string& accountsPath){
+    std::ifstream input(accountsPath);
+    if(!input){
+        std::cerr<<"cannot open accounts file: "<<accountsPath<<std::endl;
+        return std::nullopt;
+    }
+    nlohmann::json document;
+    try{
+        input>>document;
+    }
+    catch(const std::exception& e){
+        std::cerr<<"invalid accounts JSON: "<<e.what()<<std::endl;
+        return std::nullopt;
+    }
+    const nlohmann::json* entries=&document;
+    if(document.is_object()&&document.contains("accounts")){
+        entries=&document["accounts"];
+    }
+    if(!entries->is_array()||entries->empty()){
+        std::cerr<<"accounts file must contain a non-empty accounts array\n";
+        return std::nullopt;
+    }
+    std::vector<ReusableCredential> credentials;
+    std::unordered_set<std::string> seen;
+    credentials.reserve(entries->size());
+    for(const auto& entry:*entries){
+        if(!entry.is_object()||!entry.contains("accountId")||!entry["accountId"].is_string()||
+           !entry.contains("password")||!entry["password"].is_string()){
+            std::cerr<<"each account requires string accountId and password\n";
+            return std::nullopt;
+        }
+        ReusableCredential credential{
+            .accountId=entry["accountId"].get<std::string>(),
+            .password=entry["password"].get<std::string>(),
+            .username=entry.value("username","")
+        };
+        if(credential.accountId.empty()||credential.password.empty()||
+           !seen.insert(credential.accountId).second){
+            std::cerr<<"accountId/password must be non-empty and accountId must be unique\n";
+            return std::nullopt;
+        }
+        credentials.push_back(std::move(credential));
+    }
+    return credentials;
+}
+
+static bool connectAndLoginMixed(BatchConnection& connection,const MixedPrepareOptions& options,
+                                 const ReusableCredential& credential,ClientState& state,
+                                 std::string& error){
+    if(!connection.connectTo(options.host,options.port)){
+        error=connection.lastError();
+        return false;
+    }
+    state=ClientState{};
+    state.accountId=credential.accountId;
+    CommandBuilder builder;
+    auto response=connection.request(
+        builder.buildLoginReq(state,credential.accountId,credential.password),options.timeoutMs);
+    if(!response||!response->value("ok",false)){
+        error=response?responseMessage(*response):connection.lastError();
+        return false;
+    }
+    state.loggedIn=true;
+    if(response->contains("data")&&(*response)["data"].is_object()){
+        state.username=(*response)["data"].value("username",credential.username);
+    }
+    return true;
+}
+
+static std::optional<nlohmann::json> requestMixedWithRateLimit(
+    BatchConnection& connection,const std::string& payload,const MixedPrepareOptions& options){
+    constexpr int maxAttempts=5;
+    for(int attempt=0;attempt<maxAttempts;++attempt){
+        auto response=connection.request(payload,options.timeoutMs);
+        if(!response||!isRateLimited(*response)){
+            return response;
+        }
+        const int delayMs=std::max(retryAfterMs(*response,1000),options.requestIntervalMs);
+        std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+    }
+    return std::nullopt;
+}
+
+static std::string mixedEdgeKey(const std::string& first,const std::string& second){
+    return first<second?first+"|"+second:second+"|"+first;
+}
+
+static nlohmann::json sortedJsonArray(const std::unordered_set<std::string>& values){
+    std::vector<std::string> sorted(values.begin(),values.end());
+    std::sort(sorted.begin(),sorted.end());
+    return sorted;
+}
+
+static bool writeMixedManifest(const MixedPrepareOptions& options,
+                               const std::vector<MixedAccountRecord>& accounts,
+                               const std::vector<MixedGroupRecord>& groups,
+                               const std::unordered_set<std::string>& completedEdges){
+    nlohmann::json accountEntries=nlohmann::json::array();
+    for(const auto& account:accounts){
+        accountEntries.push_back({
+            {"accountId",account.credential.accountId},
+            {"password",account.credential.password},
+            {"username",account.credential.username},
+            {"groupIds",sortedJsonArray(account.groupIds)},
+            {"friendAccountIds",sortedJsonArray(account.friendAccountIds)}
+        });
+    }
+    nlohmann::json groupEntries=nlohmann::json::array();
+    for(const auto& group:groups){
+        groupEntries.push_back({
+            {"groupIndex",group.groupIndex},
+            {"groupId",group.groupId},
+            {"groupName",group.groupName},
+            {"ownerAccountId",group.ownerAccountId},
+            {"members",group.members}
+        });
+    }
+    size_t friendLinks=0;
+    for(const auto& account:accounts){
+        friendLinks+=account.friendAccountIds.size();
+    }
+    nlohmann::json document{
+        {"sourceAccountsFile",options.accountsPath},
+        {"accounts",std::move(accountEntries)},
+        {"groups",std::move(groupEntries)},
+        {"completedFriendEdges",sortedJsonArray(completedEdges)},
+        {"summary",{
+            {"accountCount",accounts.size()},
+            {"groupCount",groups.size()},
+            {"targetGroupCount",options.groupCount},
+            {"membersPerGroup",options.membersPerGroup},
+            {"friendEdgeCount",completedEdges.size()},
+            {"friendLinkCount",friendLinks},
+            {"targetFriendDegree",options.friendDegree},
+            {"ready",groups.size()==options.groupCount&&
+                     completedEdges.size()==accounts.size()*(options.friendDegree/2)}
+        }}
+    };
+    return writeJsonDocument(options.outputPath,document);
+}
+
+static bool loadMixedCheckpoint(const MixedPrepareOptions& options,
+                                std::vector<MixedAccountRecord>& accounts,
+                                std::vector<MixedGroupRecord>& groups,
+                                std::unordered_set<std::string>& completedEdges){
+    if(!options.resume||!std::filesystem::exists(options.outputPath)){
+        return true;
+    }
+    std::ifstream input(options.outputPath);
+    nlohmann::json document;
+    try{
+        input>>document;
+    }
+    catch(const std::exception& e){
+        std::cerr<<"invalid mixed checkpoint: "<<e.what()<<std::endl;
+        return false;
+    }
+    if(document.contains("summary")&&document["summary"].is_object()){
+        const auto& summary=document["summary"];
+        if(summary.value("targetGroupCount",options.groupCount)!=options.groupCount||
+           summary.value("membersPerGroup",options.membersPerGroup)!=options.membersPerGroup||
+           summary.value("targetFriendDegree",options.friendDegree)!=options.friendDegree){
+            std::cerr<<"checkpoint topology differs from current mixed preparation options\n";
+            return false;
+        }
+    }
+    std::unordered_map<std::string,size_t> accountIndex;
+    for(size_t index=0;index<accounts.size();++index){
+        accountIndex.emplace(accounts[index].credential.accountId,index);
+    }
+    if(document.contains("accounts")&&document["accounts"].is_array()){
+        for(const auto& entry:document["accounts"]){
+            const auto found=accountIndex.find(entry.value("accountId",""));
+            if(found==accountIndex.end()){
+                continue;
+            }
+            if(entry.contains("groupIds")&&entry["groupIds"].is_array()){
+                for(const auto& groupId:entry["groupIds"]){
+                    if(groupId.is_string()) accounts[found->second].groupIds.insert(groupId.get<std::string>());
+                }
+            }
+            if(entry.contains("friendAccountIds")&&entry["friendAccountIds"].is_array()){
+                for(const auto& friendId:entry["friendAccountIds"]){
+                    if(friendId.is_string()) accounts[found->second].friendAccountIds.insert(friendId.get<std::string>());
+                }
+            }
+        }
+    }
+    if(document.contains("groups")&&document["groups"].is_array()){
+        for(const auto& entry:document["groups"]){
+            if(!entry.is_object()||!entry.contains("members")||!entry["members"].is_array()){
+                continue;
+            }
+            MixedGroupRecord group;
+            group.groupIndex=entry.value("groupIndex",groups.size());
+            group.groupId=entry.value("groupId","");
+            group.groupName=entry.value("groupName","");
+            group.ownerAccountId=entry.value("ownerAccountId","");
+            group.members=entry["members"].get<std::vector<std::string>>();
+            if(!group.groupId.empty()&&group.members.size()==options.membersPerGroup){
+                groups.push_back(std::move(group));
+            }
+        }
+    }
+    if(document.contains("completedFriendEdges")&&document["completedFriendEdges"].is_array()){
+        for(const auto& edge:document["completedFriendEdges"]){
+            if(edge.is_string()) completedEdges.insert(edge.get<std::string>());
+        }
+    }
+    std::cout<<"resumed groups="<<groups.size()<<" friend_edges="<<completedEdges.size()<<std::endl;
+    return true;
+}
+
+static std::string makeMixedGroupName(const MixedPrepareOptions& options,size_t groupIndex,
+                                      int64_t runSuffix){
+    const std::string suffix="_"+std::to_string(groupIndex+1)+"_"+std::to_string(runSuffix);
+    constexpr size_t maxLength=64;
+    if(options.groupNamePrefix.size()+suffix.size()<=maxLength){
+        return options.groupNamePrefix+suffix;
+    }
+    return options.groupNamePrefix.substr(0,maxLength-suffix.size())+suffix;
+}
+
+static int runBatchPrepareMixed(int argc,char** argv){
+    auto optionsResult=parseMixedPrepareOptions(argc,argv);
+    if(!optionsResult){
+        return argc>=3&&std::string(argv[2])=="--help"?0:2;
+    }
+    const MixedPrepareOptions options=std::move(*optionsResult);
+    auto credentialsResult=loadMixedCredentials(options.accountsPath);
+    if(!credentialsResult){
+        return 3;
+    }
+    const auto& credentials=*credentialsResult;
+    const size_t groupAccountCount=options.groupCount*options.membersPerGroup;
+    if(groupAccountCount>credentials.size()||options.friendDegree>=credentials.size()){
+        std::cerr<<"need at least groups*members-per-group accounts and friend-degree < account count\n";
+        return 3;
+    }
+
+    std::vector<MixedAccountRecord> accounts;
+    accounts.reserve(credentials.size());
+    for(const auto& credential:credentials){
+        accounts.push_back(MixedAccountRecord{.credential=credential});
+    }
+    std::vector<MixedGroupRecord> groups;
+    std::unordered_set<std::string> completedEdges;
+    if(!loadMixedCheckpoint(options,accounts,groups,completedEdges)){
+        return 4;
+    }
+    if(!options.resume&&!writeMixedManifest(options,accounts,groups,completedEdges)){
+        return 4;
+    }
+    std::unordered_set<size_t> completedGroupIndexes;
+    for(const auto& group:groups){
+        completedGroupIndexes.insert(group.groupIndex);
+    }
+
+    const auto runSuffix=std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    for(size_t groupIndex=0;groupIndex<options.groupCount;++groupIndex){
+        if(completedGroupIndexes.count(groupIndex)>0){
+            continue;
+        }
+        const size_t firstAccount=groupIndex*options.membersPerGroup;
+        const auto& owner=credentials[firstAccount];
+        BatchConnection ownerConnection;
+        ClientState ownerState;
+        std::string error;
+        if(!connectAndLoginMixed(ownerConnection,options,owner,ownerState,error)){
+            std::cerr<<"group owner login failed accountId="<<owner.accountId
+                     <<" error="<<error<<std::endl;
+            return 5;
+        }
+        CommandBuilder ownerBuilder;
+        MixedGroupRecord group;
+        group.groupIndex=groupIndex;
+        group.groupName=makeMixedGroupName(options,groupIndex,runSuffix);
+        group.ownerAccountId=owner.accountId;
+        auto createResponse=requestMixedWithRateLimit(
+            ownerConnection,ownerBuilder.buildCreateGroupReq(ownerState,group.groupName),options);
+        if(!createResponse||!createResponse->value("ok",false)||
+           !createResponse->contains("data")||!(*createResponse)["data"].is_object()||
+           !(*createResponse)["data"].contains("groupId")){
+            std::cerr<<"create mixed group failed index="<<groupIndex
+                     <<" error="<<(createResponse?responseMessage(*createResponse):ownerConnection.lastError())
+                     <<std::endl;
+            return 5;
+        }
+        group.groupId=(*createResponse)["data"]["groupId"].get<std::string>();
+        group.members.push_back(owner.accountId);
+        accounts[firstAccount].groupIds.insert(group.groupId);
+
+        for(size_t memberOffset=1;memberOffset<options.membersPerGroup;++memberOffset){
+            const size_t accountIndex=firstAccount+memberOffset;
+            const auto& member=credentials[accountIndex];
+            BatchConnection memberConnection;
+            ClientState memberState;
+            error.clear();
+            if(!connectAndLoginMixed(memberConnection,options,member,memberState,error)){
+                std::cerr<<"group applicant login failed accountId="<<member.accountId
+                         <<" error="<<error<<std::endl;
+                return 5;
+            }
+            CommandBuilder memberBuilder;
+            auto applyResponse=requestMixedWithRateLimit(
+                memberConnection,
+                memberBuilder.buildApplyGroupJoinReq(memberState,group.groupId,
+                                                      "mixed load test membership"),options);
+            if(!applyResponse||!applyResponse->value("ok",false)||
+               !applyResponse->contains("data")||!(*applyResponse)["data"].is_object()){
+                std::cerr<<"group application failed accountId="<<member.accountId
+                         <<" error="<<(applyResponse?responseMessage(*applyResponse):memberConnection.lastError())
+                         <<std::endl;
+                return 5;
+            }
+            const auto& applyData=(*applyResponse)["data"];
+            bool memberReady=applyData.value("alreadyIn",false);
+            if(!memberReady&&(applyData.value("submitted",false)||
+                              applyData.value("alreadyPending",false))){
+                auto reviewResponse=requestMixedWithRateLimit(
+                    ownerConnection,
+                    ownerBuilder.buildReviewGroupJoinReq(ownerState,group.groupId,
+                                                         member.accountId,true),options);
+                if(reviewResponse&&reviewResponse->value("ok",false)&&
+                   reviewResponse->contains("data")&&(*reviewResponse)["data"].is_object()){
+                    const auto& reviewData=(*reviewResponse)["data"];
+                    memberReady=reviewData.value("memberAdded",false)||
+                                reviewData.value("approved",false);
+                }
+                if(!memberReady){
+                    std::cerr<<"group approval failed accountId="<<member.accountId
+                             <<" error="<<(reviewResponse?responseMessage(*reviewResponse):ownerConnection.lastError())
+                             <<std::endl;
+                    return 5;
+                }
+            }
+            if(!memberReady){
+                std::cerr<<"group membership not confirmed accountId="<<member.accountId<<std::endl;
+                return 5;
+            }
+            group.members.push_back(member.accountId);
+            accounts[accountIndex].groupIds.insert(group.groupId);
+            if(options.requestIntervalMs>0){
+                std::this_thread::sleep_for(std::chrono::milliseconds(options.requestIntervalMs));
+            }
+        }
+        groups.push_back(std::move(group));
+        completedGroupIndexes.insert(groupIndex);
+        if(!writeMixedManifest(options,accounts,groups,completedEdges)){
+            return 6;
+        }
+        std::cout<<"prepared group "<<(groupIndex+1)<<'/'<<options.groupCount
+                 <<" groupId="<<groups.back().groupId<<std::endl;
+    }
+
+    const size_t halfDegree=options.friendDegree/2;
+    const size_t expectedEdges=accounts.size()*halfDegree;
+    size_t newEdgesSinceCheckpoint=0;
+    for(size_t sourceIndex=0;sourceIndex<accounts.size();++sourceIndex){
+        BatchConnection requesterConnection;
+        ClientState requesterState;
+        std::string error;
+        bool requesterConnected=false;
+        CommandBuilder requesterBuilder;
+        for(size_t offset=1;offset<=halfDegree;++offset){
+            const size_t targetIndex=(sourceIndex+offset)%accounts.size();
+            const auto& requester=credentials[sourceIndex];
+            const auto& receiver=credentials[targetIndex];
+            const std::string edgeKey=mixedEdgeKey(requester.accountId,receiver.accountId);
+            if(completedEdges.count(edgeKey)>0){
+                continue;
+            }
+            if(!requesterConnected){
+                if(!connectAndLoginMixed(requesterConnection,options,requester,requesterState,error)){
+                    std::cerr<<"friend requester login failed accountId="<<requester.accountId
+                             <<" error="<<error<<std::endl;
+                    return 7;
+                }
+                requesterConnected=true;
+            }
+            auto sendResponse=requestMixedWithRateLimit(
+                requesterConnection,
+                requesterBuilder.buildSendFriendRequestReq(requesterState,receiver.accountId),options);
+            uint64_t requestId=0;
+            bool alreadyFriends=false;
+            bool pendingRequest=false;
+            if(sendResponse&&sendResponse->value("ok",false)&&sendResponse->contains("data")&&
+               (*sendResponse)["data"].is_object()){
+                requestId=(*sendResponse)["data"].value("requestId",uint64_t{0});
+            }
+            else if(sendResponse){
+                const int code=sendResponse->value("code",-1);
+                alreadyFriends=code==static_cast<int>(im::ErrorCode::ALREADY_FRIENDS);
+                pendingRequest=code==static_cast<int>(im::ErrorCode::FRIEND_REQUEST_EXISTS)||
+                               code==static_cast<int>(im::ErrorCode::USER_EXISTS)||
+                               code==static_cast<int>(im::ErrorCode::Conflict);
+                if(!alreadyFriends&&!pendingRequest){
+                    std::cerr<<"friend request failed from="<<requester.accountId
+                             <<" to="<<receiver.accountId<<" code="<<code
+                             <<" error="<<responseMessage(*sendResponse)<<std::endl;
+                    return 7;
+                }
+            }
+            else{
+                std::cerr<<"friend request failed from="<<requester.accountId
+                         <<" to="<<receiver.accountId
+                         <<" error="<<requesterConnection.lastError()<<std::endl;
+                return 7;
+            }
+
+            if(!alreadyFriends){
+                BatchConnection receiverConnection;
+                ClientState receiverState;
+                error.clear();
+                if(!connectAndLoginMixed(receiverConnection,options,receiver,receiverState,error)){
+                    std::cerr<<"friend receiver login failed accountId="<<receiver.accountId
+                             <<" error="<<error<<std::endl;
+                    return 7;
+                }
+                CommandBuilder receiverBuilder;
+                if(pendingRequest&&requestId==0){
+                    auto listResponse=requestMixedWithRateLimit(
+                        receiverConnection,receiverBuilder.buildListFriendRequestReq(receiverState),options);
+                    if(listResponse&&listResponse->value("ok",false)&&
+                       listResponse->contains("data")&&(*listResponse)["data"].is_object()&&
+                       (*listResponse)["data"].contains("requests")&&
+                       (*listResponse)["data"]["requests"].is_array()){
+                        for(const auto& request:(*listResponse)["data"]["requests"]){
+                            if(request.value("accountId","")==requester.accountId){
+                                requestId=request.value("requestId",uint64_t{0});
+                                break;
+                            }
+                        }
+                    }
+                }
+                if(requestId==0){
+                    std::cerr<<"cannot resolve friend request id from="<<requester.accountId
+                             <<" to="<<receiver.accountId<<std::endl;
+                    return 7;
+                }
+                auto acceptResponse=requestMixedWithRateLimit(
+                    receiverConnection,
+                    receiverBuilder.buildAcceptFriendRequestReq(receiverState,
+                                                                std::to_string(requestId)),options);
+                if(!acceptResponse||(!acceptResponse->value("ok",false)&&
+                   acceptResponse->value("code",-1)!=static_cast<int>(im::ErrorCode::ALREADY_FRIENDS))){
+                    std::cerr<<"accept friend request failed requestId="<<requestId
+                             <<" error="<<(acceptResponse?responseMessage(*acceptResponse):receiverConnection.lastError())
+                             <<std::endl;
+                    return 7;
+                }
+            }
+
+            completedEdges.insert(edgeKey);
+            accounts[sourceIndex].friendAccountIds.insert(receiver.accountId);
+            accounts[targetIndex].friendAccountIds.insert(requester.accountId);
+            ++newEdgesSinceCheckpoint;
+            if(options.requestIntervalMs>0){
+                std::this_thread::sleep_for(std::chrono::milliseconds(options.requestIntervalMs));
+            }
+            if(newEdgesSinceCheckpoint>=options.checkpointEvery){
+                if(!writeMixedManifest(options,accounts,groups,completedEdges)){
+                    return 8;
+                }
+                newEdgesSinceCheckpoint=0;
+                std::cout<<"friend edges "<<completedEdges.size()<<'/'<<expectedEdges<<std::endl;
+            }
+        }
+    }
+    if(!writeMixedManifest(options,accounts,groups,completedEdges)){
+        return 8;
+    }
+    std::cout<<"mixed load data ready: groups="<<groups.size()
+             <<" friend_edges="<<completedEdges.size()
+             <<" manifest="<<options.outputPath<<std::endl;
+    std::cout<<"Manifest contains plaintext test passwords; protect and exclude it from production.\n";
+    return groups.size()==options.groupCount&&completedEdges.size()==expectedEdges?0:9;
+}
+
 static void recvLoop(int fd, std::atomic<bool>& running,ClientState& state) {
     Buffer in;
     char tmp[4096];
@@ -2227,6 +2858,9 @@ int main(int argc, char** argv) {
     }
     if(argc>=2&&std::string(argv[1])=="--batch-prepare-groups"){
         return runBatchPrepareGroups(argc,argv);
+    }
+    if(argc>=2&&std::string(argv[1])=="--batch-prepare-mixed"){
+        return runBatchPrepareMixed(argc,argv);
     }
 
     const char* ip = "127.0.0.1";
