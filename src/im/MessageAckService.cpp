@@ -58,12 +58,17 @@ storage::RepoValueResult<storage::ConversationReadResult> im::MessageAckService:
     if(!resultConversation.ok()){
         return {.status=resultConversation.status,.message=resultConversation.message};
     }
-    auto resultMessage=messageRepo_->markReadBefore(accountId,type,targetId,readMsgId,readAtMs);
-    if(!resultMessage.ok()){
-        return {.status=resultMessage.status,.message=resultMessage.message};
+    size_t receiptUpdated=0;
+    if(type==storage::ConversationType::Direct){
+        auto resultMessage=messageRepo_->markReadBefore(accountId,type,targetId,readMsgId,readAtMs);
+        if(!resultMessage.ok()){
+            return {.status=resultMessage.status,.message=resultMessage.message};
+        }
+        if(!resultMessage.value.has_value()){
+            return {.status=storage::RepoStatus::Internal,.message="markReadBefore value invalid"};
+        }
+        receiptUpdated=resultMessage.value.value();
     }
-    if(!resultMessage.value.has_value()){
-        return {.status=storage::RepoStatus::Internal,.message="markReadBefore value invalid"};
-    }
-    return {.status=storage::RepoStatus::Ok,.value=storage::ConversationReadResult{.type=type,.targetId=targetId,.readMsgId=readMsgId,.readAtMs=readAtMs,.receiptUpdated=resultMessage.value.value()}};
+
+    return {.status=storage::RepoStatus::Ok,.value=storage::ConversationReadResult{.type=type,.targetId=targetId,.readMsgId=readMsgId,.readAtMs=readAtMs,.receiptUpdated=receiptUpdated}};
 }

@@ -3,11 +3,12 @@
 
 namespace storage{
     void RepositoryBundle::shutdown(){
-        if(sqlPool){
-            sqlPool->stop();
-        }
         if(messageSqlPool){
             messageSqlPool->stop();
         }
+        if(sqlPool){
+            sqlPool->stop();
+        }
+
     }
 }

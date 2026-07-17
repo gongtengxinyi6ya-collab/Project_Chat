@@ -9,6 +9,7 @@ namespace infra::health{
         << ", sqlEnabled=" << snapshot.sqlEnabled
         << ", sqlHealthy=" << snapshot.sqlHealthy
         <<", SqlStats: "<<storage::formatSqlPoolStats(snapshot.sqlStats)
+        << ", messageSqlEnabled="<< snapshot.messageSqlEnabled<< ", messageSqlHealthy="<< snapshot.messageSqlHealthy<< ", messageSqlStats="<< storage::formatSqlPoolStats(snapshot.messageSqlStats)
         << ", redisEnabled=" << snapshot.redisEnabled
         << ", redisHealthy=" << snapshot.redisHealthy
         <<", redisPingChecked="<<snapshot.redisPingChecked

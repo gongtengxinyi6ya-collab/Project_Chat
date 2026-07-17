@@ -41,7 +41,11 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
         commonPool->stop();
         throw std::runtime_error("Failed to start message SQL connection pool");
     }
-    
+    if (!commonPool->healthy() ||!messagePool->healthy()) {
+        messagePool->stop();
+        commonPool->stop();
+        throw std::runtime_error("SQL pool health check failed");
+    }
     RepositoryBundle bundle;
     //通用池注入
     bundle.userRepo=std::make_shared<SqlUserRepo>(commonPool);
@@ -59,6 +63,7 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
     bundle.groupMessageWriteStore=std::make_shared<SqlGroupMessageWriteStore>(messagePool);
     bundle.messageSqlPool=messagePool;
 
+
     auto commonPoolStats = commonPool->stats();
     auto messagePoolStats=messagePool->stats();
     LOG_INFO("common SQL pool started total=" + std::to_string(commonPoolStats.total) +
@@ -68,8 +73,9 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
             " idle=" + std::to_string(messagePoolStats.idle) +
             " acquireTimeoutMs=" + std::to_string(messagePoolStats.acquireTimeoutMs)
         );
-        return bundle;
-    }
+    
+    return bundle;
+}
 #else
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& config){
     throw std::runtime_error("SQL backend is disabled at build time");

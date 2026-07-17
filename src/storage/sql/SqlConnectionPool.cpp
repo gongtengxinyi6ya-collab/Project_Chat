@@ -15,6 +15,13 @@ bool SqlConnectionPool::start(){
     for(size_t i=0;i<options_.poolSize;++i){
         auto conn=std::make_shared<SqlConnection>(config_,options_.statementCacheSize);
         if(!conn->connect()){
+            for(auto& create:connections_){//创建到一半失败时清理已创建连接
+                create->close();
+            }
+            while(!idle_.empty()){
+                idle_.pop();
+            }
+            connections_.clear();
             return false;
         }
         idle_.push(conn);

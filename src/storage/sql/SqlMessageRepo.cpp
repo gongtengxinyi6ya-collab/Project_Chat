@@ -218,6 +218,10 @@ RepoValueResult<MessageAckResult> SqlMessageRepo::markDeliveredBatch(const std::
     }
     //对msgIds排序去重
     auto clearIds=normalizeIds(msgIds);
+    if(clearIds.empty()){
+        return {.status = RepoStatus::Ok,.value = MessageAckResult{.requestedCount = msgIds.size(),.ackedCount = 0,.ignoredCount = msgIds.size()}
+};
+    }
     //转换为JSON数组
     auto idsJson=encodeIdsAsJson(clearIds);
     try{
@@ -277,12 +281,14 @@ RepoValueResult<MessageAckResult> SqlMessageRepo::markDeliveredBatch(const std::
         if(!upsertResult.ok()){
             return {.status=RepoStatus::SqlError,.message=upsertResult.error};
         }
-        if(result.affectedRows==0){
+        if(upsertResult.affectedRows==0){
             return {.status=RepoStatus::NotFound,.message=upsertResult.error};
         }
         //提交事务
         transation.commit();
-        return {.status=RepoStatus::Ok,.value=MessageAckResult{.requestedCount=count,.ackedCount=upsertResult.affectedRows,.ignoredCount=count-upsertResult.affectedRows}};
+        const auto requestedCount=msgIds.size();
+        const auto eligiableCount=static_cast<size_t>(count);
+        return {.status=RepoStatus::Ok,.value=MessageAckResult{.requestedCount=requestedCount,.ackedCount=eligiableCount,.ignoredCount=requestedCount-eligiableCount}};
     }catch(const std::exception&e){
         return {.status=RepoStatus::Internal,.message=e.what()};
     }

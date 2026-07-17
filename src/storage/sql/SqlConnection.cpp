@@ -238,7 +238,7 @@ SqlResult SqlConnection::commit(){
         autoCommit_=true;
         return SqlResult{.success=true};
     }catch(const sql::SQLException& e){
-        autoCommit_=true;        
+        markBroken();    
         return SqlResult{.success=false,.error=e.what(),.errorCode=e.getErrorCode(),.sqlState=e.getSQLState()};
     }
 }

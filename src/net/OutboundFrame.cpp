@@ -19,7 +19,7 @@ std::shared_ptr<const OutboundFrame> OutboundFrame::create(SharedPayload payload
 }
 
 OutboundFrame::OutboundFrame(SharedPayload payload,std::array<char,4> header)
-:payload_(std::move(payload)),header_(std::move(header)),frameBytes_(payload_->size()+header_.size()){
+:header_(std::move(header)),payload_(std::move(payload)),frameBytes_(payload_->size()+header_.size()){
     
 }
 }

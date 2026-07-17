@@ -2236,7 +2236,13 @@ void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMes
             {"groupId", command.groupId},
             {"msgId", command.msgId},
             {"serverTsMs", command.serverTsMs},
-            {"persisUs",result.persistUs},
+            {"queueWaitUs", result.queueWaitUs},
+            {"persistUs", result.persistUs},
+            {"fanoutSent", broadcastResult.sent},
+            {"fanoutDropped", broadcastResult.dropped()},
+            {"fanoutClosed", broadcastResult.closed},
+            {"fanoutOverloaded", broadcastResult.overloaded},
+            {"fanoutFailed", broadcastResult.failed}
         });
     sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"GROUP_MSG_RESP_OUT");
 }

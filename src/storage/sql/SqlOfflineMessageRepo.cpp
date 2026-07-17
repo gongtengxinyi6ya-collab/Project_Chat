@@ -116,7 +116,7 @@ RepoValueResult<size_t> SqlOfflineMessageRepo::ackOfflineMessagesBatch(const std
         return {.status=RepoStatus::SqlError,.message=result.error};
     }
     if(result.affectedRows==0){
-        return {.status=RepoStatus::NotFound,.message=result.error};
+        return {.status=RepoStatus::Ok,.value=static_cast<size_t>(result.affectedRows)};
     }
     return {.status=RepoStatus::Ok,.value=result.affectedRows};
     

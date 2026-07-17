@@ -59,7 +59,8 @@ public:
         size_t noSuchConnection{0};//已失效的连接数量
         size_t closed{0};//已经关闭连接数量
         size_t overloaded{0};//满连接数量
-        size_t failed()const{return noSuchConnection+closed+overloaded;}//返回失败设备总数
+        size_t internalFailed{0};//失败数量
+        size_t failed()const{return noSuchConnection+closed+overloaded+internalFailed;}//返回失败设备总数
         bool delivered()const{return sent>0;}//是否至少投递到一个设备
     };
     //回调类型

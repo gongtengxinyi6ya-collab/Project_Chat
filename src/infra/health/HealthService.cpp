@@ -44,6 +44,7 @@ HealthSnapshot HealthService::snapshot(){
     HealthSnapshot snapshot;
     fillRuntimeStats(snapshot);
     checkSql(snapshot);
+    checkMessageSql(snapshot);
     checkRedis(snapshot);
 
     fillLoggerStats(snapshot);
@@ -238,6 +239,18 @@ void HealthService::decideStatus(HealthSnapshot& snapshot){
     if ( snapshot.sqlAcquireTimeoutIncreased) {//SQL获取连接超时
         snapshot.status = HealthStatus::Degraded;
         addReason(snapshot,"sql acquire timeout occurred");
+    }
+
+    if (snapshot.messageSqlEnabled &&!snapshot.messageSqlHealthy) {
+        snapshot.status = HealthStatus::Unhealthy;
+        addReason(snapshot, "message sql unhealthy");
+    }
+
+    if (snapshot.messageSqlAcquireTimeoutIncreased) {
+        if (snapshot.status != HealthStatus::Unhealthy) {
+            snapshot.status = HealthStatus::Degraded;
+        }
+        addReason(snapshot,"message sql acquire timeout occurred");
     }
 
     //维护任务异常
