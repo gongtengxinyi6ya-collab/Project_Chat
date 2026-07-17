@@ -76,7 +76,7 @@ RepoValueResult<std::uint64_t> SqlGroupMessageWriteStore::commit(const im::Group
                     last_ts_ms = ?
                 WHERE group_id = ?;
             )",
-        {groupSeq,command.msgId,finalPreview,command.senderAccountId,command.senderUsername,command.serverTsMs});
+        {groupSeq,command.msgId,finalPreview,command.senderAccountId,command.senderUsername,command.serverTsMs,command.groupId});
         if(!updateResult.ok()){
             return {.status=RepoStatus::SqlError,.message=updateResult.error};
         }
@@ -98,7 +98,7 @@ RepoValueResult<std::uint64_t> SqlGroupMessageWriteStore::commit(const im::Group
             return {.status=RepoStatus::SqlError,.message=cursorResult.error};
         }
         if(cursorResult.affectedRows==0){
-            return {.status=RepoStatus::NotFound,.message=updateResult.error};
+            return {.status=RepoStatus::NotFound,.message=cursorResult.error};
         }
         
         //提交事务

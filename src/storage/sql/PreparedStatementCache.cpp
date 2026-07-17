@@ -41,7 +41,7 @@ sql::PreparedStatement* PreparedStatementCache::getOrPrepare(sql::Connection& co
             .statement=std::move(statement),
             .lruIterator=lru_.begin()};
         auto [insertedIt,inserted]=entries_.emplace(std::move(name),std::move(entry));
-        lru_.push_front(name);
+        
         if (!inserted) {
             lru_.pop_front();
             throw std::logic_error(
