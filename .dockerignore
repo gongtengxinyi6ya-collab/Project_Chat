@@ -1,0 +1,11 @@
+.git
+.gitignore
+.vscode
+build
+build-*
+cmake-build-*
+*.log
+core
+core.*
+*.docx
+*.pdf

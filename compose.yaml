@@ -1,0 +1,144 @@
+name: project-chat
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+    command:
+      - mysqld
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro,Z
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+    networks:
+      - backend
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+
+    environment:
+      TZ: Asia/Shanghai
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD}
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli -a "$${REDIS_PASSWORD}" ping | grep PONG
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - backend
+
+  chat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        ROCKY_VERSION: "10"
+        HIREDIS_VERSION: "1.3.0"
+        REDIS_PLUS_PLUS_VERSION: "1.3.15"
+
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+    environment:
+      TZ: Asia/Shanghai
+
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      SERVER_IO_THREADS: 4
+      SERVER_BACKGROUND_THREADS: 2
+      SERVER_BACKGROUND_QUEUE_CAPACITY: 1024
+
+      CHAT_STORAGE_TYPE: sql
+      CHAT_STORAGE_FALLBACK_TO_MEMORY: "false"
+
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      DB_DATABASE: ${MYSQL_DATABASE}
+      DB_POOL_SIZE: 8
+      DB_MESSAGE_POOL_SIZE: 4
+      DB_CONNECT_TIMEOUT_MS: 5000
+      DB_ACQUIRE_TIMEOUT_MS: 3000
+      DB_MESSAGE_ACQUIRE_TIMEOUT_MS: 500
+
+      REDIS_ENABLED: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: 0
+      REDIS_POOL_SIZE: 4
+      REDIS_CONNECT_TIMEOUT_MS: 3000
+      REDIS_SOCKET_TIMEOUT_MS: 3000
+      REDIS_KEY_PREFIX: "project_chat:"
+
+      LOG_LEVEL: INFO
+      LOG_TO_CONSOLE: "true"
+      LOG_TO_FILE: "false"
+      LOG_ASYNC_ENABLED: "true"
+
+      IM_ALLOW_DEBUG_AUTH: "false"
+      SNOWFLAKE_NODE_ID: 1
+
+    ports:
+      - "${CHAT_PORT}:8080"
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+        restart: true
+      redis:
+        condition: service_healthy
+        restart: true
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    networks:
+      - backend
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  backend:
+    driver: bridge
