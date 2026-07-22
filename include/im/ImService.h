@@ -74,6 +74,7 @@ public:
     using SubmitMessageTaskFn =std::function<infra::thread::TaskSubmitResult(const std::string& orderingKey,MessageTask)>;//提交消息持久化任务到工作线程池
     using PostToBaseLoopFn =std::function<bool(MessageTask)>;//投递持久化的结果任务到baseLoop线程
     using BatchSendFn = std::function<net::BatchSendResult(const std::vector<ConnKey>&, net::SharedPayload)>;
+    using SubmitDbTaskFn =std::function<infra::thread::TaskSubmitResult(MessageTask)>;//投递数据库查询任务
 
     explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig(),const IdConfig& idconfig=IdConfig());
     ~Imservice();
@@ -82,6 +83,7 @@ public:
     void setMessageAsyncExecutor(SubmitMessageTaskFn submitFn,PostToBaseLoopFn postFn);//注入群消息异步处理所需的两个执行器
     void stopAcceptingAsyncMessages();//服务关闭时禁止再接受新的异步消息任务
     void setBatchSender(BatchSendFn fn);
+    void setDbReadExecutor(SubmitDbTaskFn submitFn);
 
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
@@ -237,6 +239,7 @@ private:
     
     //异步私聊消息
     std::shared_ptr<DirectMessagePersistenceService> directMessagePersistence_;//私聊持久化服务
+    SubmitDbTaskFn submitDbReadTask_;
     struct PendingDirectMessageContext {//异步上下文
     std::weak_ptr<TcpConnection> senderConnection;
     ConnKey senderKey{0};

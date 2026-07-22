@@ -1000,7 +1000,7 @@ DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session
         case MsgType::ECHO_REQ:
             return DispatchResult::immediate(handleEcho(req,key,session));
         case MsgType::DM_REQ:
-            return DispatchResult::immediate(handleDm(req,key,session));
+            return handleDmAsync(req,key,session,connection);
         case MsgType::LIST_USERS_REQ:
             return DispatchResult::immediate(handleListUsers(req,key,session));
         case MsgType::CREATE_GROUP_REQ:
@@ -2009,7 +2009,7 @@ void Imservice::setBatchSender(BatchSendFn fn){
     }
 }
 DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
-auto err=guardAuthenticated(req,session);//校验登录
+    auto err=guardAuthenticated(req,session);//校验登录
     if(err.has_value()){
         return {.mode=DispatchMode::Immediate,.response=err.value()};
     }
@@ -2199,10 +2199,142 @@ net::BatchSendResult Imservice::sendEncodedPayload(const std::vector<ConnKey>& t
     return batchSend_(targets,std::move(sharedPayload));
 }
 
-DispatchResult Imservice::handleDmAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+DispatchResult Imservice::handleDmAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+auto err=guardAuthenticated(req,session);//校验登录
+    if(err.has_value()){
+        return {.mode=DispatchMode::Immediate,.response=err.value()};
+    }
+    //校验异步功能配置
+    if(!submitMessageTask_||!postToBaseLoop_||!directMessagePersistence_){
+        return DispatchResult{.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"group message pipeline unavailable")};
+    }
+    //服务停止接受新任务
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Message service is stopping"));
+    }
+    //连接已经关闭
+    if(!connection||connection->isClosed()){
+        return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Connection is closed"));
+    }
+    //发消息限流
+    if(rateLimiter_){
+        auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
+        }    
+    }
 
+    //解析接收账号
+    std::string receiverAccountId;
+    auto getReceiver=getStringField(req,"receiverAccountId",receiverAccountId);
+    if(getReceiver){
+        return {.mode=DispatchMode::Immediate,.response=getReceiver.value()};
+    }
+    std::string content;
+    auto getContent=getStringField(req,"content",content);
+    if(getContent){
+        return {.mode=DispatchMode::Immediate,.response=getContent.value()};
+    }
+    if(content.size()>imConfig_.maxMessageLen){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::BAD_REQUEST,"Message content is too long")};
+    }
+    //生成msgId和时间戳
+    uint64_t serverTsMs=nowMs();
+    uint64_t msgId=nextMessageId();
+    auto conversationKey=common::buildDirectConversationKey(session.accountId_,receiverAccountId);
+
+    //构造Command
+    DirectMessageWriteCommand command{.msgId=msgId,.serverTsMs=serverTsMs,.conversationKey=conversationKey,
+        .senderAccountId=session.accountId_,.receiverAccountId=receiverAccountId,
+        .senderUsername=session.username_,
+        .content=content
+    };
+    //构造异步完成上下文
+    std::weak_ptr<TcpConnection> weakConn=connection;
+    PendingDirectMessageContext context{.senderConnection=weakConn,.senderKey=key,.request=req,
+        .senderAccountId=session.accountId_,.senderUsername=session.username_,
+        .receiverAccountId=receiverAccountId,.msgId=msgId,.serverTsMs=serverTsMs
+    };
+    //向专用线程提交任务
+    auto persistenceService=directMessagePersistence_;
+    auto postToBaseLoop=postToBaseLoop_;
+    auto enqueueAt=std::chrono::steady_clock::now();
+    auto submitResult=submitMessageTask_("dm:"+conversationKey,[enqueueAt,this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
+        //baseLoop提交任务交给消息线程处理
+        auto start=std::chrono::steady_clock::now();//记录开始任务时间
+        
+        auto writeResult=persistenceService->persist(command);//消息线程处理持久化
+        writeResult.queueWaitUs=std::chrono::duration_cast<std::chrono::microseconds>(start-enqueueAt).count();
+        auto posted=postToBaseLoop([this,context=std::move(context),command=std::move(command),writeResult=std::move(writeResult)]()mutable{
+        //提交回baseLoop
+        completeDirectMessage(std::move(context),std::move(command),std::move(writeResult));
+        });
+        if(!posted){
+            LOG_WARN("Failed to post group message completion to baseLoop");
+        }
+    });
+    //处理提交结果
+    return submitResultMapToDispatchResult(req,submitResult);
+    
 }
 void Imservice::completeDirectMessage(PendingDirectMessageContext context,DirectMessageWriteCommand command, DirectMessageWriteResult result){
+//
+    auto conn=context.senderConnection.lock();
+    Session* currentSession=nullptr;
+    if(conn&&!conn->isClosed()){//连接未关闭
+        currentSession=sessionManager_.find(context.senderKey);
+        if(currentSession&&currentSession->accountId_!=context.senderAccountId){
+            currentSession=nullptr;
+        }
+    }
+    if(!result.durable()){//消息持久化失败
+        LOG_ERROR("Failed to persist direct message");
+        if(currentSession){
+            auto resp=makeRepoError(context.request,result.commitResult.status,result.commitResult.message);
+            sendResponseWithLog(context.senderKey,context.request,resp,*currentSession,"DIRECT_MSG_PERSIST_FAILED");
+        }
+        return;
+    }
+    //构成推送响应
+    Response push{
+        .ver = context.request.ver,
+        .req_id = 0,
+        .type = MsgType::DM_PUSH,
+        .ok = true,
+        .code = ErrorCode::OK,
+        .msg = "New group message",
+        .data = nlohmann::json{
+            {"fromAccountId", command.senderAccountId},
+            {"fromUsername", command.senderUsername},
+            {"receiverAccountId",command.receiverAccountId},
+            {"conversationKey", command.conversationKey},
+            {"content", command.content},
+            {"msgId", command.msgId},
+            {"serverTsMs", command.serverTsMs}
+        }
+    };
+    //广播消息
+    auto pushResult=pushToAccount(command.receiverAccountId,push);
 
+    if (!currentSession) {
+        return;
+    }
+    Response response = makeOk(
+        context.request,
+        MsgType::GROUP_MSG_RESP,
+        nlohmann::json{
+            {"conversatinKey", command.conversationKey},
+            {"msgId", command.msgId},
+            {"serverTsMs", command.serverTsMs},
+            {"queueWaitUs", result.queueWaitUs},
+            {"persistUs", result.persistUs},
+            {"sent", pushResult.sent},
+            {"noConnection", pushResult.noSuchConnection},
+            {"closed", pushResult.closed},
+            {"overloaded", pushResult.overloaded},
+            {"failed", pushResult.failed()}
+        });
+    sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"GROUP_MSG_RESP_OUT");
 }
 }

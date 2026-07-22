@@ -34,12 +34,12 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     });
     if(messageExecutor_){
         imService_->setMessageAsyncExecutor(
-            [this](const std::string& groupId,std::function<void()>task)->infra::thread::TaskSubmitResult{
+            [this](const std::string& orderingKey,std::function<void()>task)->infra::thread::TaskSubmitResult{
                 //注入工作任务提交
                 if(!messageExecutor_){
                     return infra::thread::TaskSubmitResult::Stopping;
                 }
-                return messageExecutor_->submit(groupId,std::move(task));
+                return messageExecutor_->submit(orderingKey,std::move(task));
             },
             [this](std::function<void()>task)->bool{
                 if(!baseloop_||!task){
