@@ -2198,4 +2198,11 @@ net::BatchSendResult Imservice::sendEncodedPayload(const std::vector<ConnKey>& t
     auto sharedPayload=std::make_shared<const std::string>(std::move(payload));
     return batchSend_(targets,std::move(sharedPayload));
 }
+
+DispatchResult Imservice::handleDmAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+
+}
+void Imservice::completeDirectMessage(PendingDirectMessageContext context,DirectMessageWriteCommand command, DirectMessageWriteResult result){
+
+}
 }

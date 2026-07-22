@@ -26,6 +26,8 @@
 #include "id/SnowflakeGenerator.h"
 #include "security/rate_limit/RateLimitKeyType.h"
 #include "im/GroupMessagePersistenceTypes.h"
+#include "im/DirectMessagePersistenceService.h"
+#include "im/DirectMessagePersistenceTypes.h"
 
 #include "infra/thread/ThreadTypes.h"
 
@@ -50,6 +52,7 @@ namespace im{
     class GroupService;//群管理服务
     class GroupJoinService;//管理入群申请
     class GroupMessagePersistenceService;//消息一致性服务
+    class DirectMessagePersistenceService;
 class Imservice{
 public:
     
@@ -232,6 +235,21 @@ private:
     std::vector<ConnKey> collectGroupTargets(const std::string& groupId, ConnKey excludedKey) const;//获取群成员在线连接
     net::BatchSendResult sendEncodedPayload(const std::vector<ConnKey>& targets, std::string payload);//接收一份已经完成的JSON编码字符串，构造共享payload,并批量发送给多个连接
     
+    //异步私聊消息
+    std::shared_ptr<DirectMessagePersistenceService> directMessagePersistence_;//私聊持久化服务
+    struct PendingDirectMessageContext {//异步上下文
+    std::weak_ptr<TcpConnection> senderConnection;
+    ConnKey senderKey{0};
+    Request request;
 
+    std::string senderAccountId;
+    std::string senderUsername;
+    std::string receiverAccountId;
+
+    std::uint64_t msgId{0};
+    std::uint64_t serverTsMs{0};
+};
+    DispatchResult handleDmAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    void completeDirectMessage(PendingDirectMessageContext context,DirectMessageWriteCommand command, DirectMessageWriteResult result);
 };
 }

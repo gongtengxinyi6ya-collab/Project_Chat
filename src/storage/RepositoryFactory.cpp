@@ -17,6 +17,7 @@
 #include "storage/sql/SqlConversationRepo.h"
 #include "storage/sql/SqlGroupJoinRequestRepo.h"
 #include "storage/sql/SqlGroupMessageWriteStore.h"
+#include "storage/sql/SqlDirectMessageWriteStore.h"
 storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseConfig& dbConfig){
     //创建通用连接池
     SqlConnectionPoolOptions commonOptions{
@@ -61,6 +62,7 @@ storage::RepositoryBundle storage::RepositoryFactory::createSql(const DatabaseCo
     bundle.offlineMessageRepo=std::make_shared<SqlOfflineMessageRepo>(messagePool);
     bundle.conversationRepo=std::make_shared<SqlConversationRepo>(messagePool);
     bundle.groupMessageWriteStore=std::make_shared<SqlGroupMessageWriteStore>(messagePool);
+    bundle.directMessageWriteStore=std::make_shared<SqlDirectMessageWriteStore>(messagePool);
     bundle.messageSqlPool=messagePool;
 
 
