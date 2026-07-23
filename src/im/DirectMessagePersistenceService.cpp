@@ -27,9 +27,13 @@ DirectMessageWriteResult DirectMessagePersistenceService::persist(const DirectMe
         return msgWriteRes;
     }catch(const std::exception& e){
         msgWriteRes.exceptionMessage=e.what();
+        msgWriteRes.commitResult = {storage::RepoStatus::SqlError,e.what()
+};
         return msgWriteRes;
     }catch(...){
         msgWriteRes.exceptionMessage="unknow exception";
+        msgWriteRes.commitResult = { storage::RepoStatus::Internal,"unknown direct message persistence exception"
+};
         return msgWriteRes;
     }
 }

@@ -9,7 +9,7 @@ namespace storage{
 SqlDirectMessageWriteStore::SqlDirectMessageWriteStore(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
     if(!pool_){
-        std::invalid_argument("sql pool for direct mesage write store invalid");
+        throw std::invalid_argument("sql pool for direct mesage write store invalid");
     }
 }
 
@@ -22,7 +22,7 @@ RepoResult SqlDirectMessageWriteStore::commit(const im::DirectMessageWriteComman
         return {.status=RepoStatus::Internal,.message="failed to connect the pool"};
     }
     try{
-        SqlTransaction transation;
+        SqlTransaction transation(*conn);
 
         //检查接收账号
         auto checkReciveResult=conn->queryPrepared("direct_message.check_receiver",
@@ -37,7 +37,7 @@ RepoResult SqlDirectMessageWriteStore::commit(const im::DirectMessageWriteComman
             return {.status=RepoStatus::SqlError,.message=checkReciveResult.error};
         }
         if(checkReciveResult.rows.empty()){
-            return {.status=RepoStatus::NotFound,.message=checkReciveResult.error};
+            return {.status=RepoStatus::UserNotFound,.message=checkReciveResult.error};
         }
 
         //检查好友关系
@@ -51,7 +51,7 @@ RepoResult SqlDirectMessageWriteStore::commit(const im::DirectMessageWriteComman
         LIMIT 1;
         )",
         {command.senderAccountId,command.receiverAccountId});
-        if(checkRelationResult.ok()){
+        if(!checkRelationResult.ok()){
             return {.status=RepoStatus::SqlError,.message=checkRelationResult.error};
         }
         if(checkRelationResult.rows.empty()){
@@ -112,7 +112,7 @@ RepoResult SqlDirectMessageWriteStore::commit(const im::DirectMessageWriteComman
             last_read_msg_id = VALUES(last_read_msg_id),
             last_read_at_ms = VALUES(last_read_at_ms);
         )",
-        {command.senderAccountId,command.conversationKey,
+        {command.senderAccountId,command.receiverAccountId,
         command.msgId,finalPreview,command.senderAccountId,
         command.senderUsername,command.serverTsMs,
         command.msgId,command.serverTsMs});
@@ -150,7 +150,7 @@ RepoResult SqlDirectMessageWriteStore::commit(const im::DirectMessageWriteComman
             last_ts_ms = VALUES(last_ts_ms),
             unread_count = unread_count + 1;
         )",
-        {command.receiverAccountId,command.conversationKey,
+        {command.receiverAccountId,command.senderAccountId,
         command.msgId,finalPreview,command.senderAccountId,
         command.senderUsername,command.serverTsMs,
         });
@@ -175,14 +175,12 @@ RepoResult SqlDirectMessageWriteStore::commit(const im::DirectMessageWriteComman
         ON DUPLICATE KEY UPDATE
             peer_account_id = VALUES(peer_account_id);
         )",
-        {command.receiverAccountId,command.msgId,command.conversationKey
+        {command.receiverAccountId,command.msgId,command.senderAccountId
         });
         if(!offlineResult.ok()){
             return {.status=RepoStatus::SqlError,.message=offlineResult.error};
         }
-        if(upsertReceiverResult.affectedRows==0){
-            return {.status=RepoStatus::NotFound,.message=upsertReceiverResult.error};
-        }
+        
         transation.commit();
         return {.status=RepoStatus::Ok};
     }catch(const std::exception& e){

@@ -50,6 +50,13 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
             }
         );
     }
+    dbReadExecutor_=std::make_unique<infra::thread::ThreadPool>(config_.server().backgroundThreads,config_.server().backgroundQueueCapacity);
+    imService_->setDbReadExecutor([this](std::function<void()> task){
+        if(!dbReadExecutor_){
+            return infra::thread::TaskSubmitResult::Stopping;
+        }
+        return dbReadExecutor_->submit(std::move(task));
+    })
     //创建healthService_
     healthService_=std::make_unique<infra::health::HealthService>();
     healthService_->setConfig(config_.health());

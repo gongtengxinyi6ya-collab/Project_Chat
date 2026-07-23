@@ -25,7 +25,7 @@
 
 #include "security/rate_limit/RateLimiter.h"
 #include "security/PasswordHasher.h"
-
+#include "storage/DirectMessageWriteStore.h"
 #include "logger/LogMacros.h"
 
 namespace im{
@@ -189,6 +189,10 @@ void Imservice::setRepositories(storage::RepositoryBundle repos){
     if(repos_.groupMessageWriteStore){
         groupMessagePersistence_=std::make_unique<GroupMessagePersistenceService>(repos_.groupMessageWriteStore);
     }
+    if(repos_.directMessageWriteStore){
+        directMessagePersistence_=std::make_unique<DirectMessagePersistenceService>(repos_.directMessageWriteStore);
+    }
+
 }
 void Imservice::setRateLimiter(std::unique_ptr<security::RateLimiter> limiter){
     rateLimiter_=std::move(limiter);
@@ -2008,6 +2012,12 @@ void Imservice::setBatchSender(BatchSendFn fn){
         throw std::invalid_argument("Batch send function invalid");
     }
 }
+void Imservice::setDbReadExecutor(SubmitDbTaskFn submitFn){
+    submitDbReadTask_=std::move(submitFn);
+    if(!submitDbReadTask_){
+        throw std::invalid_argument("Batch send function invalid");
+    }
+}
 DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
     auto err=guardAuthenticated(req,session);//校验登录
     if(err.has_value()){
@@ -2227,9 +2237,9 @@ auto err=guardAuthenticated(req,session);//校验登录
 
     //解析接收账号
     std::string receiverAccountId;
-    auto getReceiver=getStringField(req,"receiverAccountId",receiverAccountId);
-    if(getReceiver){
-        return {.mode=DispatchMode::Immediate,.response=getReceiver.value()};
+    std::string receiverAccountId = req.to;
+    if (receiverAccountId.empty()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::MISSING_FIELD,"Missing message recipient"));
     }
     std::string content;
     auto getContent=getStringField(req,"content",content);
@@ -2303,7 +2313,7 @@ void Imservice::completeDirectMessage(PendingDirectMessageContext context,Direct
         .type = MsgType::DM_PUSH,
         .ok = true,
         .code = ErrorCode::OK,
-        .msg = "New group message",
+        .msg = "New direct message",
         .data = nlohmann::json{
             {"fromAccountId", command.senderAccountId},
             {"fromUsername", command.senderUsername},
@@ -2322,18 +2332,19 @@ void Imservice::completeDirectMessage(PendingDirectMessageContext context,Direct
     }
     Response response = makeOk(
         context.request,
-        MsgType::GROUP_MSG_RESP,
+        MsgType::DM_RESP,
         nlohmann::json{
-            {"conversatinKey", command.conversationKey},
+            {"conversationKey", command.conversationKey},
             {"msgId", command.msgId},
             {"serverTsMs", command.serverTsMs},
             {"queueWaitUs", result.queueWaitUs},
             {"persistUs", result.persistUs},
+            {"delivered", pushResult.delivered()},
+            {"queuedOffline", !pushResult.delivered()},
             {"sent", pushResult.sent},
-            {"noConnection", pushResult.noSuchConnection},
+            {"failed", pushResult.failed()},
             {"closed", pushResult.closed},
-            {"overloaded", pushResult.overloaded},
-            {"failed", pushResult.failed()}
+            {"overloaded", pushResult.overloaded}
         });
     sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"GROUP_MSG_RESP_OUT");
 }
