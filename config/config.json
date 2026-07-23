@@ -61,6 +61,12 @@
     "slow_query_ms": 50
   },
   
+  "db_async": {
+  "enabled": true,
+  "worker_threads": 4,
+  "queue_capacity": 2048,
+  "queue_warn_percent": 80
+},
   "storage": {
   "type": "sql",
   "fallback_to_memory": false

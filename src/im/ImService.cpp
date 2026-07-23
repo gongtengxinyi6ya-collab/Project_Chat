@@ -2216,7 +2216,7 @@ auto err=guardAuthenticated(req,session);//校验登录
     }
     //校验异步功能配置
     if(!submitMessageTask_||!postToBaseLoop_||!directMessagePersistence_){
-        return DispatchResult{.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"group message pipeline unavailable")};
+        return DispatchResult{.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"direct message pipeline unavailable")};
     }
     //服务停止接受新任务
     if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
@@ -2236,7 +2236,6 @@ auto err=guardAuthenticated(req,session);//校验登录
     }
 
     //解析接收账号
-    std::string receiverAccountId;
     std::string receiverAccountId = req.to;
     if (receiverAccountId.empty()) {
         return DispatchResult::immediate(makeErr(req, ErrorCode::MISSING_FIELD,"Missing message recipient"));
@@ -2281,7 +2280,7 @@ auto err=guardAuthenticated(req,session);//校验登录
         completeDirectMessage(std::move(context),std::move(command),std::move(writeResult));
         });
         if(!posted){
-            LOG_WARN("Failed to post group message completion to baseLoop");
+            LOG_WARN("Failed to post direct message completion to baseLoop");
         }
     });
     //处理提交结果
@@ -2317,7 +2316,7 @@ void Imservice::completeDirectMessage(PendingDirectMessageContext context,Direct
         .data = nlohmann::json{
             {"fromAccountId", command.senderAccountId},
             {"fromUsername", command.senderUsername},
-            {"receiverAccountId",command.receiverAccountId},
+            {"toAccountId",command.receiverAccountId},
             {"conversationKey", command.conversationKey},
             {"content", command.content},
             {"msgId", command.msgId},
@@ -2346,6 +2345,6 @@ void Imservice::completeDirectMessage(PendingDirectMessageContext context,Direct
             {"closed", pushResult.closed},
             {"overloaded", pushResult.overloaded}
         });
-    sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"GROUP_MSG_RESP_OUT");
+    sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"DM_RESP_OUT");
 }
 }

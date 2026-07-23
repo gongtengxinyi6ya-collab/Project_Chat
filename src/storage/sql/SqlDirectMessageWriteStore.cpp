@@ -119,9 +119,6 @@ RepoResult SqlDirectMessageWriteStore::commit(const im::DirectMessageWriteComman
         if(!upsertSenderResult.ok()){
             return {.status=RepoStatus::SqlError,.message=upsertSenderResult.error};
         }
-        if(upsertSenderResult.affectedRows==0){
-            return {.status=RepoStatus::NotFound,.message=upsertSenderResult.error};
-        }
 
         //更新接收方会话
         std::string lastPreview=command.content;
@@ -156,9 +153,6 @@ RepoResult SqlDirectMessageWriteStore::commit(const im::DirectMessageWriteComman
         });
         if(!upsertReceiverResult.ok()){
             return {.status=RepoStatus::SqlError,.message=upsertReceiverResult.error};
-        }
-        if(upsertReceiverResult.affectedRows==0){
-            return {.status=RepoStatus::NotFound,.message=upsertReceiverResult.error};
         }
 
         //创建待投递索引
