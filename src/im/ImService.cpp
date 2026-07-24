@@ -1028,7 +1028,7 @@ DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session
         case MsgType::LIST_GROUPS_REQ:
             return DispatchResult::immediate(handleListGroups(req,key,session));
         case MsgType::GROUP_HISTORY_REQ:
-            return DispatchResult::immediate(handleGroupHistory(req,key,session));
+            return handleGroupHistoryAsync(req,key,session,connection);
         case MsgType::OFFLINE_LIST_REQ:
             return DispatchResult::immediate(handleOfflinelist(req,key,session));
         case MsgType::OFFLINE_ACK_REQ:
@@ -1060,7 +1060,7 @@ DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session
         case MsgType::REMOVE_FRIEND_REQ:
             return DispatchResult::immediate(handleRemoveFriend(req,key,session));
         case MsgType::DM_HISTORY_REQ:
-            return DispatchResult::immediate(handleDmHistory(req,key,session));
+            return handleDmHistoryAsync(req,key,session,connection);
         case MsgType::CONVERSATION_LIST_REQ:
             return DispatchResult::immediate(handleConversationList(req,key,session));
         case MsgType::CONVERSATION_READ_REQ:
@@ -2401,9 +2401,18 @@ DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key
     if(!historyQuery.ok){
         return {.mode=DispatchMode::Immediate,.response=makeErr(req,historyQuery.code,historyQuery.message)};
     }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
 
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate( makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
     if(!submitDbReadTask_||!postToBaseLoop_){
         return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"dbRead pipeline unavailable")};
+    }
+    if (!repos_.messageRepo) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"message repository unavailable"));
     }
     //构造上下文
     std::weak_ptr<TcpConnection> weakConn=connection;
@@ -2478,6 +2487,22 @@ DispatchResult Imservice::handleDmHistoryAsync(const Request& req,ConnKey key,Se
         if(resultOpt){
             return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
         }
+    }
+    //空指针检查
+    if (!submitDbReadTask_ || !postToBaseLoop_) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"database read pipeline unavailable"));
+    }
+
+    if (!friendService_ || !repos_.messageRepo) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"direct history dependency unavailable"));
+    }
+
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
+
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL, "connection is closed"));
     }
     //读取目标
     std::string peerAccountId;

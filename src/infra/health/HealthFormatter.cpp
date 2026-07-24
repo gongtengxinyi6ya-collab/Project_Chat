@@ -66,7 +66,29 @@ namespace infra::health{
     << ", messageRejectedFull="
     << snapshot.messageExecutorStats.rejectedFull
     << ", messageRejectedStopped="
-    << snapshot.messageExecutorStats.rejectedStopped;
+    << snapshot.messageExecutorStats.rejectedStopped
+    << ", dbReadExecutorEnabled="
+    << snapshot.dbReadExecutorEnabled
+    << ", dbReadExecutorHealthy="
+    << snapshot.dbReadExecutorHealthy
+    << ", dbReadExecutorSaturated="
+    << snapshot.dbReadExecutorSaturated
+    << ", dbReadWorkers="
+    << snapshot.dbReadExecutorStats.workerCount
+    << ", dbReadActive="
+    << snapshot.dbReadExecutorStats.activeTasks
+    << ", dbReadQueueSize="
+    << snapshot.dbReadExecutorStats.queuedTasks
+    << ", dbReadQueueCapacity="
+    << snapshot.dbReadExecutorStats.queueCapacity
+    << ", dbReadSubmitted="
+    << snapshot.dbReadExecutorStats.submittedTasks
+    << ", dbReadCompleted="
+    << snapshot.dbReadExecutorStats.completedTasks
+    << ", dbReadFailed="
+    << snapshot.dbReadExecutorStats.failedTasks
+    << ", dbReadRejectedFull="
+    << snapshot.dbReadExecutorStats.rejectedFull;
     return oss.str();
 }
 }

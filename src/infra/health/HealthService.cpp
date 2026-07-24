@@ -229,7 +229,7 @@ void HealthService::fillMessageExecutorStats(HealthSnapshot& snapshot) {
 }
 
 void HealthService::fillDbReadExecutorStats(HealthSnapshot& snapshot){
-if (!messageExecutorStatsProvider_) {
+if (!dbReadExecutorStatsProvider_) {
         snapshot.dbReadExecutorEnabled = false;
         snapshot.dbReadExecutorHealthy = true;
         return;
