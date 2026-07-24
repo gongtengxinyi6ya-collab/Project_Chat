@@ -32,6 +32,13 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
         baseloop_->assertInLoopThread();
         return sendBatchToConnKeys(keys,std::move(payload));
     });
+    imService_->setBaseLoopPoster([this](std::function<void()>task)->bool{
+        if(!baseloop_||!task){
+            return false;
+        }
+        baseloop_->queueInLoop(std::move(task));
+        return true;
+    });
     if(messageExecutor_){
         imService_->setMessageAsyncExecutor(
             [this](const std::string& orderingKey,std::function<void()>task)->infra::thread::TaskSubmitResult{
@@ -40,13 +47,6 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
                     return infra::thread::TaskSubmitResult::Stopping;
                 }
                 return messageExecutor_->submit(orderingKey,std::move(task));
-            },
-            [this](std::function<void()>task)->bool{
-                if(!baseloop_||!task){
-                    return false;
-                }
-                baseloop_->queueInLoop(std::move(task));
-                return true;
             }
         );
     }

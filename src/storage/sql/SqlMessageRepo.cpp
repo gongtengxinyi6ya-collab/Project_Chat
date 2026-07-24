@@ -47,7 +47,7 @@ SaveMessageResult SqlMessageRepo::saveGroupMessage(uint64_t msgId,const std::str
     }
     return SaveMessageResult{.status=RepoStatus::SqlError,.message="Failed to connect to the database"};
 }
-std::vector<MessageRecord> SqlMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
+RepoValueResult<std::vector<MessageRecord>> SqlMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
     if(groupId.empty()){
         return {};
     }
@@ -58,32 +58,34 @@ std::vector<MessageRecord> SqlMessageRepo::listGroupMessages(const std::string& 
         limit=100;
     }
     auto conn=pool_->acquire();
-    if(!conn){
-        return {};
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::Internal,.message="Failed to connect the database"};
     }
-    if(conn->connected()){
-        SqlResult result;
-        if(beforeMsgId==0)
-            result=conn->queryPrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? ORDER BY msg_id DESC LIMIT ?",{groupId,limit});
-        else
-            result=conn->queryPrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id<? ORDER BY msg_id DESC LIMIT ?",{groupId,beforeMsgId,limit});
-        if(result.ok()){
-                std::vector<MessageRecord> messages;
-                for(auto& row:result.rows){
-                    MessageRecord message;
-                    message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
-                    message.groupId=getString(row,"group_id");
-                    message.senderAccountId=getString(row,"sender_account_id");
-                    message.senderUsername=getString(row,"sender_username");
-                    message.content=getString(row,"content");
-                    message.serverTsMs=getUInt64(row,"server_ts_ms");
-                    messages.emplace_back(std::move(message));
-                }
-                return messages;
-            }
-            return {};
+    
+    SqlResult result;
+    if(beforeMsgId==0)
+        result=conn->queryPrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? ORDER BY msg_id DESC LIMIT ?",{groupId,limit});
+    else
+        result=conn->queryPrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id<? ORDER BY msg_id DESC LIMIT ?",{groupId,beforeMsgId,limit});
+    if(!result.ok()){
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    if(result.rows.empty()){
+        return {.status=RepoStatus::Ok,.value=std::vector<MessageRecord>{}};
+    }
+    std::vector<MessageRecord> messages;
+        for(auto& row:result.rows){
+            MessageRecord message;
+            message.messageId=getUInt64(row,"msg_id");//数据库结果从string转为uint64_t
+            message.groupId=getString(row,"group_id");
+            message.senderAccountId=getString(row,"sender_account_id");
+            message.senderUsername=getString(row,"sender_username");
+            message.content=getString(row,"content");
+            message.serverTsMs=getUInt64(row,"server_ts_ms");
+            messages.emplace_back(std::move(message));
         }
-    return {};
+    return {.status=RepoStatus::Ok,.value=messages};
+    
 }
 
 SaveMessageResult SqlMessageRepo::saveDirectMessage(uint64_t msgId,const std::string&conversationKey,const std::string&senderAccountId,const std::string& receiverAccountId,const std::string& senderUsername,const std::string&content,uint64_t serverTsMs){
@@ -101,7 +103,7 @@ SaveMessageResult SqlMessageRepo::saveDirectMessage(uint64_t msgId,const std::st
     return {.status=RepoStatus::Ok,.messageId=msgId};
 
 }
-std::vector<DirectMessageRecord> SqlMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
+RepoValueResult<std::vector<DirectMessageRecord>> SqlMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
     if(conversationKey.empty()){
         return {};
     }
@@ -120,10 +122,10 @@ std::vector<DirectMessageRecord> SqlMessageRepo::listDirectMessages(const std::s
         result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation_key=? AND msg_id<? ORDER BY msg_id DESC LIMIT ?",{conversationKey,beforeMsgId,limit});
     }
     if(!result.ok()){
-        return {};
+        return {.status=RepoStatus::SqlError,.message=result.error};
     }
     if(result.rows.empty()){
-        return {};
+        return {.status=RepoStatus::Ok,.value=std::vector<DirectMessageRecord>{}};
     }
     std::vector<DirectMessageRecord> messages;
     for(auto& row:result.rows){
@@ -137,10 +139,10 @@ std::vector<DirectMessageRecord> SqlMessageRepo::listDirectMessages(const std::s
         message.serverTsMs=getUInt64(row,"server_ts_ms");
         messages.emplace_back(std::move(message));
     }
-    return messages;
+    return {.status=RepoStatus::Ok,.value=messages};
 }
 
-std::vector<DirectMessageRecord> SqlMessageRepo::listDirectMessagesAfter(const std::string& conversationKey,uint64_t lastMsgId,size_t limit){
+RepoValueResult<std::vector<DirectMessageRecord>> SqlMessageRepo::listDirectMessagesAfter(const std::string& conversationKey,uint64_t lastMsgId,size_t limit){
     if(conversationKey.empty()){
         return {};
     }
@@ -157,10 +159,10 @@ std::vector<DirectMessageRecord> SqlMessageRepo::listDirectMessagesAfter(const s
     SqlResult result;
     result=conn->queryPrepared("SELECT msg_id,conversation_key,sender_account_id,receiver_account_id,sender_username,content,server_ts_ms FROM direct_messages WHERE conversation_key=? AND msg_id>? ORDER BY msg_id ASC LIMIT ?",{conversationKey,lastMsgId,limit});
     if(!result.ok()){
-        return {};
+        return {.status=RepoStatus::SqlError,.message=result.error};
     }
     if(result.rows.empty()){
-        return {};
+        return {.status=RepoStatus::Ok,.value=std::vector<DirectMessageRecord>{}};
     }
     std::vector<DirectMessageRecord> messages;
     for(auto& row:result.rows){
@@ -174,9 +176,9 @@ std::vector<DirectMessageRecord> SqlMessageRepo::listDirectMessagesAfter(const s
         message.serverTsMs=getUInt64(row,"server_ts_ms");
         messages.emplace_back(std::move(message));
     }
-    return messages;
+    return {.status=RepoStatus::Ok,.value=messages};
 }
-std::vector<MessageRecord> SqlMessageRepo::listGroupMessagesAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit){
+RepoValueResult<std::vector<MessageRecord>> SqlMessageRepo::listGroupMessagesAfter(const std::string& groupId,uint64_t lastMsgId,size_t limit){
     if(groupId.empty()){
         return {};
     }
@@ -192,7 +194,10 @@ std::vector<MessageRecord> SqlMessageRepo::listGroupMessagesAfter(const std::str
     }
     auto result=conn->queryPrepared("SELECT msg_id,group_id,sender_account_id,sender_username,content,server_ts_ms FROM messages WHERE group_id=? AND msg_id>? ORDER BY msg_id ASC LIMIT ?",{groupId,lastMsgId,limit});
     if(!result.ok()){
-        return {};
+        return {.status=RepoStatus::SqlError,.message=result.error};
+    }
+    if(result.rows.empty()){
+        return {.status=RepoStatus::Ok,.value=std::vector<MessageRecord>{}};
     }
     std::vector<MessageRecord> messages;
     for(auto& row:result.rows){
@@ -205,7 +210,7 @@ std::vector<MessageRecord> SqlMessageRepo::listGroupMessagesAfter(const std::str
         message.serverTsMs=getUInt64(row,"server_ts_ms");
         messages.emplace_back(std::move(message));
     }
-    return messages;
+    return {.status=RepoStatus::Ok,.value=messages};
 }
 
 RepoValueResult<MessageAckResult> SqlMessageRepo::markDeliveredBatch(const std::string&accountId,const std::vector<uint64_t>& msgIds,int64_t deliveredAtMs){

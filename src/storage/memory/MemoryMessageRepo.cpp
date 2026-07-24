@@ -1,5 +1,5 @@
 #include "storage/memory/MemoryMessageRepo.h"
-
+namespace storage{
 storage::SaveMessageResult storage::MemoryMessageRepo::saveGroupMessage(uint64_t msgId,const std::string& groupId,const std::string& senderAccountId,const std::string& senderUsername,const std::string& content,uint64_t serverTsMs){
     if(groupId.empty()||senderAccountId.empty()||content.empty()){
         return {RepoStatus::InvalidArgument,0,""};
@@ -17,7 +17,7 @@ storage::SaveMessageResult storage::MemoryMessageRepo::saveGroupMessage(uint64_t
     }
     return {RepoStatus::Ok,record.messageId,""};
 }
-std::vector<storage::MessageRecord> storage::MemoryMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
+RepoValueResult<std::vector<storage::MessageRecord>> storage::MemoryMessageRepo::listGroupMessages(const std::string& groupId,uint64_t beforeMsgId,size_t limit){
     if(groupId.empty()){
         return {};
     }
@@ -33,7 +33,7 @@ std::vector<storage::MessageRecord> storage::MemoryMessageRepo::listGroupMessage
             res.insert(res.end(),std::prev(messages.end(),limit),messages.end());
         }
         else{//否则返回所有消息
-            return messages;
+            return {};
         }
     }
     else{//当beforeMsgId不为0时，返回messageId小于beforeMsgId的消息，最多返回limit条
@@ -48,7 +48,7 @@ std::vector<storage::MessageRecord> storage::MemoryMessageRepo::listGroupMessage
             res.insert(res.end(),messages.begin(),pos);
         }
     }
-    return res;
+    return {};
 }
 storage::SaveMessageResult storage::MemoryMessageRepo::saveDirectMessage(uint64_t msgId,const std::string&conversationKey,const std::string&senderAccountId,const std::string& receiverAccountId,const std::string& senderUsername,const std::string&content,uint64_t serverTsMs){
     if(conversationKey.empty()||senderAccountId.empty()||receiverAccountId.empty()||content.empty()){
@@ -68,54 +68,13 @@ storage::SaveMessageResult storage::MemoryMessageRepo::saveDirectMessage(uint64_
     }
     return {RepoStatus::Ok,record.messageId,""};
 }
-std::vector<storage::DirectMessageRecord> storage::MemoryMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
-    if(conversationKey.empty()){
-        return {};
-    }
-    std::lock_guard lk(mutex_);
-    auto it=groupMessages_.find(conversationKey);
-    if(it==groupMessages_.end()){
-        return {};
-    }
-    std::vector<DirectMessageRecord> res;
-    const auto& messages=it->second;
-    if(beforeMsgId==0){
-        if(messages.size()>limit){
-            for(auto iter=std::prev(messages.end(),limit);iter!=messages.end();++iter){
-                const auto& msg=*iter;
-                res.push_back({msg.messageId,msg.groupId,msg.senderAccountId,conversationKey,msg.senderUsername,msg.content,msg.serverTsMs});
-            }
-        }
-        else{
-            for(const auto& msg:messages){
-                res.push_back({msg.messageId,msg.groupId,msg.senderAccountId,conversationKey,msg.senderUsername,msg.content,msg.serverTsMs});
-            }
-        }
-    }
-    else{
-        auto pos=std::lower_bound(messages.begin(),messages.end(),beforeMsgId,[](const MessageRecord& msg,uint64_t id){
-            return msg.messageId<id;
-        });
-        auto index=static_cast<size_t>(std::distance(messages.begin(),pos));
-        if(index>limit){
-            for(auto iter=std::prev(pos,limit);iter!=pos;++iter){
-                const auto& msg=*iter;
-                res.push_back({msg.messageId,msg.groupId,msg.senderAccountId,conversationKey,msg.senderUsername,msg.content,msg.serverTsMs});
-            }
-        }
-        else{
-            for(auto iter=messages.begin();iter!=pos;++iter){
-                const auto& msg=*iter;
-                res.push_back({msg.messageId,msg.groupId,msg.senderAccountId,conversationKey,msg.senderUsername,msg.content,msg.serverTsMs});
-            }
-        }
-    }
-    return res;
-}
-std::vector<storage::DirectMessageRecord> storage::MemoryMessageRepo::listDirectMessagesAfter([[maybe_unused]]const std::string& conversationKey,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
+RepoValueResult<std::vector<storage::DirectMessageRecord>> storage::MemoryMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
     return {};
 }
-std::vector<storage::MessageRecord> storage::MemoryMessageRepo::listGroupMessagesAfter([[maybe_unused]]const std::string& groupId,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
+RepoValueResult<std::vector<storage::DirectMessageRecord>> storage::MemoryMessageRepo::listDirectMessagesAfter([[maybe_unused]]const std::string& conversationKey,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
+    return {};
+}
+RepoValueResult<std::vector<storage::MessageRecord>> storage::MemoryMessageRepo::listGroupMessagesAfter([[maybe_unused]]const std::string& groupId,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){
     return {};
 }
 storage::RepoValueResult<storage::MessageAckResult> storage::MemoryMessageRepo::markDeliveredBatch([[maybe_unused]]const std::string&accountId,[[maybe_unused]]const std::vector<uint64_t>& msgIds,[[maybe_unused]]int64_t deliveredAtMs){
@@ -123,5 +82,7 @@ storage::RepoValueResult<storage::MessageAckResult> storage::MemoryMessageRepo::
 }
 storage::RepoValueResult<size_t> storage::MemoryMessageRepo::markReadBefore([[maybe_unused]]const std::string&accountId,[[maybe_unused]]ConversationType type,[[maybe_unused]]const std::string& targetId,[[maybe_unused]]uint64_t readMsgId,[[maybe_unused]]int64_t readAtMs){
     return RepoValueResult<size_t>{};
+}
+
 }
     

@@ -20,17 +20,21 @@ im::SyncResult im::MessageSyncService::sync(const std::string& accountId,const s
                 auto result=messageRepo_->listDirectMessagesAfter(conversationKey,cursor.lastMsgId,cursor.limit);
                 nlohmann::json messagesRecordJson=nlohmann::json::array();
                 uint64_t lastestMsgId=0;
-                for(const auto& message:result){
+                if(!result.ok()||!result.value.has_value()){
+                    continue;
+                }
+                auto value=result.value.value();
+                for(const auto& message:value){
                     messagesRecordJson.emplace_back(nlohmann::json{{"msgId",message.messageId},{"fromAccountId",message.senderAccountId},{"toAccountId",message.receiverAccountId},{"fromUsername",message.senderUsername},{"content",message.content},{"serverTsMs",message.serverTsMs}});
                     lastestMsgId=std::max(lastestMsgId,message.messageId);
                 }
                 //获取客户端本地该会话最后一条消息id
-                if(result.empty()){
+                if(value.empty()){
                     lastestMsgId=cursor.lastMsgId;
                 }
                 //判断是否还要更多消息
                 bool hasMore=false;
-                if(result.size()>=cursor.limit){
+                if(value.size()>=cursor.limit){
                     hasMore=true;
                 }
                 syncResult.deltas.emplace_back(ConversationDelta{.type=storage::ConversationType::Direct,.targetId=cursor.targetId,.fromMsgId=cursor.lastMsgId,.latestMsgId=lastestMsgId,.hasMore=hasMore,.messages=std::move(messagesRecordJson)});
@@ -40,17 +44,21 @@ im::SyncResult im::MessageSyncService::sync(const std::string& accountId,const s
                 auto result=messageRepo_->listGroupMessagesAfter(cursor.targetId,cursor.lastMsgId,cursor.limit);
                 uint64_t lastestMsgId=0;
                 nlohmann::json messagesRecordJson=nlohmann::json::array();
-                for(const auto& msg:result){
+                if(!result.ok()||!result.value.has_value()){
+                    continue;
+                }
+                auto value=result.value.value();
+                for(const auto& msg:value){
                     messagesRecordJson.emplace_back(nlohmann::json{{"msgId",msg.messageId},{"groupId",msg.groupId},{"senderAccountId",msg.senderAccountId},{"senderUsername",msg.senderUsername},{"content",msg.content},{"serverTsMs",msg.serverTsMs}});
                     lastestMsgId=std::max(lastestMsgId,msg.messageId);
                 }
                  //获取客户端本地该会话最后一条消息id
-                if(result.empty()){
+                if(value.empty()){
                     lastestMsgId=cursor.lastMsgId;
                 }
                 //判断是否还要更多消息
                 bool hasMore=false;
-                if(result.size()>=cursor.limit){
+                if(value.size()>=cursor.limit){
                     hasMore=true;
                 }
                 syncResult.deltas.emplace_back(ConversationDelta{.type=storage::ConversationType::Group,.targetId=cursor.targetId,.fromMsgId=cursor.lastMsgId,.latestMsgId=lastestMsgId,.hasMore=hasMore,.messages=std::move(messagesRecordJson)});
@@ -74,17 +82,21 @@ im::ConversationDelta im::MessageSyncService::loadDirectDelta(const std::string&
     auto result=messageRepo_->listDirectMessagesAfter(conversationKey,lastMsgId,limit);
     uint64_t lastestMsgId=0;
     nlohmann::json messagesRecordJson=nlohmann::json::array();
-    for(const auto& message:result){
+    if(!result.ok()||!result.value.has_value()){
+        return {};
+    }
+    auto value=result.value.value();
+    for(const auto& message:value){
         messagesRecordJson.emplace_back(nlohmann::json{{"msgId",message.messageId},{"fromAccountId",message.senderAccountId},{"toAccountId",message.receiverAccountId},{"fromUsername",message.senderUsername},{"content",message.content},{"serverTsMs",message.serverTsMs}});
         lastestMsgId=std::max(lastestMsgId,message.messageId);
     }
      //获取客户端本地该会话最后一条消息id
-    if(result.empty()){
+    if(value.empty()){
         lastestMsgId=lastMsgId;
     }
     //判断是否还要更多消息
     bool hasMore=false;
-    if(result.size()>=limit){
+    if(value.size()>=limit){
         hasMore=true;
     }
     return {.type=storage::ConversationType::Direct,.targetId=peerAccountId,.fromMsgId=lastMsgId,.latestMsgId=lastestMsgId,.hasMore=hasMore,.messages=std::move(messagesRecordJson)};
@@ -99,18 +111,21 @@ im::ConversationDelta im::MessageSyncService::loadGroupDelta(const std::string& 
     auto result=messageRepo_->listGroupMessagesAfter(groupId,lastMsgId,limit);
     uint64_t lastestMsgId=0;
     nlohmann::json messagesRecordJson=nlohmann::json::array();
-
-    for(const auto& msg:result){
+    if(!result.ok()||!result.value.has_value()){
+        return {};
+    }
+    auto value=result.value.value();
+    for(const auto& msg:value){
         messagesRecordJson.emplace_back(nlohmann::json{{"msgId",msg.messageId},{"groupId",msg.groupId},{"senderAccountId",msg.senderAccountId},{"senderUsername",msg.senderUsername},{"content",msg.content},{"serverTsMs",msg.serverTsMs}});
         lastestMsgId=std::max(lastestMsgId,msg.messageId);
     }
      //获取客户端本地该会话最后一条消息id
-    if(result.empty()){
+    if(value.empty()){
         lastestMsgId=lastMsgId;
     }
     //判断是否还要更多消息
     bool hasMore=false;
-    if(result.size()>=limit){
+    if(value.size()>=limit){
         hasMore=true;
     }
     return {.type=storage::ConversationType::Group,.targetId=groupId,.fromMsgId=lastMsgId,.latestMsgId=lastestMsgId,.hasMore=hasMore,.messages=std::move(messagesRecordJson)};

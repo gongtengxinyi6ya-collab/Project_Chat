@@ -80,7 +80,8 @@ public:
     ~Imservice();
 
     //回调设置
-    void setMessageAsyncExecutor(SubmitMessageTaskFn submitFn,PostToBaseLoopFn postFn);//注入群消息异步处理所需的两个执行器
+    void setMessageAsyncExecutor(SubmitMessageTaskFn submitFn);//注入群消息异步处理所需的执行器
+    void setBaseLoopPoster(PostToBaseLoopFn postFn);//工作线程回投baseLoop
     void stopAcceptingAsyncMessages();//服务关闭时禁止再接受新的异步消息任务
     void setBatchSender(BatchSendFn fn);
     void setDbReadExecutor(SubmitDbTaskFn submitFn);
@@ -240,7 +241,7 @@ private:
     //异步私聊消息
     std::shared_ptr<DirectMessagePersistenceService> directMessagePersistence_;//私聊持久化服务
     SubmitDbTaskFn submitDbReadTask_;
-    struct PendingDirectMessageContext {//异步上下文
+    struct PendingDirectMessageContext {//异步私聊上下文
     std::weak_ptr<TcpConnection> senderConnection;
     ConnKey senderKey{0};
     Request request;
@@ -254,5 +255,15 @@ private:
 };
     DispatchResult handleDmAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeDirectMessage(PendingDirectMessageContext context,DirectMessageWriteCommand command, DirectMessageWriteResult result);
+
+    //异步查询接口
+    struct PendingDbRequestContext {
+    std::weak_ptr<TcpConnection> connection;
+    ConnKey key{0};
+    Request request;
+
+    std::string accountId;
+};
+    Session* resolvePendingSession(const PendingDbRequestContext& context);//baseLoop调用，检查session
 };
 }

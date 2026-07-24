@@ -1995,10 +1995,9 @@ std::optional<Response> Imservice::checkRateLimitOrError(const Request& req,cons
 }
 
 //异步消息
-void Imservice::setMessageAsyncExecutor(SubmitMessageTaskFn submitFn,PostToBaseLoopFn postFn){
+void Imservice::setMessageAsyncExecutor(SubmitMessageTaskFn submitFn){
     submitMessageTask_=std::move(submitFn);
-    postToBaseLoop_=std::move(postFn);
-    if(!submitMessageTask_||!postToBaseLoop_){
+    if(!submitMessageTask_){
         throw std::invalid_argument( "message async executor is invalid");
     }
 }
@@ -2015,7 +2014,13 @@ void Imservice::setBatchSender(BatchSendFn fn){
 void Imservice::setDbReadExecutor(SubmitDbTaskFn submitFn){
     submitDbReadTask_=std::move(submitFn);
     if(!submitDbReadTask_){
-        throw std::invalid_argument("Batch send function invalid");
+        throw std::invalid_argument("dbRead executor is invalid");
+    }
+}
+void Imservice::setBaseLoopPoster(PostToBaseLoopFn postFn){
+    postToBaseLoop_=std::move(postFn);
+    if(!postToBaseLoop_){
+        throw std::invalid_argument("baseLoop poster is invalid");
     }
 }
 DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
@@ -2347,4 +2352,18 @@ void Imservice::completeDirectMessage(PendingDirectMessageContext context,Direct
         });
     sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"DM_RESP_OUT");
 }
+
+Session* Imservice::resolvePendingSession(const PendingDbRequestContext& context){
+    auto conn=context.connection.lock();
+    if(!conn||conn->isClosed()){
+        return nullptr;
+    }
+    auto session=sessionManager_.find(context.key);
+    if(!session||session->accountId_!=context.accountId){
+        return nullptr;
+    }
+    return session;
+}
+
+
 }

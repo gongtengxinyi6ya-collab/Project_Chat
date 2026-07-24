@@ -23,6 +23,7 @@ AppConfig AppConfig::loadFromFile(const std::string& path){
         config.healthConfig_=HealthConfig::fromJson(j.value("health",nlohmann::json::object()));
         config.maintenance_=MaintenanceConfig::fromJson(j.value("maintenance",nlohmann::json::object()));
         config.messageAsync_=MessageAsyncConfig::fromJson(j.value("message_async",nlohmann::json::object()));
+        config.dbAsync_=DbAsyncConfig::fromJson(j.value("db_async",nlohmann::json::object()));
         
         return config;
     }catch(const nlohmann::json::exception& e){
@@ -41,6 +42,7 @@ void AppConfig::applyEnvOverrides(){
     redisConfig_.loadFromEnv();
     healthConfig_.loadFromEnv();
     messageAsync_.applyEnvOverrides();
+    dbAsync_.applyEnvOverrides();
 }
 void AppConfig::validateOrThrow() const{
     server_.validateOrThrow();
@@ -54,6 +56,7 @@ void AppConfig::validateOrThrow() const{
     healthConfig_.validateOrThrow();
     maintenance_.validateOrThrow();
     messageAsync_.validateOrThrow();
+    dbAsync_.validateOrThrow();
 }
 std::string AppConfig::dumpSummary() const{
     std::stringstream ss;
@@ -67,6 +70,7 @@ std::string AppConfig::dumpSummary() const{
       <<"Redis(enabled="<<redisConfig_.enabled()<<",host="<<redisConfig_.host()<<",port="<<redisConfig_.port()<<",db="<<redisConfig_.db()<<",poolSize="<<redisConfig_.poolSize()<<"); "
       <<"Health(enable="<<healthConfig_.enabled()<<",logIntervalMs="<<healthConfig_.logIntervalMs()<<",redisPingEnabled="<<healthConfig_.redisPingEnabled()<<",sqlTimeoutDeltaMode="<<healthConfig_.sqlTimeoutDeltaMode()<<");"
       <<"Maintenance(enable="<<maintenance_.enabled<<",intervalMs="<<maintenance_.intervalMs<<",expiredSessionRetentionMs="<<maintenance_.expiredSessionRetentionMs<<",revokedSessionRetentionMs="<<maintenance_.revokedSessionRetentionMs<<",handledRequestRetentionMs="<<maintenance_.handledRequestRetentionMs<<",offlineIndexRetentionMs="<<maintenance_.offlineIndexRetentionMs<<",batchSize="<<maintenance_.batchSize<<");"
-      << "MessageAsync(enabled="<< messageAsync_.enabled<< ",workerThreads="<< messageAsync_.workerThreads<< ",queueCapacity="<< messageAsync_.queueCapacity<< ",queueWarnPercent="<< messageAsync_.queueWarnPercent<< "); ";
+      << "MessageAsync(enabled="<< messageAsync_.enabled<< ",workerThreads="<< messageAsync_.workerThreads<< ",queueCapacity="<< messageAsync_.queueCapacity<< ",queueWarnPercent="<< messageAsync_.queueWarnPercent<< "); "
+      << "DbAsync(enabled="<< dbAsync_.enabled<< ",workerThreads="<< dbAsync_.workerThreads<< ",queueCapacity="<< dbAsync_.queueCapacity<< ",queueWarnPercent="<< dbAsync_.queueWarnPercent<< "); ";
     return ss.str();
 }
