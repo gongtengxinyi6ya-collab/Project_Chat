@@ -82,6 +82,16 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
             return messageExecutor_->aggregateStats();
         },config_.messageAsync().queueWarnPercent);
     }
+    if(dbReadExecutor_){
+        healthService_->setDbReadExecutorStatsProvider([this] {
+        if (!dbReadExecutor_) {
+            return infra::thread::ThreadPoolStats{};
+        }
+        return dbReadExecutor_->stats();
+    },
+    config_.dbAsync().queueWarnPercent
+);
+    }
     if(config_.maintenance().enabled){
         maintenanceService_=std::make_unique<infra::maintenance::MaintenanceService>(config_.maintenance(),maintenanceRepos);
         healthService_->setMaintenanceProvider([this](){
@@ -327,7 +337,9 @@ void TcpServer::finishStopInBaseLoop(){
     if (messageExecutor_) {
         messageExecutor_->stop(infra::thread::ThreadPoolStopMode::Drain);
     }
-
+    if(dbReadExecutor_){
+        dbReadExecutor_->stop(infra::thread::ThreadPoolStopMode::Drain);
+    }
     baseloop_->queueInLoop([this]() {
         finalizeStopInBaseLoop();
     });

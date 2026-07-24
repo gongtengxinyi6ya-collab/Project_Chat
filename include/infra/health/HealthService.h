@@ -21,6 +21,8 @@ class HealthService {
 public:
     using MaintenanceProvider =std::function<infra::maintenance::MaintenanceSnapshot()>;
     using MessageExecutorStatsProvider =std::function<infra::thread::ThreadPoolStats()>;
+    using DbReadExecutorStatsProvider =std::function<infra::thread::ThreadPoolStats()>;
+
     HealthService();
     explicit HealthService(const HealthConfig& config);
     void setConfig(const HealthConfig& config);
@@ -31,6 +33,7 @@ public:
     void setOnlineConnectionProvider(std::function<size_t()> provider);//注入在线连接获取函数
     void setMaintenanceProvider(MaintenanceProvider provider,int64_t exceptedIntervalMs);//注入维护快照获取函数
     void setMessageExecutorStatsProvider(MessageExecutorStatsProvider provider,std::uint32_t queueWarnPercent);
+    void setDbReadExecutorStatsProvider(DbReadExecutorStatsProvider provider,std::uint32_t queueWarnPercent);
     HealthSnapshot snapshot();//生成完整健康快照
 
 private:
@@ -52,6 +55,10 @@ private:
     MessageExecutorStatsProvider messageExecutorStatsProvider_;
     std::uint32_t messageQueueWarnPercent_{80};
     std::uint64_t lastMessageRejectedFull_{0};
+
+    DbReadExecutorStatsProvider dbReadExecutorStatsProvider_;
+    std::uint32_t dbReadQueueWarnPercent_{80};
+    std::uint64_t lastDbReadRejectedFull_{0};
     
     int64_t currentEpochMs() const;
 
@@ -62,6 +69,7 @@ private:
     void fillLoggerStats(HealthSnapshot& snapshot);
     void fillMaintenanceStats(HealthSnapshot& snapshot);
     void fillMessageExecutorStats(HealthSnapshot& snapshot);
+    void fillDbReadExecutorStats(HealthSnapshot& snapshot);
     
     void decideStatus(HealthSnapshot& snapshot);//根据状态计算总健康状态
 

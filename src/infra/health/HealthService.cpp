@@ -40,6 +40,10 @@ void HealthService::setMessageExecutorStatsProvider(MessageExecutorStatsProvider
     messageExecutorStatsProvider_ =std::move(provider);
     messageQueueWarnPercent_ =queueWarnPercent;
 }
+void HealthService::setDbReadExecutorStatsProvider(DbReadExecutorStatsProvider provider,std::uint32_t queueWarnPercent){
+    dbReadExecutorStatsProvider_=std::move(provider);
+    dbReadQueueWarnPercent_=queueWarnPercent;
+}
 HealthSnapshot HealthService::snapshot(){
     HealthSnapshot snapshot;
     fillRuntimeStats(snapshot);
@@ -50,6 +54,7 @@ HealthSnapshot HealthService::snapshot(){
     fillLoggerStats(snapshot);
     fillMaintenanceStats(snapshot);
     fillMessageExecutorStats(snapshot);
+    fillDbReadExecutorStats(snapshot);
     decideStatus(snapshot);
     return snapshot;
 }
@@ -222,6 +227,30 @@ void HealthService::fillMessageExecutorStats(HealthSnapshot& snapshot) {
 
     snapshot.messageExecutorHealthy =!snapshot.messageExecutorSaturated &&!snapshot.messageExecutorRejectedIncreased &&stats.state ==infra::thread::ThreadPoolState::Running;
 }
+
+void HealthService::fillDbReadExecutorStats(HealthSnapshot& snapshot){
+if (!messageExecutorStatsProvider_) {
+        snapshot.dbReadExecutorEnabled = false;
+        snapshot.dbReadExecutorHealthy = true;
+        return;
+    }
+
+    snapshot.dbReadExecutorEnabled = true;
+    snapshot.dbReadExecutorStats=dbReadExecutorStatsProvider_();
+
+    const auto& stats =snapshot.dbReadExecutorStats;
+
+    if (stats.queueCapacity > 0) {
+        const std::size_t warnSize =(stats.queueCapacity *dbReadQueueWarnPercent_+ 99) / 100;
+        snapshot.dbReadExecutorSaturated =stats.queuedTasks >= warnSize;
+    }
+
+    snapshot.dbReadExecutorRejectedIncreased =stats.rejectedFull >lastDbReadRejectedFull_;
+
+    lastDbReadRejectedFull_ =stats.rejectedFull;
+
+    snapshot.dbReadExecutorHealthy=!snapshot.dbReadExecutorSaturated &&!snapshot.dbReadExecutorRejectedIncreased &&stats.state ==infra::thread::ThreadPoolState::Running;
+}
 void HealthService::decideStatus(HealthSnapshot& snapshot){
     snapshot.status = HealthStatus::Healthy;
 
@@ -279,6 +308,16 @@ void HealthService::decideStatus(HealthSnapshot& snapshot){
             addReason(snapshot,"message executor queue saturated");
         }
         if (snapshot.messageExecutorRejectedIncreased) {addReason(snapshot,"message executor rejected task");
+        }
+    }
+
+    if (snapshot.dbReadExecutorEnabled &&!snapshot.dbReadExecutorHealthy) {
+        snapshot.status = HealthStatus::Degraded;
+        if (snapshot.dbReadExecutorSaturated) {
+            addReason(snapshot,"dbRead executor queue saturated");
+        }
+        if (snapshot.dbReadExecutorRejectedIncreased) {
+            addReason(snapshot,"dbRead executor rejected task");
         }
     }
 }

@@ -181,7 +181,7 @@ private:
     nlohmann::json buildMemberProfileList(const std::string& groupId);//把GroupManager返回的accountId列表转换为客户端可展示的成员资料
 
     //好友相关接口
-    std::unique_ptr<FriendService> friendService_;
+    std::shared_ptr<FriendService> friendService_;
     Response handleSearchUser(const Request& req,ConnKey key,Session& session);//提交好友搜索请求
     Response handleListFriends(const Request& req,ConnKey key,Session& session);//获取好友列表
     Response handleRemoveFriend(const Request& req,ConnKey key,Session& session);//删除好友
@@ -257,7 +257,7 @@ private:
     void completeDirectMessage(PendingDirectMessageContext context,DirectMessageWriteCommand command, DirectMessageWriteResult result);
 
     //异步查询接口
-    struct PendingDbRequestContext {
+struct PendingDbRequestContext {
     std::weak_ptr<TcpConnection> connection;
     ConnKey key{0};
     Request request;
@@ -266,7 +266,7 @@ private:
 };
     Session* resolvePendingSession(const PendingDbRequestContext& context);//baseLoop调用，检查session
 
-    struct PendingGroupHistoryContext {//群聊历史查询上下文
+struct PendingGroupHistoryContext {//群聊历史查询上下文
     PendingDbRequestContext base;
     std::string groupId;
     HistoryQuery query;
@@ -274,5 +274,16 @@ private:
 
     DispatchResult handleGroupHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeGroupHistory(PendingGroupHistoryContext context,AsyncDbResult<std::vector<storage::MessageRecord>> result);
+
+    //
+struct PendingDmHistoryContext {//私聊历史上下文
+    PendingDbRequestContext base;
+
+    std::string peerAccountId;
+    std::string conversationKey;
+    HistoryQuery query;
+};
+    DispatchResult handleDmHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    void completeDmHistory(PendingDmHistoryContext context,AsyncDbResult<std::vector<storage::DirectMessageRecord>> result);
 };
 }

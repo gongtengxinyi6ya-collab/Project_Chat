@@ -53,6 +53,13 @@ struct HealthSnapshot {
     storage::SqlConnectionPoolStats messageSqlStats{};
 
     infra::thread::ThreadPoolStats messageExecutorStats{};
+
+    bool dbReadExecutorEnabled{false};
+    bool dbReadExecutorHealthy{true};
+    bool dbReadExecutorSaturated{false};
+    bool dbReadExecutorRejectedIncreased{false};
+
+    infra::thread::ThreadPoolStats dbReadExecutorStats{};
 };
 
 }

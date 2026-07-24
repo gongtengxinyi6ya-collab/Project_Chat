@@ -169,7 +169,7 @@ void Imservice::setRepositories(storage::RepositoryBundle repos){
         authService_=std::make_unique<auth::AuthService>(repos_.userRepo,passwordHash,tokenManager,repos_.userSessionRepo,repos_.userProfileRepo);
     }
     if(repos_.friendRepo&&repos_.userProfileRepo&&repos_.friendRequestRepo){
-        friendService_=std::make_unique<FriendService>(repos_.friendRepo,repos_.userProfileRepo,repos_.friendRequestRepo);
+        friendService_=std::make_shared<FriendService>(repos_.friendRepo,repos_.userProfileRepo,repos_.friendRequestRepo);
     }
     if(repos_.conversationRepo&&repos_.userProfileRepo&&repos_.groupRepo){
         conversationService_=std::make_unique<ConversationService>(repos_.conversationRepo,repos_.userProfileRepo,repos_.groupRepo);
@@ -2120,11 +2120,11 @@ DispatchResult Imservice::submitResultMapToDispatchResult(const Request&req,infr
         case infra::thread::TaskSubmitResult::Accepted://任务提交成功调用异步
             return DispatchResult::deferred();
         case infra::thread::TaskSubmitResult::QueueFull:
-            return DispatchResult::immediate(makeErr(req,ErrorCode::DELIVERY_OVERLOADED,"Message persistence queue is full",nlohmann::json{{"retryable",true}}));
+            return DispatchResult::immediate(makeErr(req,ErrorCode::DELIVERY_OVERLOADED,"queue is full",nlohmann::json{{"retryable",true}}));
         case infra::thread::TaskSubmitResult::Stopping:
             return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Message service is stopping"));
         case infra::thread::TaskSubmitResult::InvalidTask:
-            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Invalid message persistence task"));
+            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Invalid  task"));
         default:
             return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Invaild task"));
     }
@@ -2425,6 +2425,7 @@ DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key
             readResult.repoResult=messageRepo->listGroupMessages(context.groupId,context.query.beforeMsgId,context.query.limit);
         }
         readResult.queueWaitUs=std::chrono::duration_cast<std::chrono::microseconds>(start-enqueueAt).count();
+        readResult.executeUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count();
         auto posted=postToBaseLoop([this,context=std::move(context),readResult=std::move(readResult)]()mutable{
         //提交回baseLoop
         completeGroupHistory(std::move(context),std::move(readResult));
@@ -2438,6 +2439,128 @@ DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key
     
 }
 void Imservice::completeGroupHistory(PendingGroupHistoryContext context,AsyncDbResult<std::vector<storage::MessageRecord>> result){
+    auto session=resolvePendingSession(context.base);
+    if(!session){
+        return;
+    }
+    if(!groupManager_.isMember(context.groupId,session->accountId_)){
+        return;
+    }
+    if(!result.ok()){//repo失败
+        auto resp=makeRepoError(context.base.request,result.repoResult.status,result.repoResult.message);
+        sendResponseWithLog(context.base.key,context.base.request,resp,*session,"GROUP_HISTORY_READ_FAILED");
+        return;
+    }
+    auto messages=result.repoResult.value.value();
+    //返回JSON数组messages
+    nlohmann::json messagesJson=nlohmann::json::array();
+    for(const auto& msg:messages){
+        messagesJson.push_back(nlohmann::json{{"msgId",msg.messageId},{"groupId",msg.groupId},
+            {"senderAccountId",msg.senderAccountId},{"senderUsername",msg.senderUsername},
+            {"content",msg.content},{"serverTsMs",msg.serverTsMs}});
+    }
+    auto resp=makeOk(context.base.request,MsgType::GROUP_HISTORY_RESP,
+        nlohmann::json{{"groupId",context.groupId},{"mode",historyQueryModeToString(context.query.mode)},
+    {"beforeMsgId",context.query.beforeMsgId},{"lastMsgId",context.query.lastMsgId},
+    {"limit",context.query.limit},{"messages",messagesJson},{"queueWaitUs",result.queueWaitUs},{"queryUs",result.executeUs}});
+    sendResponseWithLog(context.base.key,context.base.request,resp,*session,"GROUP_HISTORY_RESP_OUT");
+}
 
+DispatchResult Imservice::handleDmHistoryAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+    auto err=guardAuthenticated(req,session);
+    if(err.has_value()){
+        return {.mode=DispatchMode::Immediate,.response=err.value()};
+    }
+    //历史消息限流
+    if(rateLimiter_){
+        auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
+        }
+    }
+    //读取目标
+    std::string peerAccountId;
+    auto getPeerAccountId=getStringField(req,"peerAccountId",peerAccountId);
+    if(getPeerAccountId){
+        return {.mode=DispatchMode::Immediate,.response=getPeerAccountId.value()};
+    }
+
+    //生成会话key
+    auto conversationKey=common::buildDirectConversationKey(session.accountId_,peerAccountId);
+    //解析beforeMsgId,limit
+    auto historyQuery=parseHistoryQuery(req,imConfig_.defaultHistoryLimit,imConfig_.maxHistoryLimit);
+    if(!historyQuery.ok){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,historyQuery.code,historyQuery.message)};
+    }
+    //构造上下文
+    std::weak_ptr<TcpConnection> weakConn=connection;
+    PendingDmHistoryContext context={.base={.connection=weakConn,.key=key,.request=req,.accountId=session.accountId_},
+    .peerAccountId=peerAccountId,.conversationKey=conversationKey,.query=historyQuery.query};
+    //向专用线程提交任务
+    auto friendService=friendService_;
+    auto messageRepo=repos_.messageRepo;
+    auto postToBaseLoop=postToBaseLoop_;
+    auto enqueueAt=std::chrono::steady_clock::now();
+    auto submitResult=submitDbReadTask_([enqueueAt,this,friendService=std::move(friendService),messageRepo=std::move(messageRepo),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context)]()mutable{
+        //baseLoop提交任务交给消息线程处理
+        auto start=std::chrono::steady_clock::now();//记录开始任务时间
+        AsyncDbResult<std::vector<storage::DirectMessageRecord>> readResult;
+        //查询目标用户存在
+        auto findUser=friendService->findUser(context.peerAccountId);
+        auto areFriends=friendService->areFriends(context.base.accountId,context.peerAccountId);
+        if(!findUser.has_value()){
+            readResult.repoResult={.status=storage::RepoStatus::UserNotFound,.message="user not found"};
+        }
+        if(!areFriends){
+             readResult.repoResult={.status=storage::RepoStatus::NotFriends,.message="the user is not your friends"};
+        }
+        if(findUser.has_value()&&areFriends){
+            if(context.query.mode==HistoryQueryMode::After){
+                readResult.repoResult=messageRepo->listDirectMessagesAfter(context.conversationKey,context.query.lastMsgId,context.query.limit);
+            }
+            else{
+                readResult.repoResult=messageRepo->listDirectMessages(context.conversationKey,context.query.beforeMsgId,context.query.limit);
+            }
+        }
+
+        readResult.queueWaitUs=std::chrono::duration_cast<std::chrono::microseconds>(start-enqueueAt).count();
+        readResult.executeUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count();
+        auto posted=postToBaseLoop([this,context=std::move(context),readResult=std::move(readResult)]()mutable{
+        //提交回baseLoop
+        completeDmHistory(std::move(context),std::move(readResult));
+        });
+        if(!posted){
+            LOG_WARN("Failed to post read message completion to baseLoop");
+        }
+    });
+    //处理提交结果
+    return submitResultMapToDispatchResult(req,submitResult);
+    
+}
+void Imservice::completeDmHistory(PendingDmHistoryContext context,AsyncDbResult<std::vector<storage::DirectMessageRecord>> result){
+auto session=resolvePendingSession(context.base);
+    if(!session){
+        return;
+    }
+    if(!result.ok()){//repo失败
+        auto resp=makeRepoError(context.base.request,result.repoResult.status,result.repoResult.message);
+        sendResponseWithLog(context.base.key,context.base.request,resp,*session,"DM_HISTORY_READ_FAILED");
+        return;
+    }
+    auto value=result.repoResult.value.value();
+    //返回JSON数组messages
+    nlohmann::json messagesJson=nlohmann::json::array();
+    for(const auto&message:value){
+        messagesJson.push_back(nlohmann::json{{"msgId",message.messageId},{"fromAccountId",message.senderAccountId},
+            {"toAccountId",message.receiverAccountId},{"fromUsername",message.senderUsername},
+            {"content",message.content},{"serverTsMs",message.serverTsMs}});
+    }
+    auto resp= makeOk(context.base.request,MsgType::DM_HISTORY_RESP,
+        nlohmann::json{{"peerAccountId",context.peerAccountId},{"conversationKey",context.conversationKey},
+        {"mode",context.query.mode},{"beforeMsgId",context.query.beforeMsgId},{"lastMsgId",context.query.lastMsgId},
+        {"limit",context.query.limit},{"messages",messagesJson},
+        {"queueWaitUs",result.queueWaitUs},{"queryUs",result.executeUs}});
+    sendResponseWithLog(context.base.key,context.base.request,resp,*session,"DM_HISTORY_RESP_OUT");
 }
 }
