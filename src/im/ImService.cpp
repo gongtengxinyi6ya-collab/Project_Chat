@@ -1189,14 +1189,17 @@ Response Imservice::handleGroupHistory(const Request& req,[[maybe_unused]]ConnKe
     if(!historyQuery.ok){
         return makeErr(req,historyQuery.code,historyQuery.message);
     }
-    std::vector<storage::MessageRecord> messages;
+    storage::RepoValueResult<std::vector<storage::MessageRecord>> result;
     if(historyQuery.query.mode==HistoryQueryMode::After){
-        messages=repos_.messageRepo->listGroupMessagesAfter(groupId,historyQuery.query.lastMsgId,historyQuery.query.limit);
+        result=repos_.messageRepo->listGroupMessagesAfter(groupId,historyQuery.query.lastMsgId,historyQuery.query.limit);
     }
     else {
-        messages=repos_.messageRepo->listGroupMessages(groupId,historyQuery.query.beforeMsgId,historyQuery.query.limit);
+        result=repos_.messageRepo->listGroupMessages(groupId,historyQuery.query.beforeMsgId,historyQuery.query.limit);
     }
-
+    if(!result.ok()||!result.value.has_value()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    auto messages=result.value.value();
     //返回JSON数组messages
     nlohmann::json messagesJson=nlohmann::json::array();
     for(const auto& msg:messages){
@@ -1248,15 +1251,19 @@ Response Imservice::handleDmHistory(const Request& req,[[maybe_unused]]ConnKey k
         return makeErr(req,historyQuery.code,historyQuery.message);
     }
     //分支查询
-    std::vector<storage::DirectMessageRecord> result;
+    storage::RepoValueResult<std::vector<storage::DirectMessageRecord>> result;
     if(historyQuery.query.mode==HistoryQueryMode::After){
         result=repos_.messageRepo->listDirectMessagesAfter(conversationKey,historyQuery.query.lastMsgId,historyQuery.query.limit);
     }
     else{
         result=repos_.messageRepo->listDirectMessages(conversationKey,historyQuery.query.beforeMsgId,historyQuery.query.limit);
     }
+    if(!result.ok()||!result.value.has_value()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    auto value=result.value.value();
     nlohmann::json messagesJson=nlohmann::json::array();
-    for(const auto&message:result){
+    for(const auto&message:value){
         messagesJson.push_back(nlohmann::json{{"msgId",message.messageId},{"fromAccountId",message.senderAccountId},{"toAccountId",message.receiverAccountId},{"fromUsername",message.senderUsername},{"content",message.content},{"serverTsMs",message.serverTsMs}});
     }
     return makeOk(req,MsgType::DM_HISTORY_RESP,nlohmann::json{{"peerAccountId",peerAccountId},{"conversationKey",conversationKey},{"mode",historyQuery.query.mode},{"beforeMsgId",historyQuery.query.beforeMsgId},{"lastMsgId",historyQuery.query.lastMsgId},{"limit",historyQuery.query.limit},{"messages",messagesJson}});
@@ -2365,5 +2372,72 @@ Session* Imservice::resolvePendingSession(const PendingDbRequestContext& context
     return session;
 }
 
+DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+    auto err=guardAuthenticated(req,session);//检查登录
+    if(err){
+        return {.mode=DispatchMode::Immediate,.response=err.value()};
+    }
+    //历史消息限流
+    if(rateLimiter_){
+        auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
+        auto resultOpt=checkRateLimitOrError(req,limitResult);
+        if(resultOpt){
+            return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
+        }
+    }
+    std::string groupId;
+    if(auto errField=getStringField(req,"groupId",groupId)){
+        return {.mode=DispatchMode::Immediate,.response=errField.value()};
+    }
+    
+    auto accountId=sessionManager_.accountIdByConn(key);
+    if(!accountId){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::NO_SUCH_USER,"User is not exist")};
+    }
+    if(!groupManager_.isMember(groupId,accountId.value())){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::NOT_IN_GROUP,"The user is not in the group")};
+    }
+    auto historyQuery=parseHistoryQuery(req,imConfig_.defaultHistoryLimit,imConfig_.maxHistoryLimit);
+    if(!historyQuery.ok){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,historyQuery.code,historyQuery.message)};
+    }
 
+    if(!submitDbReadTask_||!postToBaseLoop_){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"dbRead pipeline unavailable")};
+    }
+    //构造上下文
+    std::weak_ptr<TcpConnection> weakConn=connection;
+    PendingGroupHistoryContext context{.base={.connection=weakConn,.key=key,.request=req,.accountId=accountId.value()},
+    .groupId=groupId,.query=historyQuery.query};
+    
+    //向专用线程提交任务
+    auto messageRepo=repos_.messageRepo;
+    auto postToBaseLoop=postToBaseLoop_;
+    auto enqueueAt=std::chrono::steady_clock::now();
+    auto submitResult=submitDbReadTask_([enqueueAt,this,messageRepo=std::move(messageRepo),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context)]()mutable{
+        //baseLoop提交任务交给消息线程处理
+        auto start=std::chrono::steady_clock::now();//记录开始任务时间
+        AsyncDbResult<std::vector<storage::MessageRecord>> readResult;
+        if(context.query.mode==HistoryQueryMode::After){
+           readResult.repoResult=messageRepo->listGroupMessagesAfter(context.groupId,context.query.lastMsgId,context.query.limit);
+        }
+        else{
+            readResult.repoResult=messageRepo->listGroupMessages(context.groupId,context.query.beforeMsgId,context.query.limit);
+        }
+        readResult.queueWaitUs=std::chrono::duration_cast<std::chrono::microseconds>(start-enqueueAt).count();
+        auto posted=postToBaseLoop([this,context=std::move(context),readResult=std::move(readResult)]()mutable{
+        //提交回baseLoop
+        completeGroupHistory(std::move(context),std::move(readResult));
+        });
+        if(!posted){
+            LOG_WARN("Failed to post read message completion to baseLoop");
+        }
+    });
+    //处理提交结果
+    return submitResultMapToDispatchResult(req,submitResult);
+    
+}
+void Imservice::completeGroupHistory(PendingGroupHistoryContext context,AsyncDbResult<std::vector<storage::MessageRecord>> result){
+
+}
 }

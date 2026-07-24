@@ -28,7 +28,7 @@
 #include "im/GroupMessagePersistenceTypes.h"
 #include "im/DirectMessagePersistenceService.h"
 #include "im/DirectMessagePersistenceTypes.h"
-
+#include "im/AsyncDbResult.h"
 #include "infra/thread/ThreadTypes.h"
 
 #include "net/SendTypes.h"
@@ -265,5 +265,14 @@ private:
     std::string accountId;
 };
     Session* resolvePendingSession(const PendingDbRequestContext& context);//baseLoop调用，检查session
+
+    struct PendingGroupHistoryContext {//群聊历史查询上下文
+    PendingDbRequestContext base;
+    std::string groupId;
+    HistoryQuery query;
+};
+
+    DispatchResult handleGroupHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    void completeGroupHistory(PendingGroupHistoryContext context,AsyncDbResult<std::vector<storage::MessageRecord>> result);
 };
 }
