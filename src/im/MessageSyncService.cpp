@@ -10,7 +10,7 @@ im::MessageSyncService::MessageSyncService(std::shared_ptr<storage::MessageRepo>
 
 storage::RepoValueResult<im::SyncResult> im::MessageSyncService::sync(const std::string& accountId,const std::vector<SyncCursor>& cursors,size_t offlineLimit){
     if(accountId.empty()){
-        return {};return {.status = storage::RepoStatus::InvalidArgument,.message = "accountId is empty"};
+        return {.status = storage::RepoStatus::InvalidArgument,.message = "accountId is empty"};
     }
     if (!messageRepo_ || !offlineMessageRepo_) {
         return {.status = storage::RepoStatus::Internal,.message = "sync repository unavailable"};
@@ -24,7 +24,7 @@ storage::RepoValueResult<im::SyncResult> im::MessageSyncService::sync(const std:
             nlohmann::json messagesRecordJson=nlohmann::json::array();
             uint64_t lastestMsgId=0;
             if(!result.ok()||!result.value.has_value()){
-                continue;
+                return {.status = result.status,.message = result.message};
             }
             auto value=result.value.value();
             for(const auto& message:value){
@@ -48,7 +48,7 @@ storage::RepoValueResult<im::SyncResult> im::MessageSyncService::sync(const std:
             uint64_t lastestMsgId=0;
             nlohmann::json messagesRecordJson=nlohmann::json::array();
             if(!result.ok()||!result.value.has_value()){
-                continue;
+                return {.status = result.status,.message = result.message};
             }
             auto value=result.value.value();
             for(const auto& msg:value){

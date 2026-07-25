@@ -337,6 +337,7 @@ struct PendingAckContext {
 DispatchResult handleMessageAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
 
 void completeMessageAck(PendingAckContext context,AsyncAckResult result);
+DispatchResult handleOfflineAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
 };
 
 }

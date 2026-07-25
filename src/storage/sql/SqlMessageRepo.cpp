@@ -286,9 +286,6 @@ RepoValueResult<MessageAckResult> SqlMessageRepo::markDeliveredBatch(const std::
         if(!upsertResult.ok()){
             return {.status=RepoStatus::SqlError,.message=upsertResult.error};
         }
-        if(upsertResult.affectedRows==0){
-            return {.status=RepoStatus::NotFound,.message=upsertResult.error};
-        }
         //提交事务
         transation.commit();
         const auto requestedCount=msgIds.size();

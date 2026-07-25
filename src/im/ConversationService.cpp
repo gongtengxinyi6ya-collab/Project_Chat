@@ -1,5 +1,6 @@
 #include "im/ConversationService.h"
 #include "storage/UserProfileRepo.h"
+#include "storage/ConversationRepo.h"
 #include "storage/GroupRepo.h"
 #include <unordered_map>
 im::ConversationService::ConversationService(std::shared_ptr<storage::ConversationRepo> conversationRepo,std::shared_ptr<storage::UserProfileRepo> userProfileRep,std::shared_ptr<storage::GroupRepo> groupRepo)
@@ -31,7 +32,7 @@ storage::RepoResult im::ConversationService::recordGroupMessage(const std::strin
     
 
 
-storage::RepoValueResult<std::vector<im::ConversationService::ConversationView>> im::ConversationService::listConversations(const std::string& ownerAccountId,size_t limit){
+storage::RepoValueResult<std::vector<im::ConversationView>> im::ConversationService::listConversations(const std::string& ownerAccountId,size_t limit){
     if(ownerAccountId.empty()){
         return {.status=storage::RepoStatus::InvalidArgument,.message="ownerAccountId is empty"};
     }

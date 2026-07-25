@@ -79,7 +79,7 @@ RepoValueResult<std::vector<OfflineMessageIndex>> SqlOfflineMessageRepo::listOff
                 }
             }
             offlineMessage.peerAccountId=getString(row,"peer_account_id");
-            offlineMessage.groupId=getString(row,"groupId");
+            offlineMessage.groupId=getString(row,"group_id");
 
             offlineMessages.emplace_back(std::move(offlineMessage));
 

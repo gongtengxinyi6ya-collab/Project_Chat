@@ -24,23 +24,22 @@ DirectMessageWriteResult DirectMessagePersistenceService::persist(const DirectMe
     if(!writeStore_){
         msgWriteRes.commitResult={storage::RepoStatus::Internal};
         finishTiming();
+        return msgWriteRes;
     }
     try{
         //计算SQL开始时间
         auto result=writeStore_->commit(command);
         msgWriteRes.commitResult={.status=result.status,.message=result.message};
-
+        finishTiming();
         return msgWriteRes;
     }catch(const std::exception& e){
-
         msgWriteRes.exceptionMessage=e.what();
-        msgWriteRes.commitResult = {storage::RepoStatus::SqlError,e.what()
-    };
+        msgWriteRes.commitResult = {storage::RepoStatus::SqlError,e.what()};
+        finishTiming();
         return msgWriteRes;
     }catch(...){
         msgWriteRes.exceptionMessage="unknow exception";
-        msgWriteRes.commitResult = { storage::RepoStatus::Internal,"unknown direct message persistence exception"
-    };
+        msgWriteRes.commitResult = { storage::RepoStatus::Internal,"unknown direct message persistence exception"};
         //计算持久化时间
         finishTiming();
         return msgWriteRes;

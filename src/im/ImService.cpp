@@ -1032,7 +1032,7 @@ DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session
         case MsgType::OFFLINE_LIST_REQ:
             return handleOfflineListAsync(req,key,session,connection);
         case MsgType::OFFLINE_ACK_REQ:
-            return handleMessageAckAsync(req,key,session,connection);
+            return handleOfflineListAsync(req,key,session,connection);
         case MsgType::REGISTER_REQ:
             return DispatchResult::immediate(handleRegister(req,key,session));
         case MsgType::LOGIN_REQ:
@@ -1062,7 +1062,7 @@ DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session
         case MsgType::DM_HISTORY_REQ:
             return handleDmHistoryAsync(req,key,session,connection);
         case MsgType::CONVERSATION_LIST_REQ:
-            return DispatchResult::immediate(handleConversationList(req,key,session));
+            return handleConversationListAsync(req,key,session,connection);
         case MsgType::CONVERSATION_READ_REQ:
             return DispatchResult::immediate(handleConversationRead(req,key,session));
         case MsgType::SYNC_REQ:{
@@ -2433,7 +2433,7 @@ DispatchResult Imservice::handleConversationListAsync(const Request& req, ConnKe
         return DispatchResult::immediate(std::move(*error));
     }
 
-    if (!submitDbReadTask_ ||!postToBaseLoop_ ||!repos_.conversationRepo) {
+    if (!submitDbReadTask_ ||!postToBaseLoop_ ||!conversationService_) {
         return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"conversation list pipeline unavailable"));
     }
     if (!connection || connection->isClosed()) {
@@ -2481,7 +2481,7 @@ DispatchResult Imservice::handleConversationListAsync(const Request& req, ConnKe
                 });
 
             if (!posted) {
-                LOG_WARN("failed to post offline list completion");
+                LOG_WARN("failed to post conversation list completion");
             }
         });
 
@@ -2496,7 +2496,7 @@ void Imservice::completeConversationList(PendingConversationListContext context,
 
     if (!result.ok()) {
         auto response = makeRepoError(context.base.request,result.repoResult.status,result.repoResult.message);
-        sendResponseWithLog(context.base.key,context.base.request,response,*session,"OFFLINE_LIST_FAILED");
+        sendResponseWithLog(context.base.key,context.base.request,response,*session,"CONVERSATION_LIST_FAILED");
         return;
     }
     nlohmann::json conversationViewJson=nlohmann::json::array();
@@ -2541,6 +2541,17 @@ DispatchResult Imservice::handleSyncAsync(const Request& req,ConnKey key,Session
     if(!messageSyncService_||!repos_.userRepo||!repos_.friendRepo){
         return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"messageSyncService")};
     }
+    if (!submitDbReadTask_ || !postToBaseLoop_) {//执行器检查
+        return DispatchResult::immediate( makeErr(req, ErrorCode::INTERNAL,"sync pipeline unavailable"));
+    }
+
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
+
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
     size_t limit=parseLimit(req,"limit",50,imConfig_.maxSyncMessageLimit);
     size_t offlineLimit=parseLimit(req,"offlineLimit",100,imConfig_.maxOfflineIndexLimit);
     auto cursorsResult=parseSyncCursors(req,limit,imConfig_.maxSyncMessageLimit);
@@ -2582,19 +2593,26 @@ DispatchResult Imservice::handleSyncAsync(const Request& req,ConnKey key,Session
             AsyncDbResult<SyncResult> result;
             try {
                 //校验私聊用户与好友关系
-                for(const auto& cursor:context.cursors)
-                    if(cursor.type==storage::ConversationType::Direct){
-                        if(!userRepo->userExists(cursor.targetId)){
-                            result.repoResult={.status=storage::RepoStatus::UserNotFound,.message="user not exiest"};
-                        }
-                        if(!friendRepo->areFriends(context.base.accountId,cursor.targetId)){
-                            result.repoResult={.status=storage::RepoStatus::NotFriends,.message="not friends"};
-                        }
+                bool validationFailed=false;
+                for(const auto& cursor:context.cursors){
+                    if (cursor.type != storage::ConversationType::Direct) {
+                        continue;
+                    }
+                    if(!userRepo->userExists(cursor.targetId)){
+                        result.repoResult={.status=storage::RepoStatus::UserNotFound,.message="user not exiest"};
+                        validationFailed=true;
+                        break;
+                    }
+                    if(!friendRepo->areFriends(context.base.accountId,cursor.targetId)){
+                        result.repoResult={.status=storage::RepoStatus::NotFriends,.message="not friends"};
+                        validationFailed=true;
+                        break;
+                    }
                 }
-                //
-                result.repoResult=service->sync(context.base.accountId,context.cursors,context.offlineLimit);
-
-            } catch (const std::exception& exception) {
+                if(!validationFailed){
+                    result.repoResult=service->sync(context.base.accountId,context.cursors,context.offlineLimit);
+                }
+        }catch (const std::exception& exception) {
                 result.exceptionMessage = exception.what();
                 result.repoResult = {.status = storage::RepoStatus::SqlError,.message = exception.what()
                 };
@@ -2622,6 +2640,13 @@ void Imservice::completeSync(PendingSyncContext context,AsyncDbResult<SyncResult
     Session* session = resolvePendingSession(context.base);
     if (!session) {
         return;
+    }
+    for (const auto& cursor : context.cursors) {//群权限校验
+        if (cursor.type == storage::ConversationType::Group &&!groupManager_.isMember(cursor.targetId,session->accountId_)) {
+            auto response = makeErr(context.base.request,ErrorCode::NOT_IN_GROUP,"group membership changed");
+            sendResponseWithLog(context.base.key,context.base.request,response,*session,"SYNC_PERMISSION_CHANGED");
+            return;
+        }
     }
     if (!result.ok()||!result.repoResult.value.has_value()) {
         auto response = makeRepoError(context.base.request,result.repoResult.status,result.repoResult.message);
@@ -2653,6 +2678,15 @@ DispatchResult Imservice::handleMessageAckAsync(const Request& req,ConnKey key,S
     if(err){
         return {.mode=DispatchMode::Immediate,.response=err.value()};
     }
+    if (!submitMessageTask_ || !postToBaseLoop_) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"message ACK pipeline unavailable"));
+    }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
     auto messageAck=parseMessageAck(req,imConfig_.maxAckBatchSize);
     if(!messageAck.ok){
         return {.mode=DispatchMode::Immediate,.response=makeErr(req,messageAck.code,messageAck.message)};
@@ -2668,8 +2702,9 @@ DispatchResult Imservice::handleMessageAckAsync(const Request& req,ConnKey key,S
             .request = req,
             .accountId = session.accountId_
         },
-        .messageIds=messageAck.payload.msgIds,
-        .offlineMessageIds=messageAck.payload.offlineMsgIds
+        .messageIds=std::move(messageAck.payload.msgIds),
+        .offlineMessageIds=std::move(messageAck.payload.offlineMsgIds),
+        .ackAtMs=static_cast<std::int64_t>(nowMs())
     };
     auto service = messageAckService_;
     auto postToBaseLoop = postToBaseLoop_;
@@ -2709,10 +2744,15 @@ DispatchResult Imservice::handleMessageAckAsync(const Request& req,ConnKey key,S
 
             result.queueWaitUs =std::chrono::duration_cast< std::chrono::microseconds>(startedAt - enqueuedAt).count();
             result.executeUs =std::chrono::duration_cast< std::chrono::microseconds>( std::chrono::steady_clock::now() - startedAt).count();
-            postToBaseLoop([this,context = std::move(context),result = std::move(result)]() mutable {
-                completeMessageAck(std::move(context),std::move(result));
+            const bool posted = postToBaseLoop(
+                [this,context = std::move(context),result = std::move(result)]() mutable {
+                    completeMessageAck(std::move(context),std::move(result));
                 });
+            if (!posted) {
+                LOG_WARN("failed to post message ACK completion");
+            }
         });
+    return submitResultMapToDispatchResult(req,submitResult);
 }
 
 void Imservice::completeMessageAck(PendingAckContext context,AsyncAckResult result){
@@ -2725,19 +2765,101 @@ void Imservice::completeMessageAck(PendingAckContext context,AsyncAckResult resu
         sendResponseWithLog(context.base.key,context.base.request,response,*session,"MESSAGE_ACK_FAILED");
         return;
     }
-
-    nlohmann::json data{
-        {"requestedMsgCount",result.messageAck.requestedCount},
-        {"ackedMsgCount",result.messageAck.ackedCount},
-        {"ignoredMsgCount",result.messageAck.ignoredCount},
-        {"requestedOfflineCount",context.offlineMessageIds.size()},
-        {"ackedOfflineCount",result.offlineAcked},
-        {"queueWaitUs", result.queueWaitUs},
-        {"executeUs", result.executeUs}
-    };
-
+    nlohmann::json data;
+    if (context.responseType == MsgType::OFFLINE_ACK_RESP) {
+        data = {
+            {"requestedCount", context.offlineMessageIds.size()},
+            {"deletedCount", result.offlineAcked},
+            {"ignoredCount",
+            context.offlineMessageIds.size() - result.offlineAcked},
+            {"queueWaitUs", result.queueWaitUs},
+            {"executeUs", result.executeUs}
+        };
+    }
+    else{
+        data={
+            {"requestedMsgCount",result.messageAck.requestedCount},
+            {"ackedMsgCount",result.messageAck.ackedCount},
+            {"ignoredMsgCount",result.messageAck.ignoredCount},
+            {"requestedOfflineCount",context.offlineMessageIds.size()},
+            {"ackedOfflineCount",result.offlineAcked},
+            {"queueWaitUs", result.queueWaitUs},
+            {"executeUs", result.executeUs}
+        };
+    }
     auto response = makeOk(context.base.request,context.responseType,std::move(data));
 
     sendResponseWithLog(context.base.key, context.base.request, response,*session,"MESSAGE_ACK_RESP_OUT");
+}
+
+DispatchResult Imservice::handleOfflineAckAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+    auto err=guardAuthenticated(req,session);
+    if(err){
+        return {.mode=DispatchMode::Immediate,.response=err.value()};
+    }
+    if (!submitMessageTask_ || !postToBaseLoop_) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"message ACK pipeline unavailable"));
+    }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
+    std::vector<std::uint64_t> offlineIds;
+    if (auto error = parseUint64ArrayField(req,"msg_ids",offlineIds,imConfig_.maxAckBatchSize)) {
+        return DispatchResult::immediate(std::move(error.value()));
+    }
+    //
+    PendingAckContext context={
+        .base={
+            .connection = connection,
+            .key = key,
+            .request = req,
+            .accountId = session.accountId_
+        },
+        .messageIds={},
+        .offlineMessageIds=std::move(offlineIds),
+        .responseType=MsgType::OFFLINE_ACK_RESP,
+        .ackAtMs=static_cast<std::int64_t>(nowMs())
+    };
+    auto service = messageAckService_;
+    auto postToBaseLoop = postToBaseLoop_;
+    auto enqueuedAt = std::chrono::steady_clock::now();
+
+    auto submitResult = submitMessageTask_("ack:" + session.accountId_,
+        [this,service = std::move(service),postToBaseLoop = std::move(postToBaseLoop),context = std::move(context),enqueuedAt]() mutable {
+            const auto startedAt =std::chrono::steady_clock::now();
+            AsyncAckResult result;
+            try {
+                if (result.ok() &&!context.offlineMessageIds.empty()) {
+                    auto offlineResult =service->ackOfflineMessages(context.base.accountId,context.offlineMessageIds);
+                    if (!offlineResult.ok() ||!offlineResult.value) {
+                        result.result = { offlineResult.status, offlineResult.message};
+                    } 
+                    else {
+                        result.offlineAcked = *offlineResult.value;
+                    }
+                }
+            } catch (const std::exception& exception) {
+                result.exceptionMessage = exception.what();
+                result.result = {storage::RepoStatus::SqlError,exception.what()};
+            } catch (...) {
+                result.exceptionMessage ="unknown ACK exception";
+                result.result = {storage::RepoStatus::Internal,"unknown ACK exception"
+                };
+            }
+
+            result.queueWaitUs =std::chrono::duration_cast< std::chrono::microseconds>(startedAt - enqueuedAt).count();
+            result.executeUs =std::chrono::duration_cast< std::chrono::microseconds>( std::chrono::steady_clock::now() - startedAt).count();
+            const bool posted = postToBaseLoop(
+                [this,context = std::move(context),result = std::move(result)]() mutable {
+                    completeMessageAck(std::move(context),std::move(result));
+                });
+            if (!posted) {
+                LOG_WARN("failed to post offlineMessageIds ACK completion");
+            }
+        });
+    return submitResultMapToDispatchResult(req,submitResult);
 }
 }

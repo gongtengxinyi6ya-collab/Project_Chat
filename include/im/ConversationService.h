@@ -4,24 +4,16 @@
 #include <cstdint>
 #include <vector>
 #include "storage/RepoResult.h"
-#include "storage/ConversationRepo.h"
+#include "im/ConversationTypes.h"
 /*会话服务，读写会话列表，并补充目标用户展示资料*/
 
 namespace storage{
     
     class UserProfileRepo;
     class GroupRepo;
+    class ConversationRepo;
 }
 namespace im{
-struct ConversationView
-    {//会话列表
-        storage::ConversationSummary summary;
-        std::string targetUsername{};//用户名
-        std::string targetNickname{};//用户昵称
-        std::string targetAvatarUrl{};//用户头像url
-        std::string groupName{};//群聊名称
-        std::string groupOwnerAccountId{};
-    };
 class ConversationService{
 public:
     
