@@ -160,12 +160,6 @@ private:
 
     ErrorCode repoStatusToErrorCode(storage::RepoStatus status)const;//把存储层错误转换为IM协议错误码
     Response makeRepoError(const Request&req,storage::RepoStatus,const std::string&fallbackMsg)const;//把repo错误统一转换为Response
-    Response handleGroupHistory(const Request& req,ConnKey key,Session& session);//获取群聊历史消息
-    
-    Response handleOfflinelist(const Request& req,ConnKey key,Session& session);//客户端拉取自己的离线消息索引
-    Response handleOfflineAck(const Request& req,ConnKey key,Session& session);//客户端确认离线消息已经处理，服务端删除离线索引
-    Response handleDmHistory(const Request& req,ConnKey key,Session& session);//获取私聊历史消息
-    
     //注册登录
     std::unique_ptr<auth::AuthService> authService_;//
     Response handleRegister(const Request& req,ConnKey key,Session& session);//处理客户端注册
@@ -204,7 +198,6 @@ private:
 
     //消息确认服务
     std::shared_ptr<MessageAckService> messageAckService_;
-    Response handleMessageAck(const Request& req,ConnKey key,Session& session);
 
     //业务限流服务
     std::unique_ptr<security::RateLimiter> rateLimiter_;//处理关键请求前进行频率限制
@@ -310,6 +303,40 @@ struct PendingSyncContext {
 
     DispatchResult handleSyncAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeSync(PendingSyncContext context,AsyncDbResult<SyncResult> result);
+
+    //ACK和已读消息异步
+struct AsyncAckResult {
+    storage::RepoResult result{
+        .status = storage::RepoStatus::Ok
+    };
+
+    storage::MessageAckResult messageAck{};
+    std::size_t offlineAcked{0};
+
+    std::int64_t queueWaitUs{0};
+    std::int64_t executeUs{0};
+    std::string exceptionMessage{};
+
+    bool ok() const noexcept {
+        return result.ok();
+    }
+};
+
+struct PendingAckContext {
+    PendingDbRequestContext base;
+
+    std::vector<std::uint64_t> messageIds;
+    std::vector<std::uint64_t> offlineMessageIds;
+
+    MsgType responseType{
+        MsgType::MESSAGE_ACK_RESP
+    };
+
+    std::int64_t ackAtMs{0};
+};
+DispatchResult handleMessageAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+
+void completeMessageAck(PendingAckContext context,AsyncAckResult result);
 };
 
 }
