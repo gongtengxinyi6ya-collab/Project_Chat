@@ -28,6 +28,7 @@ enum class RepoStatus{
     CannotInivteSelf,//禁止邀请自己
     InviteRequestsFriend,//需要好友邀请
     GroupMemberLimitReach,//群人数达到限制
+    MessageNotFound,//
     Internal,//内部未知错误
 };
 

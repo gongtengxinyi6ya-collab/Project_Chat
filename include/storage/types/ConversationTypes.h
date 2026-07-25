@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <cstddef>
 
 namespace storage{
 
@@ -30,6 +31,15 @@ struct ConversationReadResult {
     int64_t readAtMs{0};//服务端记录的已读时间
     size_t receiptUpdated{0};//消息级回执更新数量
 };
+
+struct ConversationReadCommand{
+    std::string accountId;
+    ConversationType type;//会话类型：私聊/群聊
+    std::string targetId;//私聊账号/群id
+    std::uint64_t readMsgId;//客户端已读到的消息id
+    std::int64_t readAtMs;//服务端接收已读请求时间
+};
+
 inline std::string conversationTypeToString(ConversationType type){
     switch(type){
         case ConversationType::Group:

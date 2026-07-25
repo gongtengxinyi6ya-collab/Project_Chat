@@ -223,76 +223,6 @@ void Imservice::loadFromRepositories(){
 }
 
 
-Response Imservice::handleDm(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
-    auto err=guardAuthenticated(req,session);
-    if(err.has_value()){
-        return err.value();
-    }
-    //发消息限流
-    if(rateLimiter_){
-        auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
-        auto resultOpt=checkRateLimitOrError(req,limitResult);
-        if(resultOpt){
-            return resultOpt.value();
-        }
-    }
-    
-    //取目标
-    if(req.to.empty()){
-        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing message recipient");
-    }
-    //取文本
-    std::string content;
-    if(auto errField=getStringField(req,"content",content)){
-        return errField.value();
-    }
-    if(!friendService_){
-        return makeErr(req,ErrorCode::INTERNAL,"Friend service is not available");
-    }
-    auto userProfile=friendService_->findUser(req.to);
-    if(!userProfile){
-        return makeErr(req,ErrorCode::NO_SUCH_USER,"no such user");
-    }
-    //确认是否好友关系
-    if(!friendService_->areFriends(session.accountId_,req.to)){
-        return makeErr(req,ErrorCode::NOT_FRIENDS,"not your friends");
-    }
-    //生成消息id和时间
-    uint64_t msgId=nextMessageId();
-    uint64_t serverTsMs=nowMs();
-    //保存私聊消息
-    std::string conversationKey=common::buildDirectConversationKey(session.accountId_,req.to);
-    if(!repos_.messageRepo){
-       return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not available");
-    }
-    auto result=repos_.messageRepo->saveDirectMessage(msgId,conversationKey,session.accountId_,req.to,session.username_,content,serverTsMs);
-    if(!result.ok()){
-        return makeErr(req,ErrorCode::INTERNAL,result.message);
-    }
-    //更新会话表
-    if(conversationService_){
-        auto resultConversation=conversationService_->recordDirectMessage(session.accountId_,req.to,session.username_,msgId,content,serverTsMs);
-        if(!resultConversation.ok()){
-            LOG_WARN("Failed to updated conversation for direct message");
-        }
-    }
-    //构造推送消息
-    Response pushMsg{.ver=1,.req_id=0,.type=MsgType::DM_PUSH,.ok=true,.code=ErrorCode::OK,.msg="New direct message",.data=nlohmann::json{{"msgId",msgId},{"fromAccountId",session.accountId_},{"fromUsername",session.username_},{"toAccountId",req.to},{"content",content}}};
-    auto pushResult=pushToAccount(req.to,pushMsg);
-    if(pushResult.sent==0){//目标账号没有任何设备收到
-        if(!repos_.offlineMessageRepo){
-            return makeErr(req,ErrorCode::INTERNAL,"messageRepo is not available");
-    }
-        auto resultOffline=repos_.offlineMessageRepo->saveOfflineDirectMessage(req.to,msgId,session.accountId_);
-        if(!resultOffline.ok()){
-            LOG_WARN("Failed to save offlineMessage: "+content);
-        }
-        return makeOk(req,MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"queuedOffline",true},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
-    }
-    return makeOk(req,MsgType::DM_RESP,nlohmann::json{{"msgId",msgId},{"serverTsMs",serverTsMs},{"delivered",pushResult.delivered()},{"queuedOffline",false},{"sent",pushResult.sent},{"failed",pushResult.failed()}});
-
-}
-
 Response Imservice::handleListUsers(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err.has_value()){
@@ -1143,6 +1073,8 @@ ErrorCode Imservice::repoStatusToErrorCode(storage::RepoStatus status)const{
             return ErrorCode::NO_SUCH_GROUP;
         case storage::RepoStatus::Conflict:
             return ErrorCode::Conflict;
+        case storage::RepoStatus::MessageNotFound:
+            return ErrorCode::MESSAGE_NOT_FOUND;
         case storage::RepoStatus::Internal:
             return ErrorCode::INTERNAL;
     }
@@ -1679,44 +1611,6 @@ Response Imservice::handleConversationRead(const Request& req,[[maybe_unused]]Co
     return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"conversationType",storage::conversationTypeToString(conversationType)},{"targetId",conversationRes.targetId},{"readMsgId",readMsgId},{"readAtMs",conversationRes.readAtMs},{"receiptUpdated",conversationRes.receiptUpdated}});
 }
 
-Response Imservice::handleConversationList(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
-    auto err=guardAuthenticated(req,session);//校验已登录
-    if(err){
-        return err.value();
-    }
-    if(!conversationService_){
-        //检查repos_离线存储是否存在
-        return makeErr(req,ErrorCode::INTERNAL,"conversationService is not exist");
-    }
-    //解析limit
-    size_t limit=parseLimit(req,"limit",20,200);
-    auto result=conversationService_->listConversations(session.accountId_,limit);
-    if(!result.ok()||!result.value.has_value()){
-        return makeRepoError(req,result.status,result.message);
-    }
-
-    nlohmann::json conversationViewJson=nlohmann::json::array();
-    for(const auto& view:result.value.value()){
-        nlohmann::json item{
-        {"type",storage::conversationTypeToString(view.summary.type)},
-        {"targetId",view.summary.targetId},
-        {"lastMsgId",view.summary.lastMsgId},{"lastPreview",view.summary.lastPreview},
-        {"lastSenderAccountId",view.summary.lastSenderAccountId},{"lastSenderUsername",view.summary.lastSenderUsername},
-        {"lastTsMs",view.summary.lastTsMs},{"unreadCount",view.summary.unreadCount},
-        {"lastReadMsgId",view.summary.lastReadMsgId}};
-        if(view.summary.type==storage::ConversationType::Direct){
-            item["targetUsername"] = view.targetUsername;
-            item["targetNickname"] = view.targetNickname;
-            item["targetAvatarUrl"] = view.targetAvatarUrl;
-        }
-        else if(view.summary.type == storage::ConversationType::Group){
-            item["groupName"] = view.groupName;
-            item["groupOwnerAccountId"] = view.groupOwnerAccountId;
-        }
-        conversationViewJson.emplace_back(std::move(item));
-    }
-    return makeOk(req,MsgType::CONVERSATION_LIST_RESP,nlohmann::json{{"conversations",conversationViewJson},{"count",conversationViewJson.size()}});
-}
 
 //业务限流服务
 Response Imservice::makeRateLimitError(const Request& req,const security::RateLimitResult& result){
@@ -2476,7 +2370,7 @@ DispatchResult Imservice::handleConversationListAsync(const Request& req, ConnKe
                 result.repoResult = {.status = storage::RepoStatus::SqlError,.message = exception.what()
                 };
             } catch (...) {
-                result.exceptionMessage ="unknown offline list exception";
+                result.exceptionMessage ="unknown conversation list exception";
                 result.repoResult = {.status = storage::RepoStatus::Internal,.message ="unknown offline list exception"};
             }
 
@@ -2805,7 +2699,7 @@ DispatchResult Imservice::handleOfflineAckAsync(const Request& req,ConnKey key,S
     if(err){
         return {.mode=DispatchMode::Immediate,.response=err.value()};
     }
-    if (!submitMessageTask_ || !postToBaseLoop_) {
+    if (!submitMessageTask_ || !postToBaseLoop_||messageAckService_) {
         return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"message ACK pipeline unavailable"));
     }
     if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {

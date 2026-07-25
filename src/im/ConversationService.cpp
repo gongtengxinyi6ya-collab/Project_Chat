@@ -41,7 +41,7 @@ storage::RepoValueResult<std::vector<im::ConversationView>> im::ConversationServ
     }
     const auto& result=conversationRepo_->listConversations(ownerAccountId,limit);
     if(!result.ok()||!result.value.has_value()){
-        return {.status=storage::RepoStatus::Internal,.message="repo invalid"};
+        return {.status=result.status,.message=result.message};
     }
     std::vector<ConversationView> views;//会话列表
     std::vector<std::string> accountIds;//搜集所有type为direct的targetId

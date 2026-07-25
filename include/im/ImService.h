@@ -8,6 +8,7 @@
 #include <optional>
 #include <functional>
 #include <atomic>
+#include <vector>
 
 #include "im/MsgType.h"
 #include "im/ErrorCode.h"
@@ -115,7 +116,6 @@ private:
 
     Response handleEcho(const Request& req,[[maybe_unused]]ConnKey key,Session& session);//回显
     Response handleAuth(const Request& req,ConnKey key,Session& session);//登录，把session状态改为Authed,绑定身份
-    Response handleDm(const Request& req,[[maybe_unused]]ConnKey key,Session& session);//把私聊消息投递到目标连接，并回复发送方投递结果
     Response handleListUsers(const Request& req,[[maybe_unused]]ConnKey key,Session& session);//在线用户名列表
     uint64_t nowMs() const;//获取当前时间戳
     uint64_t nextMessageId();
@@ -190,7 +190,6 @@ private:
 
     //会话列表展示
     std::shared_ptr<ConversationService> conversationService_;
-    Response handleConversationList(const Request& req,ConnKey key,Session& session);
     Response handleConversationRead(const Request& req,ConnKey key,Session& session);
 
     //消息同步服务
