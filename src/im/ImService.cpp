@@ -172,13 +172,13 @@ void Imservice::setRepositories(storage::RepositoryBundle repos){
         friendService_=std::make_shared<FriendService>(repos_.friendRepo,repos_.userProfileRepo,repos_.friendRequestRepo);
     }
     if(repos_.conversationRepo&&repos_.userProfileRepo&&repos_.groupRepo){
-        conversationService_=std::make_unique<ConversationService>(repos_.conversationRepo,repos_.userProfileRepo,repos_.groupRepo);
+        conversationService_=std::make_shared<ConversationService>(repos_.conversationRepo,repos_.userProfileRepo,repos_.groupRepo);
     }
     if(repos_.messageRepo&&repos_.offlineMessageRepo){
-        messageSyncService_=std::make_unique<MessageSyncService>(repos_.messageRepo,repos_.offlineMessageRepo);
+        messageSyncService_=std::make_shared<MessageSyncService>(repos_.messageRepo,repos_.offlineMessageRepo);
     }
     if(repos_.conversationRepo&&repos_.messageRepo&&repos_.offlineMessageRepo){
-        messageAckService_=std::make_unique<MessageAckService>(repos_.messageRepo,repos_.offlineMessageRepo,repos_.conversationRepo);
+        messageAckService_=std::make_shared<MessageAckService>(repos_.messageRepo,repos_.offlineMessageRepo,repos_.conversationRepo);
     }
     if(repos_.groupRepo&&repos_.userProfileRepo&&repos_.friendRepo){
         groupService_=std::make_unique<GroupService>(groupManager_,idGenerator_,repos_.groupRepo,repos_.userProfileRepo,repos_.friendRepo,imConfig_.requireFriendForGroupInvite,imConfig_.maxGroupMembers);
@@ -1067,8 +1067,7 @@ DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session
             return DispatchResult::immediate(handleConversationRead(req,key,session));
         case MsgType::SYNC_REQ:{
             LOG_INFO_CTX("sync request in",makeReqCtx(key,req,session,"SYNC_IN"));
-            return DispatchResult::immediate(handleSync(req,key,session));
-        }
+            return handleSyncAsync(req,key,session,connection);        }
         case MsgType::MESSAGE_ACK_REQ:
             return DispatchResult::immediate(handleMessageAck(req,key,session));
         case MsgType::KICK_GROUP_MEMBER_REQ:
@@ -1296,7 +1295,11 @@ Response Imservice::handleOfflinelist(const Request& req,[[maybe_unused]]ConnKey
     if(limit>200){
         limit=200;//限制limit最大值
     }
-    auto indexes=repos_.offlineMessageRepo->listOfflineMessage(session.accountId_,limit);
+    auto result=repos_.offlineMessageRepo->listOfflineMessage(session.accountId_,limit);
+    if(!result.ok()||!result.value.has_value()){
+        return makeRepoError(req,result.status,result.message);
+    }
+    auto indexes=result.value.value();
     nlohmann::json indexJson=nlohmann::json::array();
     for(const auto& index:indexes){
         if(index.type==storage::OfflineMessageType::Group){
@@ -1881,8 +1884,12 @@ Response Imservice::handleConversationList(const Request& req,[[maybe_unused]]Co
     //解析limit
     size_t limit=parseLimit(req,"limit",20,200);
     auto result=conversationService_->listConversations(session.accountId_,limit);
+    if(!result.ok()||!result.value.has_value()){
+        return makeRepoError(req,result.status,result.message);
+    }
+
     nlohmann::json conversationViewJson=nlohmann::json::array();
-    for(const auto& view:result){
+    for(const auto& view:result.value.value()){
         nlohmann::json item{
         {"type",storage::conversationTypeToString(view.summary.type)},
         {"targetId",view.summary.targetId},
@@ -1903,60 +1910,7 @@ Response Imservice::handleConversationList(const Request& req,[[maybe_unused]]Co
     }
     return makeOk(req,MsgType::CONVERSATION_LIST_RESP,nlohmann::json{{"conversations",conversationViewJson},{"count",conversationViewJson.size()}});
 }
-Response Imservice::handleSync(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
-    auto err=guardAuthenticated(req,session);
-    if(err){
-        return err.value();
-    }
-    //同步消息限流
-    if(rateLimiter_){
-        auto limitResult=rateLimiter_->checkSync(session.accountId_,nowMs());
-        auto resultOpt=checkRateLimitOrError(req,limitResult);
-        if(resultOpt){
-            return resultOpt.value();
-        }
-    }
-    
-    if(!messageSyncService_||!repos_.userRepo||!repos_.friendRepo){
-        return makeErr(req,ErrorCode::INTERNAL,"messageSyncService");
-    }
-    size_t limit=parseLimit(req,"limit",50,imConfig_.maxSyncMessageLimit);
-    size_t offlineLimit=parseLimit(req,"offlineLimit",100,imConfig_.maxOfflineIndexLimit);
-    auto cursorsResult=parseSyncCursors(req,limit,imConfig_.maxSyncMessageLimit);
-    if(!cursorsResult.ok){
-        return makeErr(req,cursorsResult.code,cursorsResult.message);
-    }
-    if(cursorsResult.cursors.size()>imConfig_.maxSyncCursorCount){
-        return makeErr(req,ErrorCode::BAD_REQUEST,"too many cursors");
-    }
-    for(const auto& cursor:cursorsResult.cursors){
-        if(cursor.type==storage::ConversationType::Direct){
-            if(!repos_.userRepo->userExists(cursor.targetId)){return makeErr(req,ErrorCode::USER_NOT_FOUND,"the user is not found");
-            }
-            if(!repos_.friendRepo->areFriends(session.accountId_,cursor.targetId)){return makeErr(req,ErrorCode::NOT_FRIENDS,"the user is not your friend");
-            }
-        }
-        else if(cursor.type==storage::ConversationType::Group){
-            if(!groupManager_.isMember(cursor.targetId,session.accountId_)){return makeErr(req,ErrorCode::NOT_IN_GROUP,"the user is not in the group");
-            }
-        }
-    }
-    auto result=messageSyncService_->sync(session.accountId_,cursorsResult.cursors,offlineLimit);
-    nlohmann::json deltasJson=nlohmann::json::array();
-    for(const auto& delta:result.deltas){
-        deltasJson.emplace_back(nlohmann::json{{"conversationType",storage::conversationTypeToString(delta.type)},{"targetId",delta.targetId},{"messages",delta.messages},{"fromMsgId",delta.fromMsgId},{"latestMsgId",delta.latestMsgId},{"hasMore",delta.hasMore}});
-    }
-    nlohmann::json offlineIndexesJson=nlohmann::json::array();
-    for(const auto&index:result.offlineIndexes){
-        if(index.type==storage::OfflineMessageType::Direct){
-            offlineIndexesJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type","direct"},{"peerAccountId",index.peerAccountId}});
-        }
-        else if(index.type==storage::OfflineMessageType::Group){
-            offlineIndexesJson.emplace_back(nlohmann::json{{"msgId",index.msgId},{"type","group"},{"groupId",index.groupId}});
-        }
-    }
-    return makeOk(req,MsgType::SYNC_RESP,nlohmann::json{{"deltas",deltasJson},{"offlineIndexes",offlineIndexesJson},{"cursorCount",cursorsResult.cursors.size()},{"deltaCount",deltasJson.size()},{"offlineCount",offlineIndexesJson.size()}});
-}
+
 Response Imservice::handleMessageAck(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
     auto err=guardAuthenticated(req,session);
     if(err){
@@ -2097,7 +2051,7 @@ DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key
     auto persistenceService=groupMessagePersistence_;
     auto postToBaseLoop=postToBaseLoop_;
     auto enqueueAt=std::chrono::steady_clock::now();
-    auto submitResult=submitMessageTask_(groupId,[enqueueAt,this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
+    auto submitResult=submitMessageTask_("group:"+groupId,[enqueueAt,this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
         //baseLoop提交任务交给消息线程处理
         auto start=std::chrono::steady_clock::now();//记录开始任务时间
         
@@ -2427,11 +2381,21 @@ DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key
         //baseLoop提交任务交给消息线程处理
         auto start=std::chrono::steady_clock::now();//记录开始任务时间
         AsyncDbResult<std::vector<storage::MessageRecord>> readResult;
-        if(context.query.mode==HistoryQueryMode::After){
-           readResult.repoResult=messageRepo->listGroupMessagesAfter(context.groupId,context.query.lastMsgId,context.query.limit);
-        }
-        else{
-            readResult.repoResult=messageRepo->listGroupMessages(context.groupId,context.query.beforeMsgId,context.query.limit);
+        try{
+            if(context.query.mode==HistoryQueryMode::After){
+                readResult.repoResult=messageRepo->listGroupMessagesAfter(context.groupId,
+                context.query.lastMsgId,context.query.limit);
+            }
+            else{
+                readResult.repoResult=messageRepo->listGroupMessages(context.groupId,
+                    context.query.beforeMsgId,context.query.limit);
+            }
+        }catch(const std::exception& e){
+            readResult.exceptionMessage=e.what();
+            readResult.repoResult={.status=storage::RepoStatus::SqlError,.message=e.what()};
+        }catch(...){
+            readResult.exceptionMessage = "unknown database exception";
+            readResult.repoResult = {.status = storage::RepoStatus::Internal,.message = "unknown database exception"};
         }
         readResult.queueWaitUs=std::chrono::duration_cast<std::chrono::microseconds>(start-enqueueAt).count();
         readResult.executeUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count();
@@ -2531,29 +2495,36 @@ DispatchResult Imservice::handleDmHistoryAsync(const Request& req,ConnKey key,Se
         //baseLoop提交任务交给消息线程处理
         auto start=std::chrono::steady_clock::now();//记录开始任务时间
         AsyncDbResult<std::vector<storage::DirectMessageRecord>> readResult;
-        //查询目标用户存在
-        auto findUser=friendService->findUser(context.peerAccountId);
-        auto areFriends=friendService->areFriends(context.base.accountId,context.peerAccountId);
-        if(!findUser.has_value()){
-            readResult.repoResult={.status=storage::RepoStatus::UserNotFound,.message="user not found"};
-        }
-        if(!areFriends){
-             readResult.repoResult={.status=storage::RepoStatus::NotFriends,.message="the user is not your friends"};
-        }
-        if(findUser.has_value()&&areFriends){
-            if(context.query.mode==HistoryQueryMode::After){
-                readResult.repoResult=messageRepo->listDirectMessagesAfter(context.conversationKey,context.query.lastMsgId,context.query.limit);
+        try{
+            //查询目标用户存在
+            auto findUser=friendService->findUser(context.peerAccountId);
+            auto areFriends=friendService->areFriends(context.base.accountId,context.peerAccountId);
+            if(!findUser.has_value()){
+                readResult.repoResult={.status=storage::RepoStatus::UserNotFound,.message="user not found"};
             }
-            else{
-                readResult.repoResult=messageRepo->listDirectMessages(context.conversationKey,context.query.beforeMsgId,context.query.limit);
+            else if(!areFriends){//校验好友关系
+                readResult.repoResult={.status=storage::RepoStatus::NotFriends,.message="the user is not your friends"};
             }
+            else{//查询消息
+                if(context.query.mode==HistoryQueryMode::After){
+                    readResult.repoResult=messageRepo->listDirectMessagesAfter(context.conversationKey,context.query.lastMsgId,context.query.limit);
+                }
+                else{
+                    readResult.repoResult=messageRepo->listDirectMessages(context.conversationKey,context.query.beforeMsgId,context.query.limit);
+                }
+            }
+        }catch(const std::exception& e){
+            readResult.exceptionMessage=e.what();
+            readResult.repoResult={.status=storage::RepoStatus::SqlError,.message=e.what()};
+        }catch(...){
+            readResult.exceptionMessage = "unknown database exception";
+            readResult.repoResult = {.status = storage::RepoStatus::Internal,.message = "unknown database exception"};
         }
-
         readResult.queueWaitUs=std::chrono::duration_cast<std::chrono::microseconds>(start-enqueueAt).count();
         readResult.executeUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count();
         auto posted=postToBaseLoop([this,context=std::move(context),readResult=std::move(readResult)]()mutable{
-        //提交回baseLoop
-        completeDmHistory(std::move(context),std::move(readResult));
+            //提交回baseLoop
+            completeDmHistory(std::move(context),std::move(readResult));
         });
         if(!posted){
             LOG_WARN("Failed to post read message completion to baseLoop");
@@ -2583,9 +2554,199 @@ auto session=resolvePendingSession(context.base);
     }
     auto resp= makeOk(context.base.request,MsgType::DM_HISTORY_RESP,
         nlohmann::json{{"peerAccountId",context.peerAccountId},{"conversationKey",context.conversationKey},
-        {"mode",context.query.mode},{"beforeMsgId",context.query.beforeMsgId},{"lastMsgId",context.query.lastMsgId},
+        {"mode",historyQueryModeToString(context.query.mode)},{"beforeMsgId",context.query.beforeMsgId},{"lastMsgId",context.query.lastMsgId},
         {"limit",context.query.limit},{"messages",messagesJson},
         {"queueWaitUs",result.queueWaitUs},{"queryUs",result.executeUs}});
     sendResponseWithLog(context.base.key,context.base.request,resp,*session,"DM_HISTORY_RESP_OUT");
+}
+DispatchResult Imservice::handleOfflineListAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection) {
+    if (auto error = guardAuthenticated(req, session)) {
+        return DispatchResult::immediate(std::move(*error));
+    }
+
+    if (!submitDbReadTask_ ||!postToBaseLoop_ ||!repos_.offlineMessageRepo) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"offline list pipeline unavailable"));
+    }
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
+    //解析limit
+    const std::size_t limit =parseLimit(req, "limit", 20,imConfig_.maxOfflineIndexLimit);
+    //构造上下文
+    PendingOfflineListContext context{
+        .base = {
+            .connection = connection,
+            .key = key,
+            .request = req,
+            .accountId = session.accountId_
+        },
+        .limit = limit
+    };
+
+    auto repository = repos_.offlineMessageRepo;
+    auto postToBaseLoop = postToBaseLoop_;
+    const auto enqueuedAt = std::chrono::steady_clock::now();
+
+    auto submitResult = submitDbReadTask_(
+        [this,repository = std::move(repository),postToBaseLoop = std::move(postToBaseLoop),
+        context = std::move(context),enqueuedAt]() mutable {
+            const auto startedAt =std::chrono::steady_clock::now();
+            AsyncDbResult<std::vector<storage::OfflineMessageIndex>> result;
+            try {
+                result.repoResult =repository->listOfflineMessage(context.base.accountId,context.limit);
+            } catch (const std::exception& exception) {
+                result.exceptionMessage = exception.what();
+                result.repoResult = {.status = storage::RepoStatus::SqlError,.message = exception.what()
+                };
+            } catch (...) {
+                result.exceptionMessage ="unknown offline list exception";
+                result.repoResult = {.status = storage::RepoStatus::Internal,.message ="unknown offline list exception"};
+            }
+
+            result.queueWaitUs =std::chrono::duration_cast<std::chrono::microseconds>(startedAt - enqueuedAt).count();
+
+            result.executeUs =std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() -startedAt).count();
+            const bool posted = postToBaseLoop(
+                [this,context = std::move(context),result = std::move(result)]() mutable {
+                    completeOfflineList(std::move(context),std::move(result));
+                });
+
+            if (!posted) {
+                LOG_WARN("failed to post offline list completion");
+            }
+        });
+
+    return submitResultMapToDispatchResult(req, submitResult);
+}
+
+void Imservice::completeOfflineList(PendingOfflineListContext context,AsyncDbResult<std::vector<storage::OfflineMessageIndex>> result) {
+
+    Session* session = resolvePendingSession(context.base);
+    if (!session) {
+        return;
+    }
+
+    if (!result.ok()) {
+        auto response = makeRepoError(context.base.request,result.repoResult.status,result.repoResult.message);
+        sendResponseWithLog(context.base.key,context.base.request,response,*session,"OFFLINE_LIST_FAILED");
+        return;
+    }
+
+    nlohmann::json messages = nlohmann::json::array();
+
+    for (const auto& index : result.repoResult.value.value()) {
+        nlohmann::json item{{"msgId", index.msgId},{"type",
+             storage::offlineMessageTypeToString(index.type)}
+        };
+        if (index.type ==storage::OfflineMessageType::Group) {
+            item["groupId"] = index.groupId;
+        } 
+        else if (index.type ==storage::OfflineMessageType::Direct) {
+            item["peerAccountId"] =index.peerAccountId;
+        }
+        messages.emplace_back(std::move(item));
+    }
+
+    auto response = makeOk(context.base.request,MsgType::OFFLINE_LIST_RESP,
+        {{"messages", messages},{"count", messages.size()},{"queueWaitUs", result.queueWaitUs},{"queryUs", result.executeUs}
+        });
+
+    sendResponseWithLog(context.base.key,context.base.request,response,*session,"OFFLINE_LIST_RESP_OUT");
+}
+
+DispatchResult Imservice::handleConversationListAsync(const Request& req, ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+    if (auto error = guardAuthenticated(req, session)) {
+        return DispatchResult::immediate(std::move(*error));
+    }
+
+    if (!submitDbReadTask_ ||!postToBaseLoop_ ||!repos_.conversationRepo) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"conversation list pipeline unavailable"));
+    }
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
+    //解析limit
+    const std::size_t limit =parseLimit(req, "limit", 20,imConfig_.maxOfflineIndexLimit);
+    //构造上下文
+    PendingConversationListContext context{
+        .base = {
+            .connection = connection,
+            .key = key,
+            .request = req,
+            .accountId = session.accountId_
+        },
+        .limit = limit
+    };
+
+    auto service=conversationService_ ;
+    auto postToBaseLoop = postToBaseLoop_;
+    const auto enqueuedAt = std::chrono::steady_clock::now();
+
+    auto submitResult = submitDbReadTask_(
+        [this,service= std::move(service),postToBaseLoop = std::move(postToBaseLoop),
+        context = std::move(context),enqueuedAt]() mutable {
+            const auto startedAt =std::chrono::steady_clock::now();
+            AsyncDbResult<std::vector<ConversationView>> result;
+            try {
+                result.repoResult =service->listConversations(context.base.accountId,context.limit);
+            } catch (const std::exception& exception) {
+                result.exceptionMessage = exception.what();
+                result.repoResult = {.status = storage::RepoStatus::SqlError,.message = exception.what()
+                };
+            } catch (...) {
+                result.exceptionMessage ="unknown offline list exception";
+                result.repoResult = {.status = storage::RepoStatus::Internal,.message ="unknown offline list exception"};
+            }
+
+            result.queueWaitUs =std::chrono::duration_cast<std::chrono::microseconds>(startedAt - enqueuedAt).count();
+
+            result.executeUs =std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() -startedAt).count();
+            const bool posted = postToBaseLoop(
+                [this,context = std::move(context),result = std::move(result)]() mutable {
+                    completeConversationList(std::move(context),std::move(result));
+                });
+
+            if (!posted) {
+                LOG_WARN("failed to post offline list completion");
+            }
+        });
+
+    return submitResultMapToDispatchResult(req, submitResult);
+}
+
+void Imservice::completeConversationList(PendingConversationListContext context,AsyncDbResult<std::vector<ConversationView>>result){
+    Session* session = resolvePendingSession(context.base);
+    if (!session) {
+        return;
+    }
+
+    if (!result.ok()) {
+        auto response = makeRepoError(context.base.request,result.repoResult.status,result.repoResult.message);
+        sendResponseWithLog(context.base.key,context.base.request,response,*session,"OFFLINE_LIST_FAILED");
+        return;
+    }
+    nlohmann::json conversationViewJson=nlohmann::json::array();
+    for(const auto& view:result.repoResult.value.value()){
+        nlohmann::json item{
+        {"type",storage::conversationTypeToString(view.summary.type)},
+        {"targetId",view.summary.targetId},
+        {"lastMsgId",view.summary.lastMsgId},{"lastPreview",view.summary.lastPreview},
+        {"lastSenderAccountId",view.summary.lastSenderAccountId},{"lastSenderUsername",view.summary.lastSenderUsername},
+        {"lastTsMs",view.summary.lastTsMs},{"unreadCount",view.summary.unreadCount},
+        {"lastReadMsgId",view.summary.lastReadMsgId}};
+        if(view.summary.type==storage::ConversationType::Direct){
+            item["targetUsername"] = view.targetUsername;
+            item["targetNickname"] = view.targetNickname;
+            item["targetAvatarUrl"] = view.targetAvatarUrl;
+        }
+        else if(view.summary.type == storage::ConversationType::Group){
+            item["groupName"] = view.groupName;
+            item["groupOwnerAccountId"] = view.groupOwnerAccountId;
+        }
+        conversationViewJson.emplace_back(std::move(item));
+    }
+    auto resp= makeOk(context.base.request,MsgType::CONVERSATION_LIST_RESP,
+        nlohmann::json{{"conversations",conversationViewJson},{"count",conversationViewJson.size()}});
+    sendResponseWithLog(context.base.key,context.base.request,resp,*session,"CONVERSATION_LIST_RESP_OUT");
 }
 }

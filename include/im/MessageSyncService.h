@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 #include "SyncModels.h"
-
+#include "storage/RepoValueResult.h"
 /*负责消息同步聚合：
 根据客户端游标拉取增量消息
 拉取离线消息索引
@@ -17,7 +17,7 @@ namespace im{
 class MessageSyncService{
 public:
     MessageSyncService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo);
-    SyncResult sync(const std::string& accountId,const std::vector<SyncCursor>& cursors,size_t offlineLimit);//执行一次账号级同步
+    storage::RepoValueResult<SyncResult> sync(const std::string& accountId,const std::vector<SyncCursor>& cursors,size_t offlineLimit);//执行一次账号级同步
     ConversationDelta loadDirectDelta(const std::string& selfAccountId,const std::string& peerAccountId,uint64_t lastMsgId,size_t limit);//拉取某个私聊会话的增量消息
     ConversationDelta loadGroupDelta(const std::string& groupId,uint64_t lastMsgId,size_t limit);//拉取群聊会话增量消息
 private:

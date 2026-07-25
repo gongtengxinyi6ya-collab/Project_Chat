@@ -31,21 +31,21 @@ storage::RepoResult im::ConversationService::recordGroupMessage(const std::strin
     
 
 
-std::vector<im::ConversationService::ConversationView> im::ConversationService::listConversations(const std::string& ownerAccountId,size_t limit){
+storage::RepoValueResult<std::vector<im::ConversationService::ConversationView>> im::ConversationService::listConversations(const std::string& ownerAccountId,size_t limit){
     if(ownerAccountId.empty()){
-        return {};
+        return {.status=storage::RepoStatus::InvalidArgument,.message="ownerAccountId is empty"};
     }
     if(!conversationRepo_||!userProfileRepo_||!groupRepo_){
         return {};
     }
     const auto& result=conversationRepo_->listConversations(ownerAccountId,limit);
-    if(result.empty()){
-        return {};
+    if(!result.ok()||!result.value.has_value()){
+        return {.status=storage::RepoStatus::Internal,.message="repo invalid"};
     }
     std::vector<ConversationView> views;//会话列表
     std::vector<std::string> accountIds;//搜集所有type为direct的targetId
     std::vector<std::string> groupIds;//搜集所有type为group的targetId
-    for(const auto& summary:result){
+    for(const auto& summary:result.value.value()){
         if(summary.type==storage::ConversationType::Direct){
             accountIds.emplace_back(summary.targetId);//加入targetId
         }
@@ -87,7 +87,7 @@ std::vector<im::ConversationService::ConversationView> im::ConversationService::
             }
         }
     }
-    return views;
+    return {.status=storage::RepoStatus::Ok,.value=std::move(views)};
 }
 storage::RepoResult im::ConversationService::markRead(const std::string& ownerAccountId,storage::ConversationType type,const std::string& targetId,uint64_t readMsgId,uint64_t readAtMs){
     if(ownerAccountId.empty()||targetId.empty()||readMsgId==0){

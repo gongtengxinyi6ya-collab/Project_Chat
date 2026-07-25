@@ -10,14 +10,21 @@ DirectMessagePersistenceService::DirectMessagePersistenceService(std::shared_ptr
 }
 
 DirectMessageWriteResult DirectMessagePersistenceService::persist(const DirectMessageWriteCommand& command) const{
-    if(command.conversationKey.empty()||command.msgId==0||command.senderAccountId.empty()||command.receiverAccountId.empty()){
-        return {.commitResult={storage::RepoStatus::InvalidArgument}};
-    }
-    if(!writeStore_){
-        return {.commitResult={storage::RepoStatus::Internal}};
-    }
     DirectMessageWriteResult msgWriteRes;
     auto start=std::chrono::steady_clock::now();
+
+    auto finishTiming=[&msgWriteRes,start](){
+        msgWriteRes.persistUs=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count();
+    };
+    if(command.conversationKey.empty()||command.msgId==0||command.senderAccountId.empty()||command.receiverAccountId.empty()){
+        msgWriteRes.commitResult={storage::RepoStatus::InvalidArgument};
+        finishTiming();
+        return msgWriteRes;
+    }
+    if(!writeStore_){
+        msgWriteRes.commitResult={storage::RepoStatus::Internal};
+        finishTiming();
+    }
     try{
         //计算SQL开始时间
         auto result=writeStore_->commit(command);
@@ -28,15 +35,14 @@ DirectMessageWriteResult DirectMessagePersistenceService::persist(const DirectMe
 
         msgWriteRes.exceptionMessage=e.what();
         msgWriteRes.commitResult = {storage::RepoStatus::SqlError,e.what()
-};
+    };
         return msgWriteRes;
     }catch(...){
         msgWriteRes.exceptionMessage="unknow exception";
         msgWriteRes.commitResult = { storage::RepoStatus::Internal,"unknown direct message persistence exception"
-};
+    };
         //计算持久化时间
-        auto end=std::chrono::steady_clock::now();
-        msgWriteRes.persistUs=std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
+        finishTiming();
         return msgWriteRes;
     }
 }

@@ -195,16 +195,15 @@ private:
     Response handleRejectFriendRequest(const Request& req,ConnKey key,Session& session);//拒绝好友申请
 
     //会话列表展示
-    std::unique_ptr<ConversationService> conversationService_;
+    std::shared_ptr<ConversationService> conversationService_;
     Response handleConversationList(const Request& req,ConnKey key,Session& session);
     Response handleConversationRead(const Request& req,ConnKey key,Session& session);
 
     //消息同步服务
-    std::unique_ptr<MessageSyncService> messageSyncService_;
-    Response handleSync(const Request& req,ConnKey key,Session& session);//处理客户端同步请求
+    std::shared_ptr<MessageSyncService> messageSyncService_;
 
     //消息确认服务
-    std::unique_ptr<MessageAckService> messageAckService_;
+    std::shared_ptr<MessageAckService> messageAckService_;
     Response handleMessageAck(const Request& req,ConnKey key,Session& session);
 
     //业务限流服务
@@ -285,5 +284,32 @@ struct PendingDmHistoryContext {//私聊历史上下文
 };
     DispatchResult handleDmHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeDmHistory(PendingDmHistoryContext context,AsyncDbResult<std::vector<storage::DirectMessageRecord>> result);
+
+struct PendingOfflineListContext {
+    PendingDbRequestContext base;
+    std::size_t limit{20};
 };
+
+    DispatchResult handleOfflineListAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    void completeOfflineList(PendingOfflineListContext context,AsyncDbResult<std::vector<storage::OfflineMessageIndex>> result);
+
+//异步会话接口
+struct PendingConversationListContext {
+    PendingDbRequestContext base;
+    std::size_t limit{20};
+};
+
+    DispatchResult handleConversationListAsync(const Request& request, ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    void completeConversationList(PendingConversationListContext context,AsyncDbResult<std::vector<ConversationView>> result);
+
+struct PendingSyncContext {
+    PendingDbRequestContext base;
+    std::vector<SyncCursor> cursors;
+    std::size_t offlineLimit{100};
+};
+
+    DispatchResult handleSyncAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    void completeSync(PendingSyncContext context,AsyncDbResult<SyncResult> result);
+};
+
 }

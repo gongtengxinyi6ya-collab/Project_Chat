@@ -4,11 +4,13 @@
 #include "storage/sql/SqlConnectionGuard.h"
 #include "storage/sql/SqlTransaction.h"
 #include <stdexcept>
-storage::SqlConversationRepo::SqlConversationRepo(std::shared_ptr<SqlConnectionPool> pool)
+
+namespace storage{
+SqlConversationRepo::SqlConversationRepo(std::shared_ptr<SqlConnectionPool> pool)
 :pool_(std::move(pool)){
 
 }
-storage::RepoResult storage::SqlConversationRepo::upsertDirectOnMessage(const std::string&senderAccountId,const std::string&receiverAccountId,const std::string&senderUsername,uint64_t msgId,const std::string& preview,uint64_t serverTsMs){
+RepoResult SqlConversationRepo::upsertDirectOnMessage(const std::string&senderAccountId,const std::string&receiverAccountId,const std::string&senderUsername,uint64_t msgId,const std::string& preview,uint64_t serverTsMs){
     if(senderAccountId.empty()||receiverAccountId.empty()||msgId==0||serverTsMs==0){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -82,7 +84,7 @@ storage::RepoResult storage::SqlConversationRepo::upsertDirectOnMessage(const st
     }
 }
 
-storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std::string&groupId,const std::vector<std::string>&memberAccountIds,const std::string& senderAccountId,const std::string&senderUsername,uint64_t msgId,const std::string& preview,uint64_t serverTsMs){
+RepoResult SqlConversationRepo::upsertGroupOnMessage(const std::string&groupId,const std::vector<std::string>&memberAccountIds,const std::string& senderAccountId,const std::string&senderUsername,uint64_t msgId,const std::string& preview,uint64_t serverTsMs){
     if(groupId.empty()||memberAccountIds.empty()||senderAccountId.empty()||msgId==0){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -111,7 +113,7 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
             )VALUES
         )";
     //动态拼接VALUES占位符
-    std::vector<storage::SqlParam> params;
+    std::vector<SqlParam> params;
     bool first=true;
     for(const auto &accountId:memberAccountIds){
         if(!first){
@@ -183,9 +185,9 @@ storage::RepoResult storage::SqlConversationRepo::upsertGroupOnMessage(const std
     }
     return {.status=RepoStatus::Ok};
 }
-std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConversations(const std::string& ownerAccountId,size_t limit){
+RepoValueResult<std::vector<ConversationSummary>> SqlConversationRepo::listConversations(const std::string& ownerAccountId,size_t limit){
     if(ownerAccountId.empty()){
-        return {};
+        return {.status = RepoStatus::InvalidArgument,.message = "ownerAccountId is empty"};
     }
     if(limit==0){
         limit=20;
@@ -195,7 +197,7 @@ std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConv
     }
     auto conn=pool_->acquire();
     if(!conn||!conn->connected()){
-        return {};
+        return {.status = RepoStatus::SqlError,.message = "failed to acquire SQL connection"};
     }
     std::string sql=R"(
     SELECT *
@@ -252,10 +254,7 @@ std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConv
     )";
     auto result=conn->queryPrepared("conversation.select_list",sql,{ownerAccountId,ownerAccountId,limit});
     if(!result.ok()){
-        return {};
-    }
-    if(result.rows.empty()){
-        return {};
+        return {.status = RepoStatus::SqlError,.message = result.error};
     }
     std::vector<ConversationSummary> summarys;
     for(const auto& row:result.rows){
@@ -273,9 +272,9 @@ std::vector<storage::ConversationSummary> storage::SqlConversationRepo::listConv
         summary.unreadCount=static_cast<uint32_t>(getUInt64(row,"unread_count"));
         summarys.emplace_back(std::move(summary));
     }
-    return summarys;
+    return {.status=RepoStatus::Ok,.value=std::move(summarys)};
 }
-storage::RepoResult storage::SqlConversationRepo::markConversationRead(const std::string& ownerAccountId,ConversationType type,const std::string& targetId,uint64_t readMsgId,uint64_t readAtMs){
+RepoResult SqlConversationRepo::markConversationRead(const std::string& ownerAccountId,ConversationType type,const std::string& targetId,uint64_t readMsgId,uint64_t readAtMs){
     if(ownerAccountId.empty()||targetId.empty()||readMsgId==0){
         return {.status=RepoStatus::InvalidArgument};
     }
@@ -342,4 +341,5 @@ storage::RepoResult storage::SqlConversationRepo::markConversationRead(const std
         return {.status=RepoStatus::InvalidArgument,.message="unknown conversation type"};
     }
     return {.status=RepoStatus::Ok};
+}
 }

@@ -43,45 +43,51 @@ RepoResult SqlOfflineMessageRepo::saveOfflineMessage(const std::string& accountI
     }
     return RepoResult{.status=RepoStatus::Ok,.message="Offline message saved successfully"};
 }
-std::vector<OfflineMessageIndex> SqlOfflineMessageRepo::listOfflineMessage(const std::string& accountId,size_t limit){
+RepoValueResult<std::vector<OfflineMessageIndex>> SqlOfflineMessageRepo::listOfflineMessage(const std::string& accountId,size_t limit){
     if(accountId.empty()){
-        return {};
+        return {.status=RepoStatus::InvalidArgument,.message="invalid offline list argument"};
     }
     auto conn=pool_->acquire();//获取连接
-    if(!conn){
-        return {};
+    if(!conn||!conn->connected()){
+        return {.status=RepoStatus::Internal,.message="failed to acquire SQL connection"};
     }
-    if(conn->connected()){
-        auto result=conn->queryPrepared("SELECT msg_id,group_id,msg_type,peer_account_id FROM offline_messages WHERE account_id=? ORDER BY id ASC LIMIT ?",{accountId,limit});
-        if(result.ok()){
-            std::vector<OfflineMessageIndex> offlineMessages;
-            for(auto& row:result.rows){
-                OfflineMessageIndex offlineMessage;
-                auto msgIdPair=row.find("msg_id");
-                offlineMessage.msgId=msgIdPair!=row.end()?std::stoull(msgIdPair->second):0;
-                auto msgTypePair=row.find("msg_type");
-                if(msgTypePair!=row.end()){
-                    if(std::stoi(msgTypePair->second)==1){
-                        offlineMessage.type=OfflineMessageType::Group;
-                    }
-                    else{
-                        offlineMessage.type=OfflineMessageType::Direct;
-                    }
-                }
-                auto peerAccountIdPair=row.find("peer_account_id");
-                if(peerAccountIdPair!=row.end()){
-                    offlineMessage.peerAccountId=peerAccountIdPair->second;
-                }
-                auto groupIdPair=row.find("group_id");
-                offlineMessage.groupId=groupIdPair!=row.end()?groupIdPair->second:"";
+    
+    auto result=conn->queryPrepared("offline_message.select_list",
+        R"(SELECT msg_id,group_id,msg_type,peer_account_id 
+        FROM offline_messages 
+        WHERE account_id=?
+        ORDER BY id ASC 
+        LIMIT ?)",
+        {accountId,limit});
 
-                offlineMessages.emplace_back(std::move(offlineMessage));
-
+    if(!result.ok()){
+        return {.status = RepoStatus::SqlError,.message = result.error};
+    }
+    std::vector<OfflineMessageIndex> offlineMessages;
+    offlineMessages.reserve(result.rows.size());
+    try{
+        for(auto& row:result.rows){
+            OfflineMessageIndex offlineMessage;
+            offlineMessage.msgId=getUInt64(row,"msg_id");
+            auto msgTypePair=row.find("msg_type");
+            if(msgTypePair!=row.end()){
+                if(std::stoi(msgTypePair->second)==1){
+                    offlineMessage.type=OfflineMessageType::Group;
+                }
+                else{
+                    offlineMessage.type=OfflineMessageType::Direct;
+                }
             }
-            return offlineMessages;
+            offlineMessage.peerAccountId=getString(row,"peer_account_id");
+            offlineMessage.groupId=getString(row,"groupId");
+
+            offlineMessages.emplace_back(std::move(offlineMessage));
+
         }
+    }catch(const std::exception& e){
+        return {.status=RepoStatus::SqlError,.message=e.what()};
     }
-    return {};
+    return {.status=RepoStatus::Ok,.value=std::move(offlineMessages)};
 }
 
 RepoValueResult<size_t> SqlOfflineMessageRepo::ackOfflineMessagesBatch(const std::string& accountId,const std::vector<uint64_t>& msgIds){
