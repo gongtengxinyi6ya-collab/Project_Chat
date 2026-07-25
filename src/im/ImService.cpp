@@ -1032,7 +1032,7 @@ DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session
         case MsgType::OFFLINE_LIST_REQ:
             return handleOfflineListAsync(req,key,session,connection);
         case MsgType::OFFLINE_ACK_REQ:
-            return handleOfflineListAsync(req,key,session,connection);
+            return handleOfflineAckAsync(req,key,session,connection);
         case MsgType::REGISTER_REQ:
             return DispatchResult::immediate(handleRegister(req,key,session));
         case MsgType::LOGIN_REQ:
@@ -2191,6 +2191,8 @@ void Imservice::completeGroupHistory(PendingGroupHistoryContext context,AsyncDbR
         return;
     }
     if(!groupManager_.isMember(context.groupId,session->accountId_)){
+        auto resp=makeErr(context.base.request,ErrorCode::NOT_IN_GROUP,"Not in group");
+        sendResponseWithLog(context.base.key,context.base.request,resp,*session,"GROUP_HISTORY_READ_FAILED");
         return;
     }
     if(!result.ok()){//repo失败
@@ -2344,6 +2346,9 @@ DispatchResult Imservice::handleOfflineListAsync(const Request& req,ConnKey key,
     if (!connection || connection->isClosed()) {
         return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
     }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
     //解析limit
     const std::size_t limit =parseLimit(req, "limit", 20,imConfig_.maxOfflineIndexLimit);
     //构造上下文
@@ -2438,6 +2443,9 @@ DispatchResult Imservice::handleConversationListAsync(const Request& req, ConnKe
     }
     if (!connection || connection->isClosed()) {
         return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
     }
     //解析limit
     const std::size_t limit =parseLimit(req, "limit", 20,imConfig_.maxOfflineIndexLimit);

@@ -30,7 +30,7 @@
 #include "im/DirectMessagePersistenceTypes.h"
 #include "im/AsyncDbResult.h"
 #include "infra/thread/ThreadTypes.h"
-
+#include "im/ConversationTypes.h"
 #include "net/SendTypes.h"
 class TcpConnection;
 
