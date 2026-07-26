@@ -33,6 +33,7 @@
 #include "infra/thread/ThreadTypes.h"
 #include "im/ConversationTypes.h"
 #include "net/SendTypes.h"
+#include "im/RedisLimitTypes.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -76,6 +77,8 @@ public:
     using PostToBaseLoopFn =std::function<bool(MessageTask)>;//投递持久化的结果任务到baseLoop线程
     using BatchSendFn = std::function<net::BatchSendResult(const std::vector<ConnKey>&, net::SharedPayload)>;
     using SubmitDbTaskFn =std::function<infra::thread::TaskSubmitResult(MessageTask)>;//投递数据库查询任务
+    using SubmitRedisTaskFn =std::function<infra::thread::TaskSubmitResult(const std::string& orderingKey,MessageTask task)>;
+    using RateLimitCompletion =std::function<void(AsyncRateLimitResult)>;
 
     explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig(),const IdConfig& idconfig=IdConfig());
     ~Imservice();
@@ -86,7 +89,7 @@ public:
     void stopAcceptingAsyncMessages();//服务关闭时禁止再接受新的异步消息任务
     void setBatchSender(BatchSendFn fn);
     void setDbReadExecutor(SubmitDbTaskFn submitFn);
-
+    void setRedisAsyncExecutor(SubmitRedisTaskFn submitFn,bool failOpen);
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
 
@@ -103,7 +106,7 @@ public:
     bool hasRepositories()const;//
     void loadFromRepositories();//服务启动时从Repo恢复群和成员关系
 
-    void setRateLimiter(std::unique_ptr<security::RateLimiter> limiter);
+    void setRateLimiter(std::shared_ptr<security::RateLimiter> limiter);
 private:
     uint32_t supportedVer_{1};//支持版本，协议版本校验
 
@@ -198,9 +201,14 @@ private:
     std::shared_ptr<MessageAckService> messageAckService_;
 
     //业务限流服务
-    std::unique_ptr<security::RateLimiter> rateLimiter_;//处理关键请求前进行频率限制
+    std::shared_ptr<security::RateLimiter> rateLimiter_;//处理关键请求前进行频率限制
     Response makeRateLimitError(const Request& req,const security::RateLimitResult& result);//将限流结果转换为错误响应
     std::optional<Response> checkRateLimitOrError(const Request& req,const security::RateLimitResult& result);//辅助方法
+    SubmitRedisTaskFn submitRedisTask_;//回调提交redis任务
+    bool redisFailOpen_{true};
+    infra::thread::TaskSubmitResult submitRateLimitCheck(RateLimitAction action,const std::string& subject,RateLimitCompletion completion);//构造异步限流任务，并提交到redis线程池
+    std::optional<Response> evaluateRateLimitResult(const Request& request,const AsyncRateLimitResult& result);//根据异步redis结果，判断是否立即返回响应
+    Session* resolvePendingSender(const std::weak_ptr<TcpConnection>& connection,ConnKey key,const std::string& accountId);//异步限流完成后重新确定连接和session有效
 
     //异步接口
     std::shared_ptr<GroupMessagePersistenceService> groupMessagePersistence_;

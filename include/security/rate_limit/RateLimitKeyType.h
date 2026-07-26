@@ -18,6 +18,7 @@ struct RateLimitRule {
 
 struct RateLimitResult {//限流结果
     bool allowed{true};//请求是否允许通过
+    bool backendAvailable{true};
     size_t remaining{0};//当前窗口剩余可请求次数
     int64_t retryAfterMs{0};//被限流后还需要等待多久
 };

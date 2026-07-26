@@ -61,7 +61,7 @@ void RedisConfig::validateOrThrow() const{
         ConfigParseHelper::checkRange("db", db_, 0, 16);
         ConfigParseHelper::checkRange("pool_size", poolSize_, 1, 1000);
         ConfigParseHelper::checkRange("connect_timeout_ms", connectTimeoutMs_, 1000, 60000);
-        ConfigParseHelper::checkRange("socket_timeout_ms", socketTimeoutMs_, 1000, 60000);
+        ConfigParseHelper::checkRange("socket_timeout_ms", socketTimeoutMs_, 100, 60000);
         if(keyPrefix_.empty()){
             throw std::runtime_error("Redis key prefix cannot be empty when enabled");
         }

@@ -24,7 +24,7 @@ AppConfig AppConfig::loadFromFile(const std::string& path){
         config.maintenance_=MaintenanceConfig::fromJson(j.value("maintenance",nlohmann::json::object()));
         config.messageAsync_=MessageAsyncConfig::fromJson(j.value("message_async",nlohmann::json::object()));
         config.dbAsync_=DbAsyncConfig::fromJson(j.value("db_async",nlohmann::json::object()));
-        
+        config.redisAsync_=RedisAsyncConfig::fromJson(j.value("redis_async",nlohmann::json::object()));
         return config;
     }catch(const nlohmann::json::exception& e){
         throw std::runtime_error("Failed to parse config file: "+std::string(e.what()));
@@ -43,6 +43,7 @@ void AppConfig::applyEnvOverrides(){
     healthConfig_.loadFromEnv();
     messageAsync_.applyEnvOverrides();
     dbAsync_.applyEnvOverrides();
+    redisAsync_.applyEnvOverrides();
 }
 void AppConfig::validateOrThrow() const{
     server_.validateOrThrow();
@@ -57,6 +58,7 @@ void AppConfig::validateOrThrow() const{
     maintenance_.validateOrThrow();
     messageAsync_.validateOrThrow();
     dbAsync_.validateOrThrow();
+    redisAsync_.validateOrThrow();
 }
 std::string AppConfig::dumpSummary() const{
     std::stringstream ss;
@@ -71,6 +73,7 @@ std::string AppConfig::dumpSummary() const{
       <<"Health(enable="<<healthConfig_.enabled()<<",logIntervalMs="<<healthConfig_.logIntervalMs()<<",redisPingEnabled="<<healthConfig_.redisPingEnabled()<<",sqlTimeoutDeltaMode="<<healthConfig_.sqlTimeoutDeltaMode()<<");"
       <<"Maintenance(enable="<<maintenance_.enabled<<",intervalMs="<<maintenance_.intervalMs<<",expiredSessionRetentionMs="<<maintenance_.expiredSessionRetentionMs<<",revokedSessionRetentionMs="<<maintenance_.revokedSessionRetentionMs<<",handledRequestRetentionMs="<<maintenance_.handledRequestRetentionMs<<",offlineIndexRetentionMs="<<maintenance_.offlineIndexRetentionMs<<",batchSize="<<maintenance_.batchSize<<");"
       << "MessageAsync(enabled="<< messageAsync_.enabled<< ",workerThreads="<< messageAsync_.workerThreads<< ",queueCapacity="<< messageAsync_.queueCapacity<< ",queueWarnPercent="<< messageAsync_.queueWarnPercent<< "); "
-      << "DbAsync(enabled="<< dbAsync_.enabled<< ",workerThreads="<< dbAsync_.workerThreads<< ",queueCapacity="<< dbAsync_.queueCapacity<< ",queueWarnPercent="<< dbAsync_.queueWarnPercent<< "); ";
+      << "DbAsync(enabled="<< dbAsync_.enabled<< ",workerThreads="<< dbAsync_.workerThreads<< ",queueCapacity="<< dbAsync_.queueCapacity<< ",queueWarnPercent="<< dbAsync_.queueWarnPercent<< "); "
+      << "RedisAsync(enabled="<< redisAsync_.enabled<< ",workerThreads="<< redisAsync_.workerThreads<< ",queueCapacityPerShard="<< redisAsync_.queueCapacityPerShard<< ",queueWarnPercent="<< redisAsync_.queueWarnPercent<<",faileOpen="<<redisAsync_.failOpen<< "); ";
     return ss.str();
 }

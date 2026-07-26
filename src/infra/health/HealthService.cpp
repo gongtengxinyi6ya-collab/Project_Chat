@@ -95,26 +95,17 @@ void HealthService::checkMessageSql(HealthSnapshot& snapshot){
         return;
     }
     
+    snapshot.messageSqlEnabled=true;
+    snapshot.messageSqlStats=sqlPool->stats();
+
+    const auto& stats=snapshot.messageSqlStats;
+    snapshot.messageSqlHealthy=stats.started&&stats.total>0;
+    if(config_.sqlTimeoutDeltaMode()){
+        snapshot.messageSqlAcquireTimeoutIncreased=stats.acquireTimeouts>lastMessageSqlAcquireTimeouts_;
+        lastMessageSqlAcquireTimeouts_=stats.acquireTimeouts;
+    }
     else{
-        snapshot.sqlEnabled=true;
-        auto stats=sqlPool->stats();
-        snapshot.sqlStats=stats;
-        if(!stats.started){
-            snapshot.sqlHealthy=false;
-        }
-        if(stats.total==0){
-            snapshot.sqlHealthy=false;
-        }
-        if(config_.sqlTimeoutDeltaMode()){
-            if(hasNewSqlAcquireTimeouts(stats)){
-                snapshot.sqlAcquireTimeoutIncreased=true;
-            }
-        }
-        else{
-            if(stats.acquireTimeouts>0){
-                snapshot.sqlAcquireTimeoutIncreased=true;
-            }
-        }
+        snapshot.messageSqlAcquireTimeoutIncreased=stats.acquireTimeouts>0;
     }
 }
 bool HealthService::hasNewSqlAcquireTimeouts(const storage::SqlConnectionPoolStats& stats){

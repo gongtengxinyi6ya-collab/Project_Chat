@@ -27,6 +27,6 @@ private:
     int db_{0};
     size_t poolSize_{4};
     int connectTimeoutMs_{3000};
-    int socketTimeoutMs_{3000};
+    int socketTimeoutMs_{300};
     std::string keyPrefix_{"project_chat:"};
 };

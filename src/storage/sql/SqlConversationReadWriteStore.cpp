@@ -68,7 +68,7 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitDir
         return {.status=RepoStatus::SqlError,.message=cvsResult.error};
     }
     if(cvsResult.rows.empty()){
-        return {.status=RepoStatus::NotFound,.message=cvsResult.error};
+        return {.status=RepoStatus::MessageNotFound,.message=cvsResult.error};
     }
 
     //校验readMsgIds属于当前会话
@@ -156,7 +156,7 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitDir
     if(!writeResult.ok()){
         return {.status=RepoStatus::SqlError,.message=writeResult.error};
     }
-    
+
     //更新会话游标和未读数
     auto updateResult=connection.executePrepared("conversations_update_unread",
     R"(

@@ -16,6 +16,7 @@
 #include "MaintenanceConfig.h"
 #include "MessageAsyncConfig.h"
 #include "DbAsyncConfig.h"
+#include "RedisAsyncConfig.h"
 /*
 总配置聚合：统一承载服务端/网络/日志/IM配置，提供加载，校验，查询
 */
@@ -39,6 +40,7 @@ public:
     const MaintenanceConfig& maintenance()const{return maintenance_;}
     const MessageAsyncConfig& messageAsync()const{return messageAsync_;};
     const DbAsyncConfig& dbAsync() const {return dbAsync_;}
+    const RedisAsyncConfig& redisAsync() const {return redisAsync_;}
 private:
     ServerConfig server_;
     NetConfig net_;
@@ -52,4 +54,5 @@ private:
     MaintenanceConfig maintenance_;
     MessageAsyncConfig messageAsync_;
     DbAsyncConfig dbAsync_;
+    RedisAsyncConfig redisAsync_;
 };

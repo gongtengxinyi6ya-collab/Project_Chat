@@ -194,7 +194,7 @@ void Imservice::setRepositories(storage::RepositoryBundle repos){
     }
 
 }
-void Imservice::setRateLimiter(std::unique_ptr<security::RateLimiter> limiter){
+void Imservice::setRateLimiter(std::shared_ptr<security::RateLimiter> limiter){
     rateLimiter_=std::move(limiter);
 }
 
@@ -1582,6 +1582,9 @@ void Imservice::setDbReadExecutor(SubmitDbTaskFn submitFn){
     if(!submitDbReadTask_){
         throw std::invalid_argument("dbRead executor is invalid");
     }
+}
+void Imservice::setRedisAsyncExecutor(SubmitRedisTaskFn submitFn,bool failOpen){
+    submitRedisTask_=std::move(sub)
 }
 void Imservice::setBaseLoopPoster(PostToBaseLoopFn postFn){
     postToBaseLoop_=std::move(postFn);

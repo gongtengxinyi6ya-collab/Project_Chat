@@ -70,6 +70,7 @@ private:
     std::unique_ptr<infra::thread::ThreadPool> threadPool_;//线程池，处理消息转发等耗时操作
     std::unique_ptr<infra::thread::KeyedSerialExecutor> messageExecutor_;//异步消息处理线程池
     std::unique_ptr<infra::thread::ThreadPool> dbReadExecutor_;//处理无顺序要求的MySQL查询
+    std::unique_ptr<infra::thread::KeyedSerialExecutor> redisExecutor_;//redis异步执行
     
     //IM系统
     std::unique_ptr<im::Imservice> imService_;//IM业务对象，处理消息逻辑

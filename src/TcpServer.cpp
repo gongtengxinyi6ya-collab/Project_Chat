@@ -113,9 +113,19 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
                 prefix.push_back(':');
             }
             prefix += "rate:";
+            //redis执行器创建
+            if(config_.redisAsync().enabled){
+                redisExecutor_=std::make_unique<infra::thread::KeyedSerialExecutor>(config_.redisAsync().workerThreads,config_.redisAsync().queueCapacityPerShard);
+                imService_->setRedisAsyncExecutor([this](const std::string& orderingKey,std::function<void()>task){
+                    if(!redisExecutor_){
+                        return infra::thread::TaskSubmitResult::Stopping;
+                    }
+                    return redisExecutor_->submit(orderingKey,std::move(task));
+                },config_.redisAsync().failOpen);
+            }
 
             auto store = std::make_shared<security::RedisRateLimitStore>(redisClient_, prefix);
-            imService_->setRateLimiter(std::make_unique<security::RateLimiter>(store));
+            imService_->setRateLimiter(std::make_shared<security::RateLimiter>(store));
             healthService_->setRedisClient(redisClient_);
             LOG_INFO("Redis rate limiter enabled");
         } 
