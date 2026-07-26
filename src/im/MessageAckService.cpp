@@ -1,11 +1,11 @@
 #include "im/MessageAckService.h"
 #include "storage/MessageRepo.h"
 #include "storage/OfflineMessageRepo.h"
-#include "storage/ConversationRepo.h"
+#include "storage/ConversationReadWriteStore.h"
 #include <stdexcept>
-im::MessageAckService::MessageAckService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo,std::shared_ptr<storage::ConversationRepo> conversationRepo)
-:messageRepo_(std::move(messageRepo)),offlineMessageRepo_(std::move(offlineMessageRepo)),conversationRepo_(std::move(conversationRepo)){
-    if(!messageRepo_||!offlineMessageRepo_||!conversationRepo_){
+im::MessageAckService::MessageAckService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo,std::shared_ptr<storage::ConversationReadWriteStore> conversationStore)
+:messageRepo_(std::move(messageRepo)),offlineMessageRepo_(std::move(offlineMessageRepo)),conversationReadWriteStore_(std::move(conversationStore)){
+    if(!messageRepo_||!offlineMessageRepo_||!conversationReadWriteStore_){
         throw std::invalid_argument("MessageAckService: null dependency");
     }
 }
@@ -51,24 +51,14 @@ storage::RepoValueResult<storage::ConversationReadResult> im::MessageAckService:
     if(type==storage::ConversationType::Unknown||readMsgId==0){
         return {.status=storage::RepoStatus::InvalidArgument};
     }
-    if(!conversationRepo_||!messageRepo_){
-        return {.status=storage::RepoStatus::Internal,.message="conversationRepo or messageRepo is not avaiable"};
+    if(!conversationReadWriteStore_){
+        return {.status=storage::RepoStatus::Internal,.message="conversationReadWriteStore is not avaiable"};
     }
-    auto resultConversation=conversationRepo_->markConversationRead(accountId,type,targetId,readMsgId,readAtMs);
-    if(!resultConversation.ok()){
-        return {.status=resultConversation.status,.message=resultConversation.message};
-    }
-    size_t receiptUpdated=0;
-    if(type==storage::ConversationType::Direct){
-        auto resultMessage=messageRepo_->markReadBefore(accountId,type,targetId,readMsgId,readAtMs);
-        if(!resultMessage.ok()){
-            return {.status=resultMessage.status,.message=resultMessage.message};
-        }
-        if(!resultMessage.value.has_value()){
-            return {.status=storage::RepoStatus::Internal,.message="markReadBefore value invalid"};
-        }
-        receiptUpdated=resultMessage.value.value();
-    }
-
-    return {.status=storage::RepoStatus::Ok,.value=storage::ConversationReadResult{.type=type,.targetId=targetId,.readMsgId=readMsgId,.readAtMs=readAtMs,.receiptUpdated=receiptUpdated}};
+    return conversationReadWriteStore_->commit(storage::ConversationReadCommand{
+        .accountId=accountId,
+        .type=type,
+        .targetId=targetId,
+        .readMsgId=readMsgId,
+        .readAtMs=readAtMs
+    });
 }

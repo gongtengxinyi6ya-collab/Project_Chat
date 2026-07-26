@@ -190,7 +190,6 @@ private:
 
     //会话列表展示
     std::shared_ptr<ConversationService> conversationService_;
-    Response handleConversationRead(const Request& req,ConnKey key,Session& session);
 
     //消息同步服务
     std::shared_ptr<MessageSyncService> messageSyncService_;
@@ -337,6 +336,21 @@ DispatchResult handleMessageAckAsync(const Request& request,ConnKey key,Session&
 
 void completeMessageAck(PendingAckContext context,AsyncAckResult result);
 DispatchResult handleOfflineAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+
+struct PendingConversationReadContext {
+    PendingDbRequestContext base;
+
+    storage::ConversationType conversationType{
+        storage::ConversationType::Unknown
+    };
+
+    std::string targetId;
+    std::uint64_t readMsgId{0};
+    std::int64_t readAtMs{0};
+};
+
+DispatchResult handleConversationReadAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+void completeConversationRead(PendingConversationReadContext context,AsyncDbResult<storage::ConversationReadResult> result);
 };
 
 }

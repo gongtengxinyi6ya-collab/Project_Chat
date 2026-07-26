@@ -16,6 +16,7 @@ class GroupJoinRequestRepo;
 class GroupMessageWriteStore;
 class SqlConnectionPool;
 class DirectMessageWriteStore;
+class ConversationReadWriteStore;
 
 class RepositoryBundle{
 public:
@@ -31,7 +32,8 @@ public:
     std::shared_ptr<GroupJoinRequestRepo> groupJoinRequestRepo;
     std::shared_ptr<GroupMessageWriteStore> groupMessageWriteStore;//群消息核心事务接口
     std::shared_ptr<DirectMessageWriteStore> directMessageWriteStore;//注入私聊事务存储
-    
+    std::shared_ptr<ConversationReadWriteStore> conversationReadWriteStore;//会话事务存储
+
     std::shared_ptr<SqlConnectionPool> sqlPool;
     std::shared_ptr<SqlConnectionPool> messageSqlPool;//消息独立线程池
 

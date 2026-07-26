@@ -183,6 +183,72 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitDir
 }
 
 RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitGroup(SqlConnection& connection,const ConversationReadCommand& command){
+    //锁定群成员游标
+    auto cursorResult=connection.queryPrepared(R"(
+        SELECT
+            last_read_seq,
+            last_read_msg_id,
+            last_read_at_ms
+        FROM user_group_cursors
+        WHERE account_id = ?
+        AND group_id = ?
+        FOR UPDATE;
+        )",{command.accountId,command.targetId});
+    if(!cursorResult.ok()){
+        return {.status=RepoStatus::SqlError,.message=cursorResult.error};
+    }
+    if(cursorResult.rows.empty()){
+        //查不到：用户退群、被题、数据不一致
+        return {.status=RepoStatus::TargetNotInGroup,.message="user not in group"};
+    }
+    auto row=cursorResult.rows.front();
+    auto oldReadSeq=getUInt64(row,"last_read_req");
+    auto oldReadMsgId=getUInt64(row,"last_read_msg_id");
+    auto oldReadAtMs=getInt64(row,"last_read_at_ms");
+    //获取目标消息的群内序号
+    auto seqResult=connection.queryPrepared(R"(
+        SELECT group_seq
+        FROM messages
+        WHERE group_id = ?
+        AND msg_id = ?
+        FOR UPDATE;
+        )",
+    {command.targetId,command.readMsgId});
+    if(!seqResult.ok()){
+        return {.status=RepoStatus::SqlError,.message=seqResult.error};
+    }
+    if(!seqResult.rows.empty()){
+        return {.status=RepoStatus::MessageNotFound,.message=seqResult.error};
+    }
+    auto seqRow=seqResult.rows.front();
+    auto targetGroupSeq=getUInt64(seqRow,"group_seq");
 
+    //幂等推进游标
+    if(targetGroupSeq<=oldReadSeq){
+        return {
+        .status = RepoStatus::Ok,
+        .value = ConversationReadResult{
+            .type = ConversationType::Group,
+            .targetId = command.targetId,
+            .readMsgId = oldReadMsgId,
+            .readAtMs = oldReadAtMs,
+            .receiptUpdated = 0
+        }
+    };
+    }
+    //真正推进
+    auto updateResult=connection.executePrepared(R"(
+        UPDATE user_group_cursors
+        SET
+            last_read_seq = ?,
+            last_read_msg_id = ?,
+            last_read_at_ms = GREATEST(last_read_at_ms, ?)
+        WHERE account_id = ?
+        AND group_id = ?;
+        )",
+    {targetGroupSeq,command.readMsgId,command.readAtMs,command.accountId,command.targetId});
+    if(!updateResult.ok()){
+        return {.status=RepoStatus::SqlError,.message=updateResult.error};
+    }
 }
 }

@@ -80,9 +80,6 @@ RepoValueResult<std::vector<storage::MessageRecord>> storage::MemoryMessageRepo:
 storage::RepoValueResult<storage::MessageAckResult> storage::MemoryMessageRepo::markDeliveredBatch([[maybe_unused]]const std::string&accountId,[[maybe_unused]]const std::vector<uint64_t>& msgIds,[[maybe_unused]]int64_t deliveredAtMs){
     return {};
 }
-storage::RepoValueResult<size_t> storage::MemoryMessageRepo::markReadBefore([[maybe_unused]]const std::string&accountId,[[maybe_unused]]ConversationType type,[[maybe_unused]]const std::string& targetId,[[maybe_unused]]uint64_t readMsgId,[[maybe_unused]]int64_t readAtMs){
-    return RepoValueResult<size_t>{};
-}
 
 }
     

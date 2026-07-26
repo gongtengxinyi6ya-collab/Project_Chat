@@ -177,8 +177,8 @@ void Imservice::setRepositories(storage::RepositoryBundle repos){
     if(repos_.messageRepo&&repos_.offlineMessageRepo){
         messageSyncService_=std::make_shared<MessageSyncService>(repos_.messageRepo,repos_.offlineMessageRepo);
     }
-    if(repos_.conversationRepo&&repos_.messageRepo&&repos_.offlineMessageRepo){
-        messageAckService_=std::make_shared<MessageAckService>(repos_.messageRepo,repos_.offlineMessageRepo,repos_.conversationRepo);
+    if(repos_.conversationReadWriteStore&&repos_.messageRepo&&repos_.offlineMessageRepo){
+        messageAckService_=std::make_shared<MessageAckService>(repos_.messageRepo,repos_.offlineMessageRepo,repos_.conversationReadWriteStore);
     }
     if(repos_.groupRepo&&repos_.userProfileRepo&&repos_.friendRepo){
         groupService_=std::make_unique<GroupService>(groupManager_,idGenerator_,repos_.groupRepo,repos_.userProfileRepo,repos_.friendRepo,imConfig_.requireFriendForGroupInvite,imConfig_.maxGroupMembers);
@@ -994,7 +994,7 @@ DispatchResult Imservice::dispatchRequest(const Request& req,ConnKey key,Session
         case MsgType::CONVERSATION_LIST_REQ:
             return handleConversationListAsync(req,key,session,connection);
         case MsgType::CONVERSATION_READ_REQ:
-            return DispatchResult::immediate(handleConversationRead(req,key,session));
+            return handleConversationReadAsync(req,key,session,connection);
         case MsgType::SYNC_REQ:{
             LOG_INFO_CTX("sync request in",makeReqCtx(key,req,session,"SYNC_IN"));
             return handleSyncAsync(req,key,session,connection);        }
@@ -1546,69 +1546,6 @@ Response Imservice::handleRejectFriendRequest(const Request& req,[[maybe_unused]
         LOG_WARN("Failed to push friend request rejected event to"+result.value.value().requestAccountId);
     }
     return makeOk(req,MsgType::REJECT_FRIEND_REQUEST_RESP,nlohmann::json{{"requestId",requestId}});
-}
-
-Response Imservice::handleConversationRead(const Request& req,[[maybe_unused]]ConnKey key,Session& session){
-    auto err=guardAuthenticated(req,session);
-    if(err){
-        return err.value();
-    }
-    std::string targetId;
-    auto getTargetId=getStringField(req,"targetId",targetId);
-    if(getTargetId){
-        return getTargetId.value();
-    }
-    std::string conversationTypeString;
-    auto getconversation=getStringField(req,"conversationType",conversationTypeString);
-    if(getconversation){
-        return getconversation.value();
-    }
-    storage::ConversationType conversationType;
-    if(conversationTypeString=="direct"){
-        if(!repos_.userRepo){
-            return makeErr(req,ErrorCode::INTERNAL,"userRepo is not avaiable");
-        }
-        if(!repos_.userRepo->userExists(targetId)){
-            return makeErr(req,ErrorCode::NO_SUCH_USER,"no such user");
-        }
-        conversationType=storage::ConversationType::Direct;
-    }
-    else if(conversationTypeString=="group"){
-        conversationType=storage::ConversationType::Group;
-        if(!groupManager_.isMember(targetId,session.accountId_)){
-            return makeErr(req,ErrorCode::NOT_IN_GROUP,"the user is not in the group"+targetId);
-        }
-    }
-    else{
-        return makeErr(req,ErrorCode::BAD_REQUEST,"conversationType is invalid");
-    }
-    uint64_t readMsgId=0;
-    if(req.body.contains("readMsgId")){
-        if(req.body["readMsgId"].is_number_unsigned()){
-            readMsgId=req.body["readMsgId"].get<uint64_t>();
-        }
-        else if(req.body["readMsgId"].is_number_integer()&&req.body["readMsgId"].get<int64_t>()>=0){
-            readMsgId=static_cast<uint64_t>(req.body["readMsgId"].get<int64_t>());
-        }
-        else{
-            return makeErr(req,ErrorCode::MISSING_FIELD,"Invalid readMsgId");
-        }
-    }
-    else{
-        return makeErr(req,ErrorCode::MISSING_FIELD,"Missing readMsgId");
-    }
-    if(!messageAckService_){
-        return makeErr(req,ErrorCode::INTERNAL,"messageAckService is not avaiable");
-    }
-    auto result=messageAckService_->markConversationRead(session.accountId_,conversationType,targetId,readMsgId,nowMs());
-    if(!result.ok()){
-        return makeRepoError(req,result.status,result.message);
-    }
-    if(!result.value.has_value()){
-        return makeErr(req,ErrorCode::INTERNAL,"ConversationReadResult value invalid");
-    }
-    auto conversationRes=result.value.value();
-    return makeOk(req,MsgType::CONVERSATION_READ_RESP,nlohmann::json{{"conversationType",storage::conversationTypeToString(conversationType)},{"targetId",conversationRes.targetId},{"readMsgId",readMsgId},{"readAtMs",conversationRes.readAtMs},{"receiptUpdated",conversationRes.receiptUpdated}});
 }
 
 
@@ -2763,5 +2700,158 @@ DispatchResult Imservice::handleOfflineAckAsync(const Request& req,ConnKey key,S
             }
         });
     return submitResultMapToDispatchResult(req,submitResult);
+}
+
+DispatchResult Imservice::handleConversationReadAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection) {
+    if (auto error = guardAuthenticated(req, session)) {
+        return DispatchResult::immediate(std::move(error.value()));
+    }
+
+    if (!submitMessageTask_ ||!postToBaseLoop_ ||!messageAckService_) {
+        return DispatchResult::immediate( makeErr(req, ErrorCode::INTERNAL,"conversation read pipeline unavailable"));
+    }
+
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
+
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
+    //解析目标id
+    std::string targetId;
+    if (auto error =getStringField(req, "targetId", targetId)) {
+        return DispatchResult::immediate(std::move(error.value()));
+    }
+    //解析类型
+    std::string typeString;
+    if (auto error =getStringField(req,"conversationType",typeString)) {
+        return DispatchResult::immediate(std::move(error.value()));
+    }
+
+    storage::ConversationType conversationType{
+        storage::ConversationType::Unknown
+    };
+
+    if (typeString == "direct") {
+        conversationType =storage::ConversationType::Direct;
+        if (!repos_.userRepo) {
+            return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL, "user repository unavailable"));
+        }
+    } 
+    else if(typeString == "group") {
+        conversationType =storage::ConversationType::Group;
+        if (!groupManager_.isMember(targetId,session.accountId_)) {
+            return DispatchResult::immediate(makeErr(req, ErrorCode::NOT_IN_GROUP, "not in group"));
+        }
+    } 
+    else {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::BAD_REQUEST,"invalid conversationType"));
+    }
+    //解析消息id
+    std::uint64_t readMsgId{0};
+    if (!req.body.contains("readMsgId")) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::MISSING_FIELD,"missing readMsgId"));
+    }
+
+    const auto& readMsgIdJson =req.body["readMsgId"];
+
+    if (readMsgIdJson.is_number_unsigned()) {
+        readMsgId =readMsgIdJson.get<std::uint64_t>();
+    } 
+    else if(readMsgIdJson.is_number_integer() &&readMsgIdJson.get<std::int64_t>() > 0) {
+        readMsgId = static_cast<std::uint64_t>(readMsgIdJson.get<std::int64_t>());
+    } 
+    else {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::BAD_REQUEST,"invalid readMsgId"));
+    }
+
+    if (readMsgId == 0) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::BAD_REQUEST,"readMsgId must be greater than zero"));
+    }
+
+    PendingConversationReadContext context{
+        .base = {
+            .connection = connection,
+            .key = key,
+            .request = req,
+            .accountId = session.accountId_
+        },
+        .conversationType = conversationType,
+        .targetId = targetId,
+        .readMsgId = readMsgId,
+        .readAtMs =static_cast<std::int64_t>(nowMs())
+    };
+
+    const std::string orderingKey ="ack:" + context.base.accountId;
+    auto service = messageAckService_;
+    auto userRepo = repos_.userRepo;
+    auto postToBaseLoop = postToBaseLoop_;
+
+    const auto enqueuedAt =std::chrono::steady_clock::now();
+
+    auto submitResult = submitMessageTask_(orderingKey,
+        [this,service = std::move(service),userRepo = std::move(userRepo),
+         postToBaseLoop =std::move(postToBaseLoop),context = std::move(context),enqueuedAt]() mutable {
+            const auto startedAt =std::chrono::steady_clock::now();
+            AsyncDbResult<storage::ConversationReadResult> result;
+            try {
+                if (context.conversationType ==storage::ConversationType::Direct &&(!userRepo ||!userRepo->userExists(context.targetId))) {
+                    result.repoResult = {.status =storage::RepoStatus:: UserNotFound,.message ="target user not found"
+                    };
+                } 
+                else {
+                    result.repoResult =service->markConversationRead(context.base.accountId,context.conversationType,context.targetId,context.readMsgId,context.readAtMs);
+                }
+            } catch (const std::exception& exception) {
+                result.exceptionMessage =exception.what();
+                result.repoResult = {.status = storage::RepoStatus::SqlError,.message = exception.what()};
+            } catch (...) {
+                result.exceptionMessage ="unknown conversation read exception";
+                result.repoResult = {.status = storage::RepoStatus::Internal,.message ="unknown conversation read exception"};
+            }
+
+            result.queueWaitUs =std::chrono::duration_cast< std::chrono::microseconds>(startedAt - enqueuedAt).count();
+            result.executeUs = std::chrono::duration_cast<  std::chrono::microseconds>( std::chrono::steady_clock::now() - startedAt).count();
+            const bool posted = postToBaseLoop( [this, context = std::move(context),result = std::move(result)]() mutable {
+                    completeConversationRead( std::move(context),std::move(result));
+                }
+            );
+
+            if (!posted) {
+                LOG_WARN( "failed to post conversation ""read completion");
+            }
+        }
+    );
+
+    return submitResultMapToDispatchResult(req,submitResult);
+}
+
+void Imservice::completeConversationRead(PendingConversationReadContext context,AsyncDbResult<storage::ConversationReadResult> result) {
+    Session* session =resolvePendingSession(context.base);
+    if (!session) {
+        return;
+    }
+    if (!result.ok()) {
+        auto response = makeRepoError(context.base.request,result.repoResult.status,result.repoResult.message);
+        sendResponseWithLog(context.base.key,context.base.request,response,*session,"CONVERSATION_READ_FAILED");
+        return;
+    }
+
+    auto readResult =std::move(*result.repoResult.value);
+    auto response = makeOk(context.base.request,
+        MsgType::CONVERSATION_READ_RESP,
+        nlohmann::json{{"conversationType",storage::conversationTypeToString(readResult.type)},
+            {"targetId", readResult.targetId},
+            {"requestedReadMsgId",context.readMsgId},
+            {"readMsgId", readResult.readMsgId},
+            {"readAtMs", readResult.readAtMs},
+            {"receiptUpdated",readResult.receiptUpdated},
+            {"queueWaitUs",result.queueWaitUs},
+            {"executeUs",result.executeUs}
+        }
+    );
+
+    sendResponseWithLog(context.base.key,context.base.request,response,*session,"CONVERSATION_READ_RESP_OUT");
 }
 }

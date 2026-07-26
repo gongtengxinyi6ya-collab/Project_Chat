@@ -17,12 +17,12 @@ namespace storage{
     //向前声明
     class MessageRepo;
     class OfflineMessageRepo;
-    class ConversationRepo;
+    class ConversationReadWriteStore;
 }
 namespace im{
 class MessageAckService{
 public:
-    MessageAckService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo,std::shared_ptr<storage::ConversationRepo> conversationRepo);//储存接口注入
+    MessageAckService(std::shared_ptr<storage::MessageRepo> messageRepo,std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo,std::shared_ptr<storage::ConversationReadWriteStore> conversationReadWriteStore);//储存接口注入
     storage::RepoValueResult<storage::MessageAckResult> ackMessages(const std::string& accountId,const std::vector<uint64_t>& msgIds,int64_t ackAtMs);//送达ACK，表示客户端已经收到一批消息
     storage::RepoValueResult<size_t> ackOfflineMessages(const std::string&accountId,const std::vector<uint64_t>& offlineMsgIds);//客户端确认已经拿到离线消息索引
     storage::RepoValueResult<storage::ConversationReadResult> markConversationRead(const std::string&accountId,storage::ConversationType type,const std::string&targetId,uint64_t readMsgId,int64_t readAtMs);//标记会话已读
@@ -30,6 +30,6 @@ public:
 private:
     std::shared_ptr<storage::MessageRepo> messageRepo_;//标记消息已送达，已读
     std::shared_ptr<storage::OfflineMessageRepo> offlineMessageRepo_;//操作离线消息索引
-    std::shared_ptr<storage::ConversationRepo> conversationRepo_;//标记会话已读，清理未读数
+    std::shared_ptr<storage::ConversationReadWriteStore> conversationReadWriteStore_;//标记会话已读，清理未读数
 };
 }
