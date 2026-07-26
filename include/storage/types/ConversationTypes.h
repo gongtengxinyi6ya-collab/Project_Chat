@@ -33,11 +33,11 @@ struct ConversationReadResult {
 };
 
 struct ConversationReadCommand{
-    std::string accountId;
-    ConversationType type;//会话类型：私聊/群聊
-    std::string targetId;//私聊账号/群id
-    std::uint64_t readMsgId;//客户端已读到的消息id
-    std::int64_t readAtMs;//服务端接收已读请求时间
+    std::string accountId{};
+    ConversationType type{ConversationType::Unknown};//会话类型：私聊/群聊
+    std::string targetId{};//私聊账号/群id
+    std::uint64_t readMsgId{0};//客户端已读到的消息id
+    std::int64_t readAtMs{0};//服务端接收已读请求时间
 };
 
 inline std::string conversationTypeToString(ConversationType type){

@@ -2308,7 +2308,7 @@ DispatchResult Imservice::handleConversationListAsync(const Request& req, ConnKe
                 };
             } catch (...) {
                 result.exceptionMessage ="unknown conversation list exception";
-                result.repoResult = {.status = storage::RepoStatus::Internal,.message ="unknown offline list exception"};
+                result.repoResult = {.status = storage::RepoStatus::Internal,.message ="unknown conversation list exception"};
             }
 
             result.queueWaitUs =std::chrono::duration_cast<std::chrono::microseconds>(startedAt - enqueuedAt).count();

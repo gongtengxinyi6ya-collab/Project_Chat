@@ -6,11 +6,16 @@
 
 #include "common/ConversationKey.h"
 #include <stdexcept>
+#include <algorithm>
+#include <utility>
 
 namespace storage{
 
-SqlConversationReadWriteStore::SqlConversationReadWriteStore(std::shared_ptr<SqlConnectionPool> pool){
-
+SqlConversationReadWriteStore::SqlConversationReadWriteStore(std::shared_ptr<SqlConnectionPool> pool)
+:pool_(std::move(pool)){
+    if(!pool_){
+        throw std::invalid_argument("conversation read SQL pool is null");
+    }
 }
 RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commit(const ConversationReadCommand& command) {
     if (command.accountId.empty() ||command.targetId.empty() ||command.readMsgId == 0 ||command.type == ConversationType::Unknown) {
@@ -114,7 +119,7 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitDir
         return {.status=RepoStatus::SqlError,.message=readResult.error};
     }
     if(readResult.rows.empty()){
-        return {.status=RepoStatus::NotFound,.message=readResult.error};
+        return {.status=RepoStatus::MessageNotFound,.message=readResult.error};
     }
     auto readRow=readResult.rows.front();
     auto newLyRead=getUInt64(readRow,"newly_read");
@@ -151,9 +156,7 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitDir
     if(!writeResult.ok()){
         return {.status=RepoStatus::SqlError,.message=writeResult.error};
     }
-    if(writeResult.rows.empty()){
-        return {.status=RepoStatus::NotFound,.message=writeResult.error};
-    }
+    
     //更新会话游标和未读数
     auto updateResult=connection.executePrepared("conversations_update_unread",
     R"(
@@ -174,6 +177,9 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitDir
     if(!updateResult.ok()){
         return {.status=RepoStatus::SqlError,.message=updateResult.error};
     }
+    if (updateResult.affectedRows == 0) {
+        return {.status = RepoStatus::Conflict,.message ="direct conversation cursor was not updated"};
+    }
     return {.status=RepoStatus::Ok,
         .value=ConversationReadResult{.type=ConversationType::Direct,
         .targetId=command.targetId,
@@ -184,7 +190,8 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitDir
 
 RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitGroup(SqlConnection& connection,const ConversationReadCommand& command){
     //锁定群成员游标
-    auto cursorResult=connection.queryPrepared(R"(
+    auto cursorResult=connection.queryPrepared("conversation_read.group_cursor_for_update",
+        R"(
         SELECT
             last_read_seq,
             last_read_msg_id,
@@ -202,11 +209,12 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitGro
         return {.status=RepoStatus::TargetNotInGroup,.message="user not in group"};
     }
     auto row=cursorResult.rows.front();
-    auto oldReadSeq=getUInt64(row,"last_read_req");
+    auto oldReadSeq=getUInt64(row,"last_read_seq");
     auto oldReadMsgId=getUInt64(row,"last_read_msg_id");
     auto oldReadAtMs=getInt64(row,"last_read_at_ms");
     //获取目标消息的群内序号
-    auto seqResult=connection.queryPrepared(R"(
+    auto seqResult=connection.queryPrepared("conversation_read.group_message_for_update",
+        R"(
         SELECT group_seq
         FROM messages
         WHERE group_id = ?
@@ -217,7 +225,7 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitGro
     if(!seqResult.ok()){
         return {.status=RepoStatus::SqlError,.message=seqResult.error};
     }
-    if(!seqResult.rows.empty()){
+    if(seqResult.rows.empty()){
         return {.status=RepoStatus::MessageNotFound,.message=seqResult.error};
     }
     auto seqRow=seqResult.rows.front();
@@ -237,7 +245,8 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitGro
     };
     }
     //真正推进
-    auto updateResult=connection.executePrepared(R"(
+    auto updateResult=connection.executePrepared("conversation_read.update_group_cursor",
+        R"(
         UPDATE user_group_cursors
         SET
             last_read_seq = ?,
@@ -250,5 +259,18 @@ RepoValueResult<ConversationReadResult> SqlConversationReadWriteStore::commitGro
     if(!updateResult.ok()){
         return {.status=RepoStatus::SqlError,.message=updateResult.error};
     }
+    if (updateResult.affectedRows == 0) {
+        return {.status = RepoStatus::Conflict,.message ="group read cursor was not updated"};
+    }
+
+    return {.status = RepoStatus::Ok,
+        .value = ConversationReadResult{
+            .type = ConversationType::Group,
+            .targetId = command.targetId,
+            .readMsgId = command.readMsgId,
+            .readAtMs = command.readAtMs,
+            .receiptUpdated = 0
+        }
+    };
 }
 }

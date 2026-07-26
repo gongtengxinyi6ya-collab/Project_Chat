@@ -55,7 +55,6 @@ enum class ErrorCode: uint16_t{
     JOIN_REQUEST_NOT_FOUND,
     RATE_LIMITED,//请求过于频繁
     Conflict,
-    MESSAGE_NOT_FOUND,
     INTERNAL//服务器内部错误
 
 };
