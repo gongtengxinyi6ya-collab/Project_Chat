@@ -1718,7 +1718,7 @@ DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key
     std::weak_ptr<TcpConnection> weakConn=connection;
     PendingGroupMessageContext context{.senderConnection=weakConn,.senderKey=key,.request=req,
         .senderAccountId=session.accountId_,.senderUsername=session.username_,
-        .groupId=groupId,.msgId=msgId,.serverTsMs=serverTsMs
+        .groupId=groupId,.content=content
     };
     //向专用线程提交任务
     auto persistenceService=groupMessagePersistence_;
