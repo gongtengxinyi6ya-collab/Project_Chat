@@ -4,11 +4,13 @@
 build
 build-*
 cmake-build-*
+load-results
 *.log
 core
 core.*
 *.docx
 *.pdf
+README.md
 .env
 .env.*
 !.env.example

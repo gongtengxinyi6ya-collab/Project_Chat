@@ -7,10 +7,10 @@ services:
 
     environment:
       TZ: Asia/Shanghai
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-project_chat}
+      MYSQL_USER: ${MYSQL_USER:-project_chat}
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD must be set in .env}"
 
     command:
       - mysqld
@@ -39,14 +39,14 @@ services:
 
     environment:
       TZ: Asia/Shanghai
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"
 
     command:
       - redis-server
       - --appendonly
       - "yes"
       - --requirepass
-      - ${REDIS_PASSWORD}
+      - "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"
 
     volumes:
       - redis_data:/data
@@ -54,7 +54,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - redis-cli -a "$${REDIS_PASSWORD}" ping | grep PONG
+        - REDISCLI_AUTH="$${REDIS_PASSWORD}" redis-cli ping | grep -q PONG
       interval: 10s
       timeout: 5s
       retries: 10
@@ -88,35 +88,58 @@ services:
 
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_USER: ${MYSQL_USER}
-      DB_PASSWORD: ${MYSQL_PASSWORD}
-      DB_DATABASE: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER:-project_chat}
+      DB_PASSWORD: "${MYSQL_PASSWORD:?MYSQL_PASSWORD must be set in .env}"
+      DB_DATABASE: ${MYSQL_DATABASE:-project_chat}
       DB_POOL_SIZE: 8
       DB_MESSAGE_POOL_SIZE: 4
       DB_CONNECT_TIMEOUT_MS: 5000
       DB_ACQUIRE_TIMEOUT_MS: 3000
       DB_MESSAGE_ACQUIRE_TIMEOUT_MS: 500
+      DB_PREPARED_STATEMENT_CACHE_SIZE: 64
+      DB_SLOW_QUERY_MS: 50
+
+      MESSAGE_ASYNC_ENABLED: "true"
+      MESSAGE_ASYNC_WORKER_THREADS: 4
+      MESSAGE_ASYNC_QUEUE_CAPACITY: 1024
+      MESSAGE_ASYNC_QUEUE_WARN_PERCENT: 80
+
+      DB_ASYNC_ENABLED: "true"
+      DB_ASYNC_WORKER_THREADS: 4
+      DB_ASYNC_QUEUE_CAPACITY: 2048
+      DB_ASYNC_QUEUE_WARN_PERCENT: 80
 
       REDIS_ENABLED: "true"
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_PASSWORD: "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"
       REDIS_DB: 0
       REDIS_POOL_SIZE: 4
       REDIS_CONNECT_TIMEOUT_MS: 3000
-      REDIS_SOCKET_TIMEOUT_MS: 3000
+      REDIS_SOCKET_TIMEOUT_MS: 300
       REDIS_KEY_PREFIX: "project_chat:"
+
+      REDIS_ASYNC_ENABLED: "true"
+      REDIS_ASYNC_WORKER_THREADS: 4
+      REDIS_ASYNC_QUEUE_CAPACITY: 512
+      REDIS_ASYNC_QUEUE_WARN_PERCENT: 80
+      REDIS_ASYNC_FAIL_OPEN: "true"
 
       LOG_LEVEL: INFO
       LOG_TO_CONSOLE: "true"
       LOG_TO_FILE: "false"
       LOG_ASYNC_ENABLED: "true"
 
+      HEALTH_ENABLE: "true"
+      HEALTH_LOG_INTERVAL_MS: 30000
+      HEALTH_REDIS_PING_ENABLE: "true"
+      HEALTH_SQL_TIMEOUT_DELTA_MODE: "true"
+
       IM_ALLOW_DEBUG_AUTH: "false"
       SNOWFLAKE_NODE_ID: 1
 
     ports:
-      - "${CHAT_PORT}:8080"
+      - "${CHAT_PORT:-8080}:8080"
 
     depends_on:
       mysql:

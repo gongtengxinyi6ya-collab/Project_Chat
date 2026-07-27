@@ -61,7 +61,12 @@ RUN curl -fsSL \
     && ldconfig
 
 WORKDIR /src
-COPY . /src
+COPY CMakeLists.txt /src/CMakeLists.txt
+COPY include /src/include
+COPY src /src/src
+COPY server /src/server
+COPY client /src/client
+COPY tools /src/tools
 
 RUN cmake \
         -S /src \
@@ -104,6 +109,11 @@ COPY --from=builder --chown=chat:chat \
 
 COPY --chown=chat:chat \
     config/config.json /app/config/config.json
+
+RUN ldd /app/server > /tmp/server-ldd.txt \
+    && cat /tmp/server-ldd.txt \
+    && ! grep -q "not found" /tmp/server-ldd.txt \
+    && rm -f /tmp/server-ldd.txt
 
 USER chat
 

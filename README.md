@@ -13,11 +13,17 @@ C++20 / Linux 即时通信服务端。项目从基础 Reactor 网络库出发，
 - `timerfd + set` 实现定时器队列，支持跨线程添加、取消、重复定时器及回调内取消。
 - `TcpConnection` 输出高低水位、硬限制和慢连接丢弃/关闭策略，避免输出缓冲无限增长。
 - 有界 `ThreadSafeQueue + ThreadPool`，支持 `Drain / Discard` 停止语义和运行统计。
+- `KeyedSerialExecutor` 按业务键分片：同一群、同一私聊会话或同一账号的任务保持有序，不同键并行执行。
+- 消息持久化、历史查询、增量同步、消息 ACK 和会话已读已从 `baseLoop` 迁移到独立执行器，完成后回投 `baseLoop` 提交状态与响应。
+- 群聊广播复用一次 JSON 编码结果和共享 `OutboundFrame`，再按 `ioLoop` 批量投递，降低大群广播中的重复编码、拷贝和跨线程唤醒。
 - 同步/异步日志、结构化上下文、文件与终端 Sink、日志丢弃统计。
-- Repository 抽象与 MySQL Connector/C++ 实现，使用 PreparedStatement、事务和连接池。
+- Repository 抽象与 MySQL Connector/C++ 实现，使用事务、通用 SQL 参数绑定、连接池及单连接 LRU PreparedStatement 缓存。
+- 普通业务 SQL 与消息事务使用独立连接池，避免历史查询、管理请求与高频消息写入互相抢占连接。
 - Redis Lua 原子限流，覆盖注册、登录失败、发消息、同步和历史消息等关键接口。
+- 已建立独立 Redis 异步执行器和配置模型；当前正在把同步限流检查与健康 PING 从 `baseLoop` 迁入该执行器。
 - 账号、Token、资料、好友、群组权限、入群审批、私聊/群聊、历史消息、离线索引、ACK、会话列表和增量同步。
-- 健康快照、维护任务、SQL/Redis/日志状态采集、信号驱动优雅停服。
+- 会话已读使用事务统一更新私聊/群聊已读游标、未读数与消息回执，异步完成时重新校验连接和账号身份。
+- 健康快照、维护任务、SQL连接池/执行器/Redis/日志状态采集、信号驱动优雅停服。
 
 ## 技术栈
 
@@ -29,7 +35,7 @@ C++20 / Linux 即时通信服务端。项目从基础 Reactor 网络库出发，
 | 数据库 | MySQL / InnoDB、MySQL Connector/C++ JDBC API、PreparedStatement、事务、连接池 |
 | 缓存与限流 | Redis、hiredis、redis-plus-plus、Lua |
 | 安全组件 | OpenSSL RAND、SHA-256、Token Hash |
-| 工程能力 | 异步日志、配置系统、健康检查、后台维护、优雅停服、ASAN选项、压测工具 |
+| 工程能力 | 有界任务队列、KeyedSerialExecutor、异步日志、配置系统、健康检查、后台维护、优雅停服、ASAN选项、压测工具 |
 
 ## 总体架构
 
@@ -60,15 +66,29 @@ flowchart TB
         ImService --> Session["SessionManager / GroupManager"]
     end
 
+    subgraph Executors["异步执行层"]
+        ImService --> MessageExecutor["KeyedSerialExecutor<br/>消息事务 / ACK / 已读"]
+        ImService --> DbReadExecutor["ThreadPool<br/>历史 / 同步 / 列表查询"]
+        ImService -.->|"正在接入"| RedisExecutor["KeyedSerialExecutor<br/>Redis限流 / 健康探测"]
+        MessageExecutor --> BaseLoop
+        DbReadExecutor --> BaseLoop
+        RedisExecutor --> BaseLoop
+    end
+
     subgraph Storage["存储与基础设施"]
         Auth --> Repos["Repository Interfaces"]
         Friend --> Repos
         Group --> Repos
         Conversation --> Repos
         Sync --> Repos
-        Repos --> MySQL["MySQL / InnoDB"]
+        MessageExecutor --> MessagePool["消息SQL连接池"]
+        DbReadExecutor --> GeneralPool["普通SQL连接池"]
+        Repos --> GeneralPool
+        MessagePool --> MySQL["MySQL / InnoDB"]
+        GeneralPool --> MySQL
         ImService --> RateLimiter["RateLimiter"]
         RateLimiter --> Redis["Redis Lua"]
+        RedisExecutor --> Redis
         Logger["Async Logger"]
         Health["HealthService"]
         Maintenance["MaintenanceService"]
@@ -112,8 +132,82 @@ sequenceDiagram
 
 - **baseLoop**：监听新连接、维护连接映射、串行业务入口、Session/Group内存状态、广播编排、健康与维护定时调度。
 - **ioLoop**：所属连接的 `Channel`、fd、输入/输出 Buffer、心跳和实际 socket 读写。
-- **后台线程池**：当前主要承担维护任务等后台工作；后续性能优化方向是把同步 SQL、Redis和密码计算从 baseLoop 中进一步解耦。
+- **messageExecutor**：`KeyedSerialExecutor`，处理群聊/私聊持久化、消息 ACK、离线 ACK 和会话已读事务；同一业务键有序，不同键并行。
+- **dbReadExecutor**：无顺序要求的有界线程池，处理群聊/私聊历史、离线索引、会话列表和增量同步等查询。
+- **redisExecutor**：独立的 `KeyedSerialExecutor` 基础设施已经建立；目标是承载限流、健康 PING 以及后续缓存操作，避免 Redis 延迟影响消息线程池。
+- **后台线程池**：承担维护任务等低频后台工作，不用于高频消息持久化和 Redis 限流。
 - **异步日志线程**：批量消费日志队列并写入 Sink，避免业务线程逐条刷盘。
+
+## 异步业务流水线
+
+### 执行器划分
+
+| 流水线 | 执行器 | 顺序键 | 当前状态 |
+|---|---|---|---|
+| 群消息持久化 | `messageExecutor` | `group:<groupId>` | 已接入 |
+| 私聊消息持久化 | `messageExecutor` | `dm:<conversationKey>` | 已接入 |
+| 消息/离线 ACK | `messageExecutor` | `ack:<accountId>` | 已接入 |
+| 会话已读 | `messageExecutor` | 账号级顺序键 | 已接入 |
+| 历史、离线、会话和同步查询 | `dbReadExecutor` | 无 | 已接入 |
+| Redis限流和健康探测 | `redisExecutor` | `account:<accountId>` / 系统键 | 执行器已建立，业务接入中 |
+
+所有已接入的异步业务都遵循：
+
+```text
+baseLoop校验并构造不可变上下文
+    → 有界执行器提交
+    → 工作线程执行阻塞I/O
+    → 回投baseLoop
+    → 重新校验连接、ConnKey和accountId
+    → 修改内存状态、广播或回包
+```
+
+异步完成阶段不会直接信任请求提交时保存的 `Session*`，而是通过弱连接、连接键和账号重新解析当前 Session，避免断线重连或 fd 复用后把旧结果发送给错误连接。
+
+### 消息写入与广播
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant B as baseLoop
+    participant M as messageExecutor
+    participant SQL as Message SQL Pool
+    participant I as ioLoop
+
+    C->>B: GROUP_MSG_REQ / DM_REQ
+    B->>B: 协议、身份、字段和内存状态校验
+    B->>M: keyed submit(command + weak context)
+    M->>SQL: PreparedStatement + transaction
+    SQL-->>M: commit result
+    M-->>B: post completion
+    B->>B: 重新校验连接与Session
+    B->>B: 一次JSON编码并构造共享OutboundFrame
+    B->>I: 按ioLoop批量投递
+    I-->>C: PUSH / RESP
+```
+
+消息写入使用独立 SQL 连接池。群消息事务分配群内递增序号，私聊事务校验接收账号和好友关系，并更新双方会话摘要、未读数及离线投递索引。
+
+### ACK与会话已读
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant B as baseLoop
+    participant M as messageExecutor
+    participant SQL as Message SQL Pool
+
+    C->>B: MESSAGE_ACK_REQ / CONVERSATION_READ_REQ
+    B->>B: 解析批量ID或会话游标
+    B->>M: account keyed submit
+    M->>SQL: 校验消息归属并执行事务
+    SQL-->>M: ack/read result
+    M-->>B: post completion
+    B->>B: 重新校验Session
+    B-->>C: ACK_RESP / CONVERSATION_READ_RESP
+```
+
+会话已读不是简单把 `unread_count` 置零：私聊会校验消息属于当前会话并推进已读消息ID，群聊维护成员级已读序号；更新过程由事务保证一致性。
 
 ## 网络协议
 
@@ -179,10 +273,12 @@ sequenceDiagram
 ### 消息链路
 
 - 好友私聊、群聊广播与消息持久化。
-- 连接级背压与慢连接保护。
+- 消息写事务按群ID或私聊会话键串行，不同会话可并行。
+- 批量广播共享编码后 payload 和帧对象，并按目标 `ioLoop` 分组投递。
+- 连接级高低水位、硬限制、丢弃统计与慢连接保护。
 - 私聊/群聊历史消息向前分页和按lastMsgId增量补齐。
 - 离线消息索引、批量ACK、消息送达/已读回执。
-- 会话摘要、未读数、会话已读和多会话增量同步。
+- 会话摘要、未读数、事务化会话已读和多会话增量同步。
 
 ## 目录结构
 
@@ -203,7 +299,7 @@ Project_Chat/
 ├── sql/schema.sql           # MySQL初始化脚本
 ├── src/                     # 实现文件
 ├── tools/                   # SQL测试与压测工具
-├── docs/                    # 项目面试问答
+├── load-results/            # 固定场景压测结果与汇总
 └── CMakeLists.txt
 ```
 
@@ -251,12 +347,25 @@ export DB_PORT=3306
 export DB_USER=project_chat
 export DB_PASSWORD='replace-with-real-password'
 export DB_DATABASE=project_chat
-export DB_POOL_SIZE=4
+export DB_POOL_SIZE=8
 
 export REDIS_ENABLED=true
 export REDIS_HOST=127.0.0.1
 export REDIS_PORT=6379
 export REDIS_PASSWORD=''
+
+export MESSAGE_ASYNC_ENABLED=true
+export MESSAGE_ASYNC_WORKER_THREADS=4
+export MESSAGE_ASYNC_QUEUE_CAPACITY=1024
+
+export DB_ASYNC_ENABLED=true
+export DB_ASYNC_WORKER_THREADS=4
+export DB_ASYNC_QUEUE_CAPACITY=2048
+
+export REDIS_ASYNC_ENABLED=true
+export REDIS_ASYNC_WORKER_THREADS=4
+export REDIS_ASYNC_QUEUE_CAPACITY=512
+export REDIS_ASYNC_FAIL_OPEN=true
 ```
 
 安全建议：
@@ -328,7 +437,83 @@ cmake --build build-min -j"$(nproc)"
 
 客户端只用于开发调试，最新业务接口建议结合前端或专用测试工具验证。
 
+## Docker Compose部署
+
+当前部署由三个容器组成：
+
+```text
+宿主机:CHAT_PORT
+        ↓
+chat（Rocky Linux 10，非root用户）
+   ├── MySQL 8.4（mysql_data持久卷）
+   └── Redis 7.4（redis_data持久卷）
+```
+
+`chat` 只发布业务端口，MySQL和Redis仅加入内部 `backend` 网络。Compose会等待二者健康检查通过后再启动服务端；服务端收到 `SIGTERM` 后执行项目已有的优雅停服链路。
+
+首次部署：
+
+```bash
+cp .env.example .env
+# 修改.env中的MySQL和Redis密码，禁止直接使用示例值
+
+docker compose config
+docker compose up -d --build
+docker compose ps
+docker compose logs -f chat
+```
+
+停止容器但保留MySQL和Redis数据：
+
+```bash
+docker compose down
+```
+
+仅在本地开发且确认可以删除全部测试数据时，才使用：
+
+```bash
+docker compose down -v
+```
+
+`sql/schema.sql` 挂载在MySQL初始化目录中，只会在 `mysql_data` 首次创建时执行。已有数据库的表结构变更必须使用单独的迁移SQL，不能依赖重启或重新构建容器；`down -v` 会永久删除当前Compose项目的MySQL和Redis卷。
+
+### 修改文件后的部署动作
+
+| 修改内容 | 需要执行的动作 |
+|---|---|
+| `src/`、`include/`、`server/`、`CMakeLists.txt` | `docker compose up -d --build chat` |
+| `Dockerfile`或C/C++依赖版本 | `docker compose build chat && docker compose up -d --no-deps chat` |
+| `config/config.json` | `docker compose up -d --build --no-deps chat`；该文件会复制进镜像 |
+| `compose.yaml`或`.env`中的chat环境变量 | 先执行`docker compose config`，再执行`docker compose up -d --force-recreate --no-deps chat` |
+| MySQL/Redis容器配置 | `docker compose up -d --force-recreate mysql redis`，随后确认依赖健康并重启chat |
+| `sql/schema.sql` | 对已有库执行迁移SQL；只有全新`mysql_data`才会自动初始化 |
+| `client/`、纯压测工具、`load-results/`、README | 不影响已部署服务端，无需重建chat镜像 |
+
+`docker compose restart` 只重启旧容器，不会应用修改后的Compose环境变量。日常服务端代码更新可直接使用：
+
+```bash
+docker compose up -d --build --no-deps chat
+```
+
+部署后建议检查：
+
+```bash
+docker compose ps
+docker compose logs --tail=200 chat
+docker compose exec chat sh -c 'ldd /app/server | grep "not found" || true'
+```
+
+注意事项：
+
+- `.env` 已被忽略，不能提交真实密码；仓库只保留 `.env.example`。
+- `MYSQL_DATABASE` 默认且建议保持为 `project_chat`，因为当前初始化脚本显式使用该库名。
+- 单机部署使用 `SNOWFLAKE_NODE_ID=1`；未来启动多个写节点时，每个节点必须配置不同ID。
+- Docker健康检查当前只验证TCP监听端口，属于存活检查；项目内部MySQL/Redis健康状态仍以服务端健康快照和日志为准。
+- 当前镜像构建依赖MySQL官方仓库和GitHub下载hiredis、redis-plus-plus，生产构建可进一步加入SHA-256校验或内部制品仓库。
+
 ## 压测
+
+仓库提供群聊吞吐、长连接、连接循环和混合业务压测工具，并在 `load-results/` 保存固定场景结果。压测前应使用独立测试账号、固定群规模和 Release 构建，避免注册限流、群成员上限和调试日志影响结果。
 
 ```bash
 ./build/load_test \
@@ -357,13 +542,17 @@ cmake --build build-min -j"$(nproc)"
 
 ## 优雅停服
 
+当前消息执行器和查询执行器已经进入显式停止链路；下图同时给出 Redis 执行器正式接入后应采用的最终关闭顺序。
+
 ```mermaid
 sequenceDiagram
     participant OS as SIGINT/SIGTERM
     participant S as SignalHandler
     participant B as baseLoop
     participant T as TcpServer
-    participant P as ThreadPool
+    participant R as Redis Executor
+    participant M as Message Executor
+    participant D as DB Read Executor
     participant I as IO Thread Pool
 
     OS->>S: signal
@@ -373,19 +562,26 @@ sequenceDiagram
     T->>T: stop Acceptor
     T->>I: forceClose all connections
     I-->>B: removeConnection
-    B->>P: stop(Drain)
+    B->>R: stop(Discard)
+    B->>M: stop(Drain)
+    B->>D: stop(Drain)
     B->>T: shutdown IM/Redis/Repository
     B->>I: stop io loops
     T->>B: quitCallback
 ```
 
+`messageExecutor` 使用 `Drain`，保证已经接收的持久化任务尽量完成；Redis限流任务没有持久化价值，完整接入关闭链路后使用 `Discard`，避免Redis故障时退出过程等待大量超时任务。
+
 ## 已知限制与后续优化
 
-- 当前`ImService`和同步Repository调用主要运行在baseLoop；慢SQL或Redis操作可能阻塞业务入口。后续可加入异步执行器，将阻塞I/O放到后台线程，结果再回到baseLoop提交状态。
+- 高频消息事务、历史/同步查询、ACK和会话已读已经异步化，但注册登录、部分好友/群管理Repository调用仍可能同步运行在`baseLoop`，后续应按完整业务流水线迁移。
+- Redis独立执行器和配置已经建立，但群聊、私聊、历史、同步限流及健康PING尚未全部切换到该执行器；接入完成前Redis延迟仍可能影响`baseLoop`。
+- Redis执行器接入时必须同步补齐健康统计和关闭顺序：先停止Redis执行器，再关闭`RedisClient`。
 - 当前密码存储为带随机盐的SHA-256学习实现；生产实现应升级为PBKDF2、scrypt或Argon2id，并使用常量时间比较。
 - 业务协议当前未接TLS，密码和Token不应通过公网明文传输。
 - 当前是单机连接目录和群状态，尚未实现跨节点连接路由与分布式广播。
-- 压测工具和自动化测试仍需继续完善，性能结论必须以固定机器、Release构建和完整报告为准。
+- 当前回归测试仍以客户端、SQL测试程序和压测工具为主，后续应补充可重复执行的单元测试与集成测试。
+- 性能数据必须结合固定机器、Release构建、MySQL/Redis配置、群规模和投递放大倍数解释，不能只使用请求QPS。
 
 
 ## 参考资料
