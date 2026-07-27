@@ -1698,14 +1698,6 @@ DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key
     if(!connection||connection->isClosed()){
         return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Connection is closed"));
     }
-    //发消息限流
-    if(rateLimiter_){
-        auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
-        auto resultOpt=checkRateLimitOrError(req,limitResult);
-        if(resultOpt){
-            return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
-        }    
-    }
     
     if(imConfig_.requireGroupIdForSend){//如果配置要求必须提供groupId字段
         if(!req.body.contains("groupId")||!req.body["groupId"].is_string()){
@@ -1729,41 +1721,30 @@ DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key
     if(content.size()>imConfig_.maxMessageLen){
         return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::BAD_REQUEST,"Message content is too long")};
     }
-    //生成msgId和时间戳
-    uint64_t serverTsMs=nowMs();
-    uint64_t msgId=nextMessageId();
 
-    //构造Command
-    GroupMessageWriteCommand command{.msgId=msgId,.serverTsMs=serverTsMs,.groupId=groupId,
-        .senderAccountId=session.accountId_,.senderUsername=session.username_,
-        .content=content
-    };
     //构造异步完成上下文
     std::weak_ptr<TcpConnection> weakConn=connection;
-    PendingGroupMessageContext context{.senderConnection=weakConn,.senderKey=key,.request=req,
+    PendingGroupMessageContext context{
+        .senderConnection=weakConn,.senderKey=key,.request=req,
         .senderAccountId=session.accountId_,.senderUsername=session.username_,
         .groupId=groupId,.content=content
     };
-    //向专用线程提交任务
-    auto persistenceService=groupMessagePersistence_;
-    auto postToBaseLoop=postToBaseLoop_;
-    auto enqueueAt=std::chrono::steady_clock::now();
-    auto submitResult=submitMessageTask_("group:"+groupId,[enqueueAt,this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
-        //baseLoop提交任务交给消息线程处理
-        auto start=std::chrono::steady_clock::now();//记录开始任务时间
-        
-        auto writeResult=persistenceService->persist(command);//消息线程处理持久化
-        writeResult.queueWaitUs=std::chrono::duration_cast<std::chrono::microseconds>(start-enqueueAt).count();
-        auto posted=postToBaseLoop([this,context=std::move(context),command=std::move(command),writeResult=std::move(writeResult)]()mutable{
-        //提交回baseLoop
-        completeGroupMessage(std::move(context),std::move(command),std::move(writeResult));
-        });
-        if(!posted){
-            LOG_WARN("Failed to post group message completion to baseLoop");
-        }
+    //
+    if (!rateLimiter_) {//限流未启动直接进行mysql持久化
+        auto submitResult =submitGroupMessagePersistence(std::move(context));
+        return submitResultMapToDispatchResult(req,submitResult,"message");
+    }
+    if (!submitRedisTask_) {//限流启动但执行器缺失返回错误
+        return DispatchResult::immediate(makeErr( req,ErrorCode::INTERNAL,"redis rate-limit pipeline unavailable"));
+    }
+    //提交异步redis限流检查
+    auto submitResult = submitRateLimitCheck(RateLimitAction::SendMessage,session.accountId_,
+        [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
+            completeGroupMessageRateLimit(std::move(context),std::move(result));
     });
+
     //处理提交结果
-    return submitResultMapToDispatchResult(req,submitResult);
+    return submitResultMapToDispatchResult(req,submitResult,"redis");
     
 }
 DispatchResult Imservice::submitResultMapToDispatchResult(const Request&req,infra::thread::TaskSubmitResult result,std::string_view pipeline){
@@ -1883,6 +1864,36 @@ void Imservice::completeGroupMessageRateLimit(PendingGroupMessageContext context
     if(!session){
         return;
     }
+    if(!acceptingAsyncMessages_.load(std::memory_order_acquire)){
+        return;
+    }
+    if (auto error=evaluateRateLimitResult(context.request,result)) {
+        sendResponseWithLog(context.senderKey,context.request,*error,*session,"GROUP_MSG_RATE_LIMIT");
+        return;
+    }
+
+    // Redis等待期间可能发生退群或被踢。
+    if (!groupManager_.isMember(context.groupId,context.senderAccountId)) {
+        auto response = makeErr(context.request,ErrorCode::NOT_IN_GROUP,"the user is no longer in the group");
+        sendResponseWithLog( context.senderKey,context.request,response,*session,"GROUP_MSG_MEMBER_RECHECK_FAILED");
+        return;
+    }
+    const auto weakConnection =context.senderConnection;
+    const auto key = context.senderKey;
+    const auto accountId =context.senderAccountId;
+    const auto request = context.request;
+
+    auto submitResult =submitGroupMessagePersistence(std::move(context));
+    if (submitResult !=infra::thread::TaskSubmitResult::Accepted) {
+        sendDeferredSubmitFailure(
+            weakConnection,
+            key,
+            accountId,
+            request,
+            submitResult,
+            "message",
+            "GROUP_MSG_PERSIST_SUBMIT_FAILED");
+    }
 
 }
 std::vector<net::ConnKey> Imservice::collectGroupTargets(const std::string& groupId, ConnKey excludedKey) const{
@@ -1935,14 +1946,6 @@ auto err=guardAuthenticated(req,session);//校验登录
     if(!connection||connection->isClosed()){
         return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Connection is closed"));
     }
-    //发消息限流
-    if(rateLimiter_){
-        auto limitResult=rateLimiter_->checkSendMessage(session.accountId_,nowMs());
-        auto resultOpt=checkRateLimitOrError(req,limitResult);
-        if(resultOpt){
-            return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
-        }    
-    }
 
     //解析接收账号
     std::string receiverAccountId = req.to;
@@ -1957,28 +1960,64 @@ auto err=guardAuthenticated(req,session);//校验登录
     if(content.size()>imConfig_.maxMessageLen){
         return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::BAD_REQUEST,"Message content is too long")};
     }
-    //生成msgId和时间戳
+    //生成会话key
     uint64_t serverTsMs=nowMs();
     uint64_t msgId=nextMessageId();
     auto conversationKey=common::buildDirectConversationKey(session.accountId_,receiverAccountId);
 
-    //构造Command
-    DirectMessageWriteCommand command{.msgId=msgId,.serverTsMs=serverTsMs,.conversationKey=conversationKey,
-        .senderAccountId=session.accountId_,.receiverAccountId=receiverAccountId,
-        .senderUsername=session.username_,
-        .content=content
-    };
     //构造异步完成上下文
     std::weak_ptr<TcpConnection> weakConn=connection;
-    PendingDirectMessageContext context{.senderConnection=weakConn,.senderKey=key,.request=req,
+    PendingDirectMessageContext context{.senderConnection=weakConn,
+        .senderKey=key,.request=req,
         .senderAccountId=session.accountId_,.senderUsername=session.username_,
-        .receiverAccountId=receiverAccountId,.msgId=msgId,.serverTsMs=serverTsMs
+        .receiverAccountId=receiverAccountId,
+        .conversationKey=conversationKey,.content=content
+    };
+    if (!rateLimiter_) {//限流未启动直接进行mysql持久化
+        auto submitResult =submitDirectMessagePersistence(std::move(context));
+        return submitResultMapToDispatchResult(req,submitResult,"message");
+    }
+    if (!submitRedisTask_) {//限流启动但执行器缺失返回错误
+        return DispatchResult::immediate(makeErr( req,ErrorCode::INTERNAL,"redis rate-limit pipeline unavailable"));
+    }
+    //提交异步redis限流检查
+    auto submitResult = submitRateLimitCheck(RateLimitAction::SendMessage,session.accountId_,
+        [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
+            completeDirectMessageRateLimit(std::move(context),std::move(result));
+        });
+    
+    //处理提交结果
+    return submitResultMapToDispatchResult(req,submitResult);
+    
+}
+
+//异步私聊处理
+infra::thread::TaskSubmitResult Imservice::submitDirectMessagePersistence(PendingDirectMessageContext context){
+     //校验异步功能配置
+    if(!submitMessageTask_||!postToBaseLoop_||!directMessagePersistence_){
+        return infra::thread::TaskSubmitResult::InvalidTask;
+    }
+    //服务停止接受新任务
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return infra::thread::TaskSubmitResult::Stopping;
+    }
+    //时间与消息id生成
+    //生成msgId和时间戳
+    uint64_t serverTsMs=nowMs();
+    uint64_t msgId=nextMessageId();
+
+    //构造Command
+    DirectMessageWriteCommand command{.msgId=msgId,.serverTsMs=serverTsMs,
+        .conversationKey=context.conversationKey,
+        .senderAccountId=context.senderAccountId,.receiverAccountId=context.receiverAccountId,
+        .senderUsername=context.senderUsername,.content=context.content
     };
     //向专用线程提交任务
     auto persistenceService=directMessagePersistence_;
-    auto postToBaseLoop=postToBaseLoop_;
+    auto poster=postToBaseLoop_;
     auto enqueueAt=std::chrono::steady_clock::now();
-    auto submitResult=submitMessageTask_("dm:"+conversationKey,[enqueueAt,this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context),command=std::move(command)]()mutable{
+    auto submitResult=submitMessageTask_("dm:"+context.conversationKey,
+        [enqueueAt,this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(poster),context=std::move(context),command=std::move(command)]()mutable{
         //baseLoop提交任务交给消息线程处理
         auto start=std::chrono::steady_clock::now();//记录开始任务时间
         
@@ -1992,9 +2031,32 @@ auto err=guardAuthenticated(req,session);//校验登录
             LOG_WARN("Failed to post direct message completion to baseLoop");
         }
     });
-    //处理提交结果
-    return submitResultMapToDispatchResult(req,submitResult);
-    
+}
+void Imservice::completeDirectMessageRateLimit(PendingDirectMessageContext context,AsyncRateLimitResult result){
+    auto* session=resolvePendingSender(context.senderConnection,context.senderKey,context.senderAccountId);
+    if(!session){
+        return ;
+    }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return ;
+    }
+    auto error=evaluateRateLimitResult(context.request,result);
+    if(error){
+        sendResponseWithLog(context.senderKey,context.request,error.value(),*session,"DM_RATE_LIMIT");
+        return;
+    }
+    //进行消息持久化
+    const auto weakConn=context.senderConnection;
+    const auto key = context.senderKey;
+    const auto accountId =context.senderAccountId;
+    const auto request = context.request;
+
+    auto submitResult =submitDirectMessagePersistence(std::move(context));
+
+    if (submitResult!=infra::thread::TaskSubmitResult::Accepted) {
+        sendDeferredSubmitFailure(weakConn,key,
+            accountId,request,submitResult,"message","DM_PERSIST_SUBMIT_FAILED");
+    }
 }
 void Imservice::completeDirectMessage(PendingDirectMessageContext context,DirectMessageWriteCommand command, DirectMessageWriteResult result){
 //
@@ -2069,53 +2131,17 @@ Session* Imservice::resolvePendingSession(const PendingDbRequestContext& context
     return session;
 }
 
-DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
-    auto err=guardAuthenticated(req,session);//检查登录
-    if(err){
-        return {.mode=DispatchMode::Immediate,.response=err.value()};
-    }
-    //历史消息限流
-    if(rateLimiter_){
-        auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
-        auto resultOpt=checkRateLimitOrError(req,limitResult);
-        if(resultOpt){
-            return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
-        }
-    }
-    std::string groupId;
-    if(auto errField=getStringField(req,"groupId",groupId)){
-        return {.mode=DispatchMode::Immediate,.response=errField.value()};
-    }
-    
-    auto accountId=sessionManager_.accountIdByConn(key);
-    if(!accountId){
-        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::NO_SUCH_USER,"User is not exist")};
-    }
-    if(!groupManager_.isMember(groupId,accountId.value())){
-        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::NOT_IN_GROUP,"The user is not in the group")};
-    }
-    auto historyQuery=parseHistoryQuery(req,imConfig_.defaultHistoryLimit,imConfig_.maxHistoryLimit);
-    if(!historyQuery.ok){
-        return {.mode=DispatchMode::Immediate,.response=makeErr(req,historyQuery.code,historyQuery.message)};
-    }
+//群聊历史异步查询
+infra::thread::TaskSubmitResult Imservice::submitGroupHistoryQuery(PendingGroupHistoryContext context){
     if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
-        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
-    }
-
-    if (!connection || connection->isClosed()) {
-        return DispatchResult::immediate( makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+        return infra::thread::TaskSubmitResult::Stopping;
     }
     if(!submitDbReadTask_||!postToBaseLoop_){
-        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"dbRead pipeline unavailable")};
+        return infra::thread::TaskSubmitResult::InvalidTask;
     }
     if (!repos_.messageRepo) {
-        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"message repository unavailable"));
+        return infra::thread::TaskSubmitResult::InvalidTask;
     }
-    //构造上下文
-    std::weak_ptr<TcpConnection> weakConn=connection;
-    PendingGroupHistoryContext context{.base={.connection=weakConn,.key=key,.request=req,.accountId=accountId.value()},
-    .groupId=groupId,.query=historyQuery.query};
-    
     //向专用线程提交任务
     auto messageRepo=repos_.messageRepo;
     auto postToBaseLoop=postToBaseLoop_;
@@ -2150,6 +2176,89 @@ DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key
             LOG_WARN("Failed to post read message completion to baseLoop");
         }
     });
+}
+void Imservice::completeGroupHistoryRateLimit(PendingGroupHistoryContext context,AsyncRateLimitResult result){
+    auto* session=resolvePendingSession(context.base);
+    if(!session){
+        return ;
+    }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return ;
+    }
+    auto error=evaluateRateLimitResult(context.base.request,result);
+    if(error){
+        sendResponseWithLog(context.base.key,context.base.request,error.value(),*session,"GROUP_HISTORY_RATE_LIMIT");
+        return;
+    }
+    // Redis等待期间可能已经退群。
+    if (!groupManager_.isMember(context.groupId,context.base.accountId)) {
+        auto response = makeErr(context.base.request,ErrorCode::NOT_IN_GROUP,"the user is no longer in the group");
+        sendResponseWithLog(context.base.key,context.base.request,response, *session,"GROUP_HISTORY_MEMBER_RECHECK_FAILED");
+        return;
+    }
+
+    const auto base = context.base;
+    auto submitResult =submitGroupHistoryQuery(std::move(context));
+
+    if (submitResult !=infra::thread::TaskSubmitResult::Accepted) {
+        sendDeferredSubmitFailure( base.connection,base.key,base.accountId,
+            base.request,submitResult,
+            "dbRead","GROUP_HISTORY_QUERY_SUBMIT_FAILED");
+    }
+}
+DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+    auto err=guardAuthenticated(req,session);//检查登录
+    if(err){
+        return {.mode=DispatchMode::Immediate,.response=err.value()};
+    }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
+
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate( makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
+    if(!submitDbReadTask_||!postToBaseLoop_){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"dbRead pipeline unavailable")};
+    }
+    if (!repos_.messageRepo) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"message repository unavailable"));
+    }
+    //群id解析
+    std::string groupId;
+    if(auto errField=getStringField(req,"groupId",groupId)){
+        return {.mode=DispatchMode::Immediate,.response=errField.value()};
+    }
+    
+    auto accountId=sessionManager_.accountIdByConn(key);
+    if(!accountId){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::NO_SUCH_USER,"User is not exist")};
+    }
+    if(!groupManager_.isMember(groupId,accountId.value())){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::NOT_IN_GROUP,"The user is not in the group")};
+    }
+    auto historyQuery=parseHistoryQuery(req,imConfig_.defaultHistoryLimit,imConfig_.maxHistoryLimit);
+    if(!historyQuery.ok){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,historyQuery.code,historyQuery.message)};
+    }
+    //构造上下文
+    std::weak_ptr<TcpConnection> weakConn=connection;
+    PendingGroupHistoryContext context{
+        .base={.connection=weakConn,.key=key,.request=req,.accountId=accountId.value()},
+    .groupId=groupId,.query=historyQuery.query};
+    if (!rateLimiter_) {//限流未启动直接进行mysql持久化
+        auto submitResult =submitGroupHistoryQuery(std::move(context));
+        return submitResultMapToDispatchResult(req,submitResult,"message");
+    }
+    if (!submitRedisTask_) {//限流启动但执行器缺失返回错误
+        return DispatchResult::immediate(makeErr( req,ErrorCode::INTERNAL,"redis rate-limit pipeline unavailable"));
+    }
+    //提交异步redis限流检查
+    auto submitResult = submitRateLimitCheck(RateLimitAction::SendMessage,session.accountId_,
+        [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
+            completeGroupHistoryRateLimit(std::move(context),std::move(result));
+        });
+    
     //处理提交结果
     return submitResultMapToDispatchResult(req,submitResult);
     
@@ -2184,53 +2293,19 @@ void Imservice::completeGroupHistory(PendingGroupHistoryContext context,AsyncDbR
     sendResponseWithLog(context.base.key,context.base.request,resp,*session,"GROUP_HISTORY_RESP_OUT");
 }
 
-DispatchResult Imservice::handleDmHistoryAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
-    auto err=guardAuthenticated(req,session);
-    if(err.has_value()){
-        return {.mode=DispatchMode::Immediate,.response=err.value()};
-    }
-    //历史消息限流
-    if(rateLimiter_){
-        auto limitResult=rateLimiter_->checkHistory(session.accountId_,nowMs());
-        auto resultOpt=checkRateLimitOrError(req,limitResult);
-        if(resultOpt){
-            return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
-        }
-    }
-    //空指针检查
+//私聊历史异步查询
+infra::thread::TaskSubmitResult Imservice::submitDmHistoryQuery(PendingDmHistoryContext context){
     if (!submitDbReadTask_ || !postToBaseLoop_) {
-        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"database read pipeline unavailable"));
+        return infra::thread::TaskSubmitResult::InvalidTask;
     }
 
     if (!friendService_ || !repos_.messageRepo) {
-        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"direct history dependency unavailable"));
+        return infra::thread::TaskSubmitResult::InvalidTask;
     }
 
     if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
-        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+        return infra::thread::TaskSubmitResult::Stopping;
     }
-
-    if (!connection || connection->isClosed()) {
-        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL, "connection is closed"));
-    }
-    //读取目标
-    std::string peerAccountId;
-    auto getPeerAccountId=getStringField(req,"peerAccountId",peerAccountId);
-    if(getPeerAccountId){
-        return {.mode=DispatchMode::Immediate,.response=getPeerAccountId.value()};
-    }
-
-    //生成会话key
-    auto conversationKey=common::buildDirectConversationKey(session.accountId_,peerAccountId);
-    //解析beforeMsgId,limit
-    auto historyQuery=parseHistoryQuery(req,imConfig_.defaultHistoryLimit,imConfig_.maxHistoryLimit);
-    if(!historyQuery.ok){
-        return {.mode=DispatchMode::Immediate,.response=makeErr(req,historyQuery.code,historyQuery.message)};
-    }
-    //构造上下文
-    std::weak_ptr<TcpConnection> weakConn=connection;
-    PendingDmHistoryContext context={.base={.connection=weakConn,.key=key,.request=req,.accountId=session.accountId_},
-    .peerAccountId=peerAccountId,.conversationKey=conversationKey,.query=historyQuery.query};
     //向专用线程提交任务
     auto friendService=friendService_;
     auto messageRepo=repos_.messageRepo;
@@ -2275,6 +2350,84 @@ DispatchResult Imservice::handleDmHistoryAsync(const Request& req,ConnKey key,Se
             LOG_WARN("Failed to post read message completion to baseLoop");
         }
     });
+}
+void Imservice::completeDmHistoryRateLimit(PendingDmHistoryContext context,AsyncRateLimitResult result){
+    auto* session=resolvePendingSession(context.base);
+    if(!session){
+        return ;
+    }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return ;
+    }
+    auto error=evaluateRateLimitResult(context.base.request,result);
+    if(error){
+        sendResponseWithLog(context.base.key,context.base.request,error.value(),*session,"DM_HISTORY_RATE_LIMIT");
+        return;
+    }
+    // Redis等待期间可能已经退群。
+    const auto base = context.base;
+    auto submitResult =submitDmHistoryQuery(std::move(context));
+
+    if (submitResult !=infra::thread::TaskSubmitResult::Accepted) {
+        sendDeferredSubmitFailure( base.connection,base.key,base.accountId,
+            base.request,submitResult,
+            "dbRead","DM_HISTORY_QUERY_SUBMIT_FAILED");
+    }
+}
+DispatchResult Imservice::handleDmHistoryAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+    auto err=guardAuthenticated(req,session);
+    if(err.has_value()){
+        return {.mode=DispatchMode::Immediate,.response=err.value()};
+    }
+    //空指针检查
+    if (!submitDbReadTask_ || !postToBaseLoop_) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"database read pipeline unavailable"));
+    }
+
+    if (!friendService_ || !repos_.messageRepo) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"direct history dependency unavailable"));
+    }
+
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
+
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL, "connection is closed"));
+    }
+    //读取目标
+    std::string peerAccountId;
+    auto getPeerAccountId=getStringField(req,"peerAccountId",peerAccountId);
+    if(getPeerAccountId){
+        return {.mode=DispatchMode::Immediate,.response=getPeerAccountId.value()};
+    }
+
+    //生成会话key
+    auto conversationKey=common::buildDirectConversationKey(session.accountId_,peerAccountId);
+    //解析beforeMsgId,limit
+    auto historyQuery=parseHistoryQuery(req,imConfig_.defaultHistoryLimit,imConfig_.maxHistoryLimit);
+    if(!historyQuery.ok){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,historyQuery.code,historyQuery.message)};
+    }
+    //构造上下文
+    std::weak_ptr<TcpConnection> weakConn=connection;
+    PendingDmHistoryContext context={
+        .base={.connection=weakConn,.key=key,.request=req,.accountId=session.accountId_},
+        .peerAccountId=peerAccountId,.conversationKey=conversationKey,.query=historyQuery.query
+    };
+    if (!rateLimiter_) {//限流未启动直接进行mysql持久化
+        auto submitResult =submitDmHistoryQuery(std::move(context));
+        return submitResultMapToDispatchResult(req,submitResult,"message");
+    }
+    if (!submitRedisTask_) {//限流启动但执行器缺失返回错误
+        return DispatchResult::immediate(makeErr( req,ErrorCode::INTERNAL,"redis rate-limit pipeline unavailable"));
+    }
+    //提交异步redis限流检查
+    auto submitResult = submitRateLimitCheck(RateLimitAction::SendMessage,session.accountId_,
+        [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
+            completeDmHistoryRateLimit(std::move(context),std::move(result));
+        });
+    
     //处理提交结果
     return submitResultMapToDispatchResult(req,submitResult);
     
@@ -2501,62 +2654,17 @@ void Imservice::completeConversationList(PendingConversationListContext context,
     sendResponseWithLog(context.base.key,context.base.request,resp,*session,"CONVERSATION_LIST_RESP_OUT");
 }
 
-DispatchResult Imservice::handleSyncAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
-    auto err=guardAuthenticated(req,session);//校验登录
-    if(err){
-        return {.mode=DispatchMode::Immediate,.response=err.value()};
-    }
-    //同步消息限流
-    if(rateLimiter_){
-        auto limitResult=rateLimiter_->checkSync(session.accountId_,nowMs());
-        auto resultOpt=checkRateLimitOrError(req,limitResult);
-        if(resultOpt){
-            return {.mode=DispatchMode::Immediate,.response=resultOpt.value()};
-        }
-    }
-    
+//消息同步异步处理
+infra::thread::TaskSubmitResult Imservice::submitSyncQuery(PendingSyncContext context){
     if(!messageSyncService_||!repos_.userRepo||!repos_.friendRepo){
-        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"messageSyncService")};
+        return infra::thread::TaskSubmitResult::InvalidTask;
     }
     if (!submitDbReadTask_ || !postToBaseLoop_) {//执行器检查
-        return DispatchResult::immediate( makeErr(req, ErrorCode::INTERNAL,"sync pipeline unavailable"));
+        return infra::thread::TaskSubmitResult::InvalidTask;
     }
-
-    if (!connection || connection->isClosed()) {
-        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
-    }
-
     if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
-        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+        return infra::thread::TaskSubmitResult::Stopping;
     }
-    size_t limit=parseLimit(req,"limit",50,imConfig_.maxSyncMessageLimit);
-    size_t offlineLimit=parseLimit(req,"offlineLimit",100,imConfig_.maxOfflineIndexLimit);
-    auto cursorsResult=parseSyncCursors(req,limit,imConfig_.maxSyncMessageLimit);
-    if(!cursorsResult.ok){
-        return {.mode=DispatchMode::Immediate,.response=makeErr(req,cursorsResult.code,cursorsResult.message)};
-    }
-    if(cursorsResult.cursors.size()>imConfig_.maxSyncCursorCount){
-        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::BAD_REQUEST,"too many cursors")};
-    }
-    
-    for(const auto& cursor:cursorsResult.cursors){
-        if(cursor.type==storage::ConversationType::Group){
-            if(!groupManager_.isMember(cursor.targetId,session.accountId_)){
-                return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::NOT_IN_GROUP,"the user is not in the group")};
-            }
-        }
-    }
-    //构造上下文
-    PendingSyncContext context={
-        .base=PendingDbRequestContext{
-            .connection = connection,
-            .key = key,
-            .request = req,
-            .accountId = session.accountId_
-        },
-        .cursors=std::move(cursorsResult.cursors),
-        .offlineLimit=offlineLimit
-    };
     auto service=messageSyncService_ ;
     auto userRepo=repos_.userRepo;
     auto friendRepo=repos_.friendRepo;
@@ -2610,6 +2718,97 @@ DispatchResult Imservice::handleSyncAsync(const Request& req,ConnKey key,Session
             }
         });
 
+}
+void Imservice::completeSyncRateLimit(PendingSyncContext context,AsyncRateLimitResult result){
+    auto* session=resolvePendingSession(context.base);
+    if(!session){
+        return ;
+    }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return ;
+    }
+    auto error=evaluateRateLimitResult(context.base.request,result);
+    if(error){
+        sendResponseWithLog(context.base.key,context.base.request,error.value(),*session,"SYNC_RATE_LIMIT");
+        return;
+    }
+    // Redis执行期间群关系可能变化。
+    for (const auto& cursor : context.cursors) {
+        if (cursor.type ==storage::ConversationType::Group &&!groupManager_.isMember(cursor.targetId,context.base.accountId)) {
+            auto response = makeErr(context.base.request,ErrorCode::NOT_IN_GROUP,"group membership changed");
+            sendResponseWithLog(context.base.key,context.base.request,response,*session,"SYNC_MEMBERSHIP_RECHECK_FAILED");
+            return;
+        }
+    }
+    const auto base = context.base;
+    auto submitResult =submitSyncQuery(std::move(context));
+
+    if (submitResult !=infra::thread::TaskSubmitResult::Accepted) {
+        sendDeferredSubmitFailure( base.connection,base.key,base.accountId,
+            base.request,submitResult,
+            "dbRead","SYNC_QUERY_SUBMIT_FAILED");
+    }
+}
+DispatchResult Imservice::handleSyncAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+    auto err=guardAuthenticated(req,session);//校验登录
+    if(err){
+        return {.mode=DispatchMode::Immediate,.response=err.value()};
+    }
+    
+    if(!messageSyncService_||!repos_.userRepo||!repos_.friendRepo){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::INTERNAL,"messageSyncService")};
+    }
+    if (!submitDbReadTask_ || !postToBaseLoop_) {//执行器检查
+        return DispatchResult::immediate( makeErr(req, ErrorCode::INTERNAL,"sync pipeline unavailable"));
+    }
+
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
+
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
+    size_t limit=parseLimit(req,"limit",50,imConfig_.maxSyncMessageLimit);
+    size_t offlineLimit=parseLimit(req,"offlineLimit",100,imConfig_.maxOfflineIndexLimit);
+    auto cursorsResult=parseSyncCursors(req,limit,imConfig_.maxSyncMessageLimit);
+    if(!cursorsResult.ok){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,cursorsResult.code,cursorsResult.message)};
+    }
+    if(cursorsResult.cursors.size()>imConfig_.maxSyncCursorCount){
+        return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::BAD_REQUEST,"too many cursors")};
+    }
+    
+    for(const auto& cursor:cursorsResult.cursors){
+        if(cursor.type==storage::ConversationType::Group){
+            if(!groupManager_.isMember(cursor.targetId,session.accountId_)){
+                return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::NOT_IN_GROUP,"the user is not in the group")};
+            }
+        }
+    }
+    //构造上下文
+    PendingSyncContext context={
+        .base=PendingDbRequestContext{
+            .connection = connection,
+            .key = key,
+            .request = req,
+            .accountId = session.accountId_
+        },
+        .cursors=std::move(cursorsResult.cursors),
+        .offlineLimit=offlineLimit
+    };
+    if (!rateLimiter_) {//限流未启动直接进行mysql持久化
+        auto submitResult =submitSyncQuery(std::move(context));
+        return submitResultMapToDispatchResult(req,submitResult,"message");
+    }
+    if (!submitRedisTask_) {//限流启动但执行器缺失返回错误
+        return DispatchResult::immediate(makeErr( req,ErrorCode::INTERNAL,"redis rate-limit pipeline unavailable"));
+    }
+    //提交异步redis限流检查
+    auto submitResult = submitRateLimitCheck(RateLimitAction::SendMessage,session.accountId_,
+        [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
+            completeSyncRateLimit(std::move(context),std::move(result));
+        });
     return submitResultMapToDispatchResult(req, submitResult);
 
 }

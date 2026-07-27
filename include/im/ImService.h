@@ -238,7 +238,6 @@ private:
     
     //异步私聊消息
     std::shared_ptr<DirectMessagePersistenceService> directMessagePersistence_;//私聊持久化服务
-    SubmitDbTaskFn submitDbReadTask_;
     struct PendingDirectMessageContext {//异步私聊上下文
     std::weak_ptr<TcpConnection> senderConnection;
     ConnKey senderKey{0};
@@ -248,14 +247,18 @@ private:
     std::string senderUsername;
     std::string receiverAccountId;
 
-    std::uint64_t msgId{0};
-    std::uint64_t serverTsMs{0};
+    std::string conversationKey;
+    std::string content;
 };
-    DispatchResult handleDmAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
-    void completeDirectMessage(PendingDirectMessageContext context,DirectMessageWriteCommand command, DirectMessageWriteResult result);
+    DispatchResult handleDmAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);//私聊消息异步处理
+    void completeDirectMessage(PendingDirectMessageContext context,DirectMessageWriteCommand command, DirectMessageWriteResult result);//
+    infra::thread::TaskSubmitResult submitDirectMessagePersistence(PendingDirectMessageContext context);//提交任务到数据库线程池
+    void completeDirectMessageRateLimit(PendingDirectMessageContext context,AsyncRateLimitResult result);//限流检查完成后处理私聊请求终止或进行持久化
+
 
     //异步查询接口
-struct PendingDbRequestContext {
+    SubmitDbTaskFn submitDbReadTask_;//数据库读线程池任务提交
+struct PendingDbRequestContext {//通用异步数据库查询上下文
     std::weak_ptr<TcpConnection> connection;
     ConnKey key{0};
     Request request;
@@ -269,11 +272,12 @@ struct PendingGroupHistoryContext {//群聊历史查询上下文
     std::string groupId;
     HistoryQuery query;
 };
-
-    DispatchResult handleGroupHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    infra::thread::TaskSubmitResult submitGroupHistoryQuery(PendingGroupHistoryContext context);//提交异步群聊历史任务
+    void completeGroupHistoryRateLimit(PendingGroupHistoryContext context,AsyncRateLimitResult result);
+    DispatchResult handleGroupHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);//群聊历史查询异步处理
     void completeGroupHistory(PendingGroupHistoryContext context,AsyncDbResult<std::vector<storage::MessageRecord>> result);
 
-    //
+//私聊历史消息异步处理
 struct PendingDmHistoryContext {//私聊历史上下文
     PendingDbRequestContext base;
 
@@ -281,6 +285,8 @@ struct PendingDmHistoryContext {//私聊历史上下文
     std::string conversationKey;
     HistoryQuery query;
 };
+    infra::thread::TaskSubmitResult submitDmHistoryQuery(PendingDmHistoryContext context);
+    void completeDmHistoryRateLimit(PendingDmHistoryContext context,AsyncRateLimitResult result);
     DispatchResult handleDmHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeDmHistory(PendingDmHistoryContext context,AsyncDbResult<std::vector<storage::DirectMessageRecord>> result);
 
@@ -293,20 +299,22 @@ struct PendingOfflineListContext {
     void completeOfflineList(PendingOfflineListContext context,AsyncDbResult<std::vector<storage::OfflineMessageIndex>> result);
 
 //异步会话接口
-struct PendingConversationListContext {
+//会话列表查询
+struct PendingConversationListContext {//会话列表上下文
     PendingDbRequestContext base;
     std::size_t limit{20};
 };
-
     DispatchResult handleConversationListAsync(const Request& request, ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeConversationList(PendingConversationListContext context,AsyncDbResult<std::vector<ConversationView>> result);
 
-struct PendingSyncContext {
+//增量同步
+struct PendingSyncContext {//增量同步上下文
     PendingDbRequestContext base;
     std::vector<SyncCursor> cursors;
     std::size_t offlineLimit{100};
 };
-
+    infra::thread::TaskSubmitResult submitSyncQuery(PendingSyncContext context);
+    void completeSyncRateLimit(PendingSyncContext context,AsyncRateLimitResult result);
     DispatchResult handleSyncAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeSync(PendingSyncContext context,AsyncDbResult<SyncResult> result);
 
