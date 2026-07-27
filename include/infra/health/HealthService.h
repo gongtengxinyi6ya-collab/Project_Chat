@@ -5,6 +5,7 @@
 #include <memory>
 #include "infra/health/HealthSnapshot.h"
 #include "config/HealthConfig.h"
+#include "infra/health/RedisHealthProbe.h"
 
 /*负责聚合服务健康信息，从各个基础设施模块收集状态*/
 namespace infra::redis{
@@ -22,6 +23,8 @@ public:
     using MaintenanceProvider =std::function<infra::maintenance::MaintenanceSnapshot()>;
     using MessageExecutorStatsProvider =std::function<infra::thread::ThreadPoolStats()>;
     using DbReadExecutorStatsProvider =std::function<infra::thread::ThreadPoolStats()>;
+    using RedisExecutorStatsProvider =std::function<infra::thread::ThreadPoolStats()>;
+    using RedisProbeProvider =std::function<RedisHealthProbeSnapshot()>;
 
     HealthService();
     explicit HealthService(const HealthConfig& config);
@@ -29,11 +32,14 @@ public:
     void setSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool);//注入SQL连接池
     void setMessageSqlPool(std::weak_ptr<storage::SqlConnectionPool> sqlPool);
 
-    void setRedisClient(std::weak_ptr<infra::redis::RedisClient> redisClient);//注入Redis客户端
+    
     void setOnlineConnectionProvider(std::function<size_t()> provider);//注入在线连接获取函数
     void setMaintenanceProvider(MaintenanceProvider provider,int64_t exceptedIntervalMs);//注入维护快照获取函数
     void setMessageExecutorStatsProvider(MessageExecutorStatsProvider provider,std::uint32_t queueWarnPercent);
     void setDbReadExecutorStatsProvider(DbReadExecutorStatsProvider provider,std::uint32_t queueWarnPercent);
+    void setRedisExecutorStatsProvider(RedisExecutorStatsProvider provider,std::uint32_t queueWarnPercent);
+    void setRedisProbeProvider(RedisProbeProvider provider);
+
     HealthSnapshot snapshot();//生成完整健康快照
 
 private:
@@ -43,8 +49,6 @@ private:
     std::weak_ptr<storage::SqlConnectionPool> sqlPool_;//指向SQL连接池，同时weak_ptr避免延长生命周期
     std::weak_ptr<storage::SqlConnectionPool> messageSqlPool_;
     std::uint64_t lastMessageSqlAcquireTimeouts_{0};
-
-    std::weak_ptr<infra::redis::RedisClient> redisClient_;//指向Redis客户端
 
     std::function<size_t()> onlineConnectionProvider_;//获取当前在线连接数
     MaintenanceProvider maintenanceProvider_;
@@ -59,7 +63,12 @@ private:
     DbReadExecutorStatsProvider dbReadExecutorStatsProvider_;
     std::uint32_t dbReadQueueWarnPercent_{80};
     std::uint64_t lastDbReadRejectedFull_{0};
-    
+
+    //redis执行器
+    RedisExecutorStatsProvider redisExecutorStatsProvider_;
+    RedisProbeProvider redisProbeProvider_;
+    std::uint32_t redisQueueWarnPercent_{80};
+    std::uint64_t lastRedisRejectedFull_{0};
     int64_t currentEpochMs() const;
 
     void checkSql(HealthSnapshot& snapshot);//读取SQL pool状态
@@ -70,6 +79,8 @@ private:
     void fillMaintenanceStats(HealthSnapshot& snapshot);
     void fillMessageExecutorStats(HealthSnapshot& snapshot);
     void fillDbReadExecutorStats(HealthSnapshot& snapshot);
+    void fillRedisExecutorStats(HealthSnapshot& snapshot);
+    void fillRedisProbeState(HealthSnapshot& snapshot);
     
     void decideStatus(HealthSnapshot& snapshot);//根据状态计算总健康状态
 

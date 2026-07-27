@@ -60,6 +60,19 @@ struct HealthSnapshot {
     bool dbReadExecutorRejectedIncreased{false};
 
     infra::thread::ThreadPoolStats dbReadExecutorStats{};
+
+    //redis执行器状态
+    bool redisExecutorEnabled{false};
+    bool redisExecutorHealthy{true};
+    bool redisExecutorSaturated{false};
+    bool redisExecutorRejectedIncreased{false};
+
+    infra::thread::ThreadPoolStats redisExecutorStats{};
+
+    bool redisProbeHasResult{false};
+    bool redisProbeInFlight{false};
+    std::int64_t redisProbeLatencyUs{0};
+    std::uint64_t redisProbeFailedChecks{0};
 };
 
 }

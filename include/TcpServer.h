@@ -18,6 +18,7 @@ namespace im{
 }
 namespace infra::health{
     class HealthService;
+    class RedisHealthProbe;
 }
 namespace infra::redis{
     class RedisClient;
@@ -78,6 +79,8 @@ private:
 
     std::unique_ptr<infra::health::HealthService> healthService_;//健康检查
     TimerId healthTimerId_;
+    std::shared_ptr<infra::health::RedisHealthProbe> redisHealthProbe_;
+    void scheduleRedisHealthProbe();
     
     //RedisClient
     std::shared_ptr<infra::redis::RedisClient> redisClient_;

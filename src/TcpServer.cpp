@@ -14,6 +14,7 @@
 #include "infra/redis/RedisClient.h"
 #include "security/rate_limit/RedisRateLimitStore.h"
 #include "security/rate_limit/RateLimiter.h"
+#include "infra/health/RedisHealthProbe.h"
 #endif
 #include <vector>
 #include <unordered_map>
@@ -126,13 +127,27 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
 
             auto store = std::make_shared<security::RedisRateLimitStore>(redisClient_, prefix);
             imService_->setRateLimiter(std::make_shared<security::RateLimiter>(store));
-            healthService_->setRedisClient(redisClient_);
+
+            healthService_->setRedisExecutorStatsProvider([this] {
+                if (!redisExecutor_) {
+                    return infra::thread::ThreadPoolStats{};
+                }
+                return redisExecutor_->aggregateStats();
+                }
+                ,config_.redisAsync().queueWarnPercent);
+            healthService_->setRedisProbeProvider([probe = redisHealthProbe_] {
+                if (!probe) {
+                    return infra::health::RedisHealthProbeSnapshot{};
+                }
+                return probe->snapshot();
+            });
             LOG_INFO("Redis rate limiter enabled");
         } 
         else {
             LOG_WARN("Redis connect failed, rate limiter disabled");
         }
     }
+    
     #else
     if (config_.redis().enabled()) {
         LOG_WARN("Redis is enabled in config, but binary was built without PROJECT_CHAT_ENABLE_REDIS");
@@ -140,6 +155,33 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     #endif
 }
 
+void TcpServer::scheduleRedisHealthProbe(){
+#ifdef PROJECT_CHAT_ENABLE_REDIS
+    if (!redisExecutor_ ||!redisClient_ ||!redisHealthProbe_) {
+        return;
+    }
+    if (!redisHealthProbe_->tryBegin()) {
+        return;
+    }
+
+    auto client = redisClient_;
+    auto probe = redisHealthProbe_;
+
+    auto submitResult = redisExecutor_->submit(
+        "system:redis-health",
+        [client = std::move(client),probe = std::move(probe)] {
+            const auto startedAt =std::chrono::steady_clock::now();
+            const bool healthy = client->ping();
+            const auto latencyUs =std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() -startedAt).count();
+            const auto checkedAtMs =std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            probe->complete(healthy,checkedAtMs,latencyUs);
+        });
+
+    if (submitResult !=infra::thread::TaskSubmitResult::Accepted) {
+        redisHealthProbe_->cancel();
+    }
+#endif
+}
 TcpServer::~TcpServer(){
     // Ensure remaining connections are cleaned up if server is destroyed.
     if(!stopping_.load(std::memory_order_acquire)){
@@ -158,6 +200,9 @@ void TcpServer::start(){
         healthTimerId_=baseloop_->runEvery(std::chrono::milliseconds(config_.health().logIntervalMs()),[this](){
             if(stopping_.load(std::memory_order_acquire)){
                 return ;
+            }
+            if(config_.health().redisPingEnabled()){
+                scheduleRedisHealthProbe();
             }
             auto snapshot=healthService_->snapshot();
             LOG_INFO(infra::health::formatHealthSnapshot(snapshot));
@@ -265,6 +310,8 @@ void TcpServer::onMessage(const std::shared_ptr<TcpConnection>& conn,const std::
     
     imService_->onMessage(conn,msg);    
 }
+
+
 void TcpServer::setThreadNum(int numThreads){
     threadNum_=numThreads;
 }
@@ -284,6 +331,8 @@ void TcpServer::stop(){
         });
     }
 }
+
+
 
 void TcpServer::stopInBaseLoop(){
     if(stopping_.load(std::memory_order_relaxed)){

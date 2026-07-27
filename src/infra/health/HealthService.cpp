@@ -24,9 +24,6 @@ void HealthService::setMessageSqlPool(std::weak_ptr<storage::SqlConnectionPool> 
 }
 
 
-void HealthService::setRedisClient(std::weak_ptr<infra::redis::RedisClient> redisClient){
-    redisClient_=std::move(redisClient);
-}
 void HealthService::setOnlineConnectionProvider(std::function<size_t()> provider){
     onlineConnectionProvider_=std::move(provider);
 }
@@ -44,6 +41,14 @@ void HealthService::setDbReadExecutorStatsProvider(DbReadExecutorStatsProvider p
     dbReadExecutorStatsProvider_=std::move(provider);
     dbReadQueueWarnPercent_=queueWarnPercent;
 }
+void HealthService::setRedisExecutorStatsProvider(RedisExecutorStatsProvider provider,std::uint32_t queueWarnPercent){
+    redisExecutorStatsProvider_=std::move(provider);
+    redisQueueWarnPercent_=queueWarnPercent;
+}
+void HealthService::setRedisProbeProvider(RedisProbeProvider provider){
+    redisProbeProvider_=std::move(provider);
+}
+
 HealthSnapshot HealthService::snapshot(){
     HealthSnapshot snapshot;
     fillRuntimeStats(snapshot);
@@ -55,6 +60,8 @@ HealthSnapshot HealthService::snapshot(){
     fillMaintenanceStats(snapshot);
     fillMessageExecutorStats(snapshot);
     fillDbReadExecutorStats(snapshot);
+    fillRedisExecutorStats(snapshot);
+    fillRedisProbeState(snapshot);
     decideStatus(snapshot);
     return snapshot;
 }
@@ -116,25 +123,10 @@ bool HealthService::hasNewSqlAcquireTimeouts(const storage::SqlConnectionPoolSta
     return false;
 }
 void HealthService::checkRedis(HealthSnapshot& snapshot){
-    auto redisClient=redisClient_.lock();
-    if(!redisClient){
-        snapshot.redisEnabled=false;
-        snapshot.redisHealthy=true;
-    }
-    else{
-        snapshot.redisEnabled=true;
-        if(config_.redisPingEnabled()){
-            if(!redisClient->ping()){
-                snapshot.redisHealthy=false;
-            }
-            snapshot.redisPingChecked=true;
-        }
-        else{
-            if(!redisClient->connected()){
-                snapshot.redisHealthy=false;
     
-            }
-        }
+    snapshot.redisEnabled=true;
+    if(config_.redisPingEnabled()){
+        snapshot.redisPingChecked=true;
     }
 }
 
@@ -242,6 +234,40 @@ if (!dbReadExecutorStatsProvider_) {
 
     snapshot.dbReadExecutorHealthy=!snapshot.dbReadExecutorSaturated &&!snapshot.dbReadExecutorRejectedIncreased &&stats.state ==infra::thread::ThreadPoolState::Running;
 }
+
+void HealthService::fillRedisExecutorStats( HealthSnapshot& snapshot) {
+
+    if (!redisExecutorStatsProvider_) {
+        snapshot.redisExecutorEnabled = false;
+        snapshot.redisExecutorHealthy = true;
+        return;
+    }
+
+    snapshot.redisExecutorEnabled = true;
+    snapshot.redisExecutorStats =redisExecutorStatsProvider_();
+
+    const auto& stats =snapshot.redisExecutorStats;
+    if (stats.queueCapacity > 0) {
+        const std::size_t warnSize =(stats.queueCapacity *redisQueueWarnPercent_ + 99) / 100;
+        snapshot.redisExecutorSaturated =stats.queuedTasks >= warnSize;
+    }
+
+    snapshot.redisExecutorRejectedIncreased =stats.rejectedFull >lastRedisRejectedFull_;
+    lastRedisRejectedFull_ =stats.rejectedFull;
+
+    snapshot.redisExecutorHealthy =stats.state ==infra::thread::ThreadPoolState::Running &&!snapshot.redisExecutorSaturated &&!snapshot.redisExecutorRejectedIncreased;
+}
+void HealthService::fillRedisProbeState(HealthSnapshot& snapshot){
+    if(!redisProbeProvider_){
+        snapshot.redisProbeHasResult=false;
+    }
+    const auto &stats=redisProbeProvider_();
+    snapshot.redisProbeHasResult=stats.hasResult;
+    snapshot.redisProbeInFlight=stats.inFlight;
+    snapshot.redisProbeLatencyUs=stats.lastLatencyUs;
+    snapshot.redisProbeFailedChecks=stats.failedChecks;
+
+}
 void HealthService::decideStatus(HealthSnapshot& snapshot){
     snapshot.status = HealthStatus::Healthy;
 
@@ -309,6 +335,17 @@ void HealthService::decideStatus(HealthSnapshot& snapshot){
         }
         if (snapshot.dbReadExecutorRejectedIncreased) {
             addReason(snapshot,"dbRead executor rejected task");
+        }
+    }
+    if (snapshot.redisExecutorEnabled &&!snapshot.redisExecutorHealthy) {
+        if (snapshot.status !=HealthStatus::Unhealthy) {
+            snapshot.status =HealthStatus::Degraded;
+        }
+        if (snapshot.redisExecutorSaturated) {
+            addReason(snapshot,"redis executor queue saturated");
+        }
+        if (snapshot.redisExecutorRejectedIncreased) {
+            addReason(snapshot,"redis executor rejected task");
         }
     }
 }
