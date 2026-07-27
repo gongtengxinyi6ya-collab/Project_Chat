@@ -1627,6 +1627,23 @@ Session* Imservice::resolvePendingSender(const std::weak_ptr<TcpConnection>& con
     }
     return session;
 }
+void Imservice::sendDeferredSubmitFailure(const std::weak_ptr<TcpConnection>& connection,ConnKey key,
+    const std::string& accountId,const Request& request,infra::thread::TaskSubmitResult submitResult,
+    std::string_view pipeline,std::string_view event) {
+    //连接状态检查
+    auto* session = resolvePendingSender(connection,key,accountId);
+    if (!session) {
+        return;
+    }
+    //
+    auto dispatch =submitResultMapToDispatchResult(request,submitResult,pipeline);
+
+    if (!dispatch.shouldRespond() ||!dispatch.response.has_value()) {
+        return;
+    }
+
+    sendResponseWithLog(key,request,*dispatch.response,*session,std::string(event));
+}
 
 //异步消息
 void Imservice::setMessageAsyncExecutor(SubmitMessageTaskFn submitFn){
@@ -1749,18 +1766,19 @@ DispatchResult Imservice::handleGroupMessageAsync(const Request& req,ConnKey key
     return submitResultMapToDispatchResult(req,submitResult);
     
 }
-DispatchResult Imservice::submitResultMapToDispatchResult(const Request&req,infra::thread::TaskSubmitResult result){
+DispatchResult Imservice::submitResultMapToDispatchResult(const Request&req,infra::thread::TaskSubmitResult result,std::string_view pipeline){
+    const std::string pipelineName{pipeline};
     switch(result){
         case infra::thread::TaskSubmitResult::Accepted://任务提交成功调用异步
             return DispatchResult::deferred();
         case infra::thread::TaskSubmitResult::QueueFull:
-            return DispatchResult::immediate(makeErr(req,ErrorCode::DELIVERY_OVERLOADED,"queue is full",nlohmann::json{{"retryable",true}}));
+            return DispatchResult::immediate(makeErr(req,ErrorCode::DELIVERY_OVERLOADED,pipelineName+" queue is full",nlohmann::json{{"retryable",true},{"pipeline",pipelineName}}));
         case infra::thread::TaskSubmitResult::Stopping:
-            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Message service is stopping"));
+            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,pipelineName+" Message service is stopping",nlohmann::json{{"retryable",true},{"pipeline",pipelineName}}));
         case infra::thread::TaskSubmitResult::InvalidTask:
-            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Invalid  task"));
+            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Invalid "+pipelineName+" task",{{"retryable",true},{"pipeline",pipelineName}}));
         default:
-            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"Invaild task"));
+            return DispatchResult::immediate(makeErr(req,ErrorCode::INTERNAL,"unknown async submission result"));
     }
 }
 void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMessageWriteCommand command,GroupMessageWriteResult result){
@@ -1821,7 +1839,52 @@ void Imservice::completeGroupMessage(PendingGroupMessageContext context,GroupMes
         });
     sendResponseWithLog(context.senderKey,context.request,response,*currentSession,"GROUP_MSG_RESP_OUT");
 }
+infra::thread::TaskSubmitResult Imservice::submitGroupMessagePersistence(PendingGroupMessageContext context){
+    //校验异步功能配置
+    if(!submitMessageTask_||!postToBaseLoop_||!groupMessagePersistence_){
+        return infra::thread::TaskSubmitResult::InvalidTask;
+    }
+    //服务停止接受新任务
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return infra::thread::TaskSubmitResult::Stopping;
+    }
+    //生成msgId和时间戳
+    const uint64_t serverTsMs=nowMs();
+    const uint64_t msgId=nextMessageId();
+    //构造Command
+    GroupMessageWriteCommand command{
+        .msgId=msgId,.serverTsMs=serverTsMs,.groupId=context.groupId,
+        .senderAccountId=context.senderAccountId,.senderUsername=context.senderUsername,
+        .content=context.content
+    };
 
+    //向专用线程提交任务
+    auto persistenceService=groupMessagePersistence_;
+    auto poster=postToBaseLoop_;
+    const auto enqueueAt=std::chrono::steady_clock::now();
+    return submitMessageTask_("group:"+context.groupId,[enqueueAt,this,persistenceService=std::move(persistenceService),
+        poster=std::move(poster),context=std::move(context),command=std::move(command)]()mutable{
+        //baseLoop提交任务交给消息线程处理
+        auto start=std::chrono::steady_clock::now();//记录开始任务时间
+        
+        auto writeResult=persistenceService->persist(command);//消息线程处理持久化
+        writeResult.queueWaitUs=std::chrono::duration_cast<std::chrono::microseconds>(start-enqueueAt).count();
+        auto posted=poster([this,context=std::move(context),command=std::move(command),writeResult=std::move(writeResult)]()mutable{
+            //提交回baseLoop
+            completeGroupMessage(std::move(context),std::move(command),std::move(writeResult));
+        });
+        if(!posted){
+            LOG_WARN("Failed to post group message completion to baseLoop");
+        }
+    });
+}
+void Imservice::completeGroupMessageRateLimit(PendingGroupMessageContext context,AsyncRateLimitResult result){
+    auto *session=resolvePendingSender(context.senderConnection,context.senderKey,context.senderAccountId);
+    if(!session){
+        return;
+    }
+
+}
 std::vector<net::ConnKey> Imservice::collectGroupTargets(const std::string& groupId, ConnKey excludedKey) const{
     //获取群成员
     auto members=groupManager_.memberInfos(groupId);

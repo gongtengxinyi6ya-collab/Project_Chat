@@ -209,14 +209,14 @@ private:
     infra::thread::TaskSubmitResult submitRateLimitCheck(RateLimitAction action,const std::string& subject,RateLimitCompletion completion);//构造异步限流任务，并提交到redis线程池
     std::optional<Response> evaluateRateLimitResult(const Request& request,const AsyncRateLimitResult& result);//根据异步redis结果，判断是否立即返回响应
     Session* resolvePendingSender(const std::weak_ptr<TcpConnection>& connection,ConnKey key,const std::string& accountId);//异步限流完成后重新确定连接和session有效
-
-    //异步接口
+    void sendDeferredSubmitFailure(const std::weak_ptr<TcpConnection>& connection,ConnKey key,const std::string& accountId,const Request& request,infra::thread::TaskSubmitResult submitResult,std::string_view pipeline,std::string_view event);//延迟链路提交失败回包
+    //群消息异步接口
     std::shared_ptr<GroupMessagePersistenceService> groupMessagePersistence_;
     SubmitMessageTaskFn submitMessageTask_;//调用线程：负责将任务放入messageThreadPool_队列
     PostToBaseLoopFn postToBaseLoop_;//调用消息工作线程将完成任务放回baseLoop
     std::atomic<bool> acceptingAsyncMessages_{true};//控制当前服务是否还接受新的异步群消息任务
     DispatchResult handleGroupMessageAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);//群消息异步入口
-    DispatchResult submitResultMapToDispatchResult(const Request& req,infra::thread::TaskSubmitResult result);
+    DispatchResult submitResultMapToDispatchResult(const Request& req,infra::thread::TaskSubmitResult result,std::string_view pipeline="async");//提交结果转换
     struct PendingGroupMessageContext {//异步上下文
         std::weak_ptr<TcpConnection> senderConnection;//发送者连接
         ConnKey senderKey{0};//连接标识
@@ -227,6 +227,8 @@ private:
         std::string groupId;
         std::string content;
     };
+    infra::thread::TaskSubmitResult submitGroupMessagePersistence(PendingGroupMessageContext context);//由baseLoop调用，在限流通过后生成command并提交任务到MYSQL工作线程
+    void completeGroupMessageRateLimit(PendingGroupMessageContext context,AsyncRateLimitResult result);//redis工作线程工作线程回投，校验状态和处理结果
     void completeGroupMessage(PendingGroupMessageContext context,GroupMessageWriteCommand command,GroupMessageWriteResult result);//持久化完成并回到baseLoop,根据持久化结果完成群消息业务
 
     //批量广播接口
