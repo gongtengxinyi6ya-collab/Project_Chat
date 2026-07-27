@@ -59,6 +59,13 @@ void AppConfig::validateOrThrow() const{
     messageAsync_.validateOrThrow();
     dbAsync_.validateOrThrow();
     redisAsync_.validateOrThrow();
+    if (redisConfig_.enabled() &&!redisAsync_.enabled) {
+        throw std::runtime_error("redis_async must be enabled when Redis is enabled");
+    }
+
+    if (redisConfig_.enabled() &&redisConfig_.poolSize() <redisAsync_.workerThreads) {
+        throw std::runtime_error("redis pool_size must be >= redis_async worker_threads");
+    }
 }
 std::string AppConfig::dumpSummary() const{
     std::stringstream ss;
@@ -74,6 +81,6 @@ std::string AppConfig::dumpSummary() const{
       <<"Maintenance(enable="<<maintenance_.enabled<<",intervalMs="<<maintenance_.intervalMs<<",expiredSessionRetentionMs="<<maintenance_.expiredSessionRetentionMs<<",revokedSessionRetentionMs="<<maintenance_.revokedSessionRetentionMs<<",handledRequestRetentionMs="<<maintenance_.handledRequestRetentionMs<<",offlineIndexRetentionMs="<<maintenance_.offlineIndexRetentionMs<<",batchSize="<<maintenance_.batchSize<<");"
       << "MessageAsync(enabled="<< messageAsync_.enabled<< ",workerThreads="<< messageAsync_.workerThreads<< ",queueCapacity="<< messageAsync_.queueCapacity<< ",queueWarnPercent="<< messageAsync_.queueWarnPercent<< "); "
       << "DbAsync(enabled="<< dbAsync_.enabled<< ",workerThreads="<< dbAsync_.workerThreads<< ",queueCapacity="<< dbAsync_.queueCapacity<< ",queueWarnPercent="<< dbAsync_.queueWarnPercent<< "); "
-      << "RedisAsync(enabled="<< redisAsync_.enabled<< ",workerThreads="<< redisAsync_.workerThreads<< ",queueCapacityPerShard="<< redisAsync_.queueCapacityPerShard<< ",queueWarnPercent="<< redisAsync_.queueWarnPercent<<",faileOpen="<<redisAsync_.failOpen<< "); ";
+      << "RedisAsync(enabled="<< redisAsync_.enabled<< ",workerThreads="<< redisAsync_.workerThreads<< ",queueCapacityPerShard="<< redisAsync_.queueCapacityPerShard<< ",queueWarnPercent="<< redisAsync_.queueWarnPercent<<",failOpen="<<redisAsync_.failOpen<< "); ";
     return ss.str();
 }

@@ -19,7 +19,7 @@ void RedisAsyncConfig::applyEnvOverrides(){
     if(envthread.has_value()){
         workerThreads=ConfigParseHelper::parseEnvUInt64(envthread.value(), "REDIS_ASYNC_WORKER_THREADS");
     }
-    auto envqueueCapacity=ConfigParseHelper::getEnv("REDIS_ASYNC_QUEUE_CAPACITY");
+    auto envqueueCapacity=ConfigParseHelper::getEnv("REDIS_ASYNC_QUEUE_CAPACITY_PER_SHARD");
     if(envqueueCapacity.has_value()){
         queueCapacityPerShard=ConfigParseHelper::parseEnvUInt64(envqueueCapacity.value(), "REDIS_ASYNC_QUEUE_CAPACITY_PER_SHARD");
     }
@@ -29,12 +29,12 @@ void RedisAsyncConfig::applyEnvOverrides(){
     }
     auto envFailOpen=ConfigParseHelper::getEnv("REDIS_ASYNC_FAIL_OPEN");
     if(envFailOpen.has_value()){
-        failOpen=ConfigParseHelper::parseEnvBool(envFailOpen.value(), "REDIS_ASYNC_ENABLED");
+        failOpen=ConfigParseHelper::parseEnvBool(envFailOpen.value(), "REDIS_ASYNC_FAILED_OPEN");
     }
 }
 
 void RedisAsyncConfig::validateOrThrow()const{
     ConfigParseHelper::checkRange("worker_threads",workerThreads,1,32);
-    ConfigParseHelper::checkRange("queuq_capacity",queueCapacityPerShard,1,100000);
+    ConfigParseHelper::checkRange("queuq_capacity_per_shard",queueCapacityPerShard,1,100000);
     ConfigParseHelper::checkRange("queue_warn_percent",queueWarnPercent,1,100);
 }

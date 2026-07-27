@@ -9,8 +9,12 @@ RedisRateLimitStore::RedisRateLimitStore(std::shared_ptr<infra::redis::RedisClie
 }
 
 RateLimitResult RedisRateLimitStore::hit(const std::string&key,const RateLimitRule& rule,[[maybe_unused]]int64_t nowMs){
-    if(!redis_||key.empty()||rule.maxRequests==0||rule.windowMs<=0){
-        return {.allowed=true};
+    if(!redis_){
+        return {.allowed=true,.backendAvailable=false};
+    }
+    if(key.empty()||rule.maxRequests==0||rule.windowMs<=0){
+        //参数无效
+        return {.allowed=true,.backendAvailable=true};
     }
     return hitByLua(key,rule);
 }
@@ -45,7 +49,7 @@ RateLimitResult RedisRateLimitStore::hitByLua(const std::string& key, const Rate
     auto blkKey=blockKey(key,rule);
     auto valueOpt=redis_->evalInt(hitScript(),{cntKey,blkKey},{std::to_string(rule.maxRequests),std::to_string(rule.windowMs),std::to_string(rule.blockMs)});
     if(!valueOpt.has_value()){
-        return {.allowed=true};
+        return {.allowed=true,.backendAvailable=false};
     }
     if(valueOpt.value()>=0){
         //表示允许通过

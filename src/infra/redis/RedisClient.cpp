@@ -4,11 +4,12 @@
 #include "logger/LogMacros.h"
 #include "infra/redis/RedisClient.h"
 
+#include <atomic>
 namespace infra::redis{
 struct RedisClient::Impl{
     RedisConfig config;//redis连接配置
     std::unique_ptr<sw::redis::Redis> redis;//执行redis对象
-    bool connected{false};//客户端是否成功初始化并ping通过
+    std::atomic<bool> connected{false};//客户端是否成功初始化并ping通过
 };
 
 RedisClient::RedisClient(const RedisConfig&config)
@@ -24,7 +25,7 @@ void RedisClient::close(){
         return;
     }
     impl_->redis.reset();
-    impl_->connected=false;
+    impl_->connected.store(false,std::memory_order_release);
 }
 bool RedisClient::connect(){
     if(!impl_->config.enabled()){
@@ -44,13 +45,13 @@ bool RedisClient::connect(){
         poolOpts.size=impl_->config.poolSize();
         impl_->redis=std::make_unique<sw::redis::Redis>(connectionOpts,poolOpts);
         if(ping()){
-            impl_->connected=true;
+            impl_->connected.store(true,std::memory_order_release);
             return true;
         }
         return false;
     }catch(const std::exception& e){
         impl_->redis.reset();
-        impl_->connected=false;
+        impl_->connected.store(false,std::memory_order_release);
         LOG_WARN(std::string("Faile to connect redis:")+e.what());
         return false;
     }
@@ -60,7 +61,7 @@ bool RedisClient::connected()const{
     if(!impl_){
         return false;
     }
-    return impl_->connected;
+    return impl_->connected.load(std::memory_order_acquire);
 }
 bool RedisClient::ping(){
     if(!impl_||!impl_->redis){
@@ -68,13 +69,13 @@ bool RedisClient::ping(){
     }
     try{
         if(impl_->redis->ping()=="PONG"){
-            impl_->connected=true;
+            impl_->connected.store(true,std::memory_order_release);
             return true;
         }
-        impl_->connected=false;
+        impl_->connected.store(false,std::memory_order_release);
         return false;
     }catch(const std::exception& e){
-        impl_->connected=false;
+        impl_->connected.store(false,std::memory_order_release);
         LOG_WARN(std::string("Redis command failed: ") + e.what());
         return false;
     }

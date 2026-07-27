@@ -345,7 +345,9 @@ void TcpServer::finishStopInBaseLoop(){
     }
 
     finalStopQueued_ = true;
-
+    if(redisExecutor_){//
+        return redisExecutor_->stop(infra::thread::ThreadPoolStopMode::Discard);
+    }
     if (messageExecutor_) {
         messageExecutor_->stop(infra::thread::ThreadPoolStopMode::Drain);
     }

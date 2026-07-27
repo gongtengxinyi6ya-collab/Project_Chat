@@ -1579,6 +1579,9 @@ infra::thread::TaskSubmitResult Imservice::submitRateLimitCheck(RateLimitAction 
                 case RateLimitAction::Sync:
                     result.decision =limiter->checkSync(subject,static_cast<std::int64_t>(nowMs()));
                     break;
+                case RateLimitAction::History:
+                    result.decision=limiter->checkHistory(subject,static_cast<std::int64_t>(nowMs()));
+                    break;
             }
         }catch(const std::exception& exception){
             result.decision.backendAvailable = false;
@@ -1650,6 +1653,10 @@ void Imservice::setDbReadExecutor(SubmitDbTaskFn submitFn){
 }
 void Imservice::setRedisAsyncExecutor(SubmitRedisTaskFn submitFn,bool failOpen){
     submitRedisTask_=std::move(submitFn);
+    if(!submitRedisTask_){
+        throw std::invalid_argument("redis async executor is invalid");
+    }
+    redisFailOpen_=failOpen;
 }
 void Imservice::setBaseLoopPoster(PostToBaseLoopFn postFn){
     postToBaseLoop_=std::move(postFn);

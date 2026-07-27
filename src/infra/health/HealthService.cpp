@@ -90,8 +90,8 @@ void HealthService::checkSql(HealthSnapshot& snapshot){
 void HealthService::checkMessageSql(HealthSnapshot& snapshot){
     auto sqlPool=messageSqlPool_.lock();
     if(!sqlPool){
-        snapshot.sqlEnabled=false;
-        snapshot.sqlHealthy=true;
+        snapshot.messageSqlEnabled=false;
+        snapshot.messageSqlHealthy=true;
         return;
     }
     
