@@ -225,9 +225,7 @@ private:
         std::string senderAccountId;
         std::string senderUsername;
         std::string groupId;
-
-        std::uint64_t msgId{0};
-        std::uint64_t serverTsMs{0};
+        std::string content;
     };
     void completeGroupMessage(PendingGroupMessageContext context,GroupMessageWriteCommand command,GroupMessageWriteResult result);//持久化完成并回到baseLoop,根据持久化结果完成群消息业务
 

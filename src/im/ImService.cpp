@@ -1560,6 +1560,71 @@ std::optional<Response> Imservice::checkRateLimitOrError(const Request& req,cons
     return makeRateLimitError(req,result);
 }
 
+infra::thread::TaskSubmitResult Imservice::submitRateLimitCheck(RateLimitAction action,const std::string& subject,RateLimitCompletion completion){
+    if(!submitRedisTask_||!postToBaseLoop_||!rateLimiter_||!completion){
+        return infra::thread::TaskSubmitResult::InvalidTask;
+    }
+    auto limiter=rateLimiter_;
+    auto poster=postToBaseLoop_;
+    const auto enqueuedAt=std::chrono::steady_clock::now();
+    return submitRedisTask_("account:"+subject,[this,action,subject,limiter=std::move(limiter),poster=std::move(poster),
+    completion=std::move(completion),enqueuedAt]()mutable{
+        AsyncRateLimitResult result;
+        const auto start=std::chrono::steady_clock::now();
+        try{
+            switch(action){
+                case RateLimitAction::SendMessage:
+                    result.decision=limiter->checkSendMessage(subject,static_cast<std::int64_t>(nowMs()));
+                    break;
+                case RateLimitAction::Sync:
+                    result.decision =limiter->checkSync(subject,static_cast<std::int64_t>(nowMs()));
+                    break;
+            }
+        }catch(const std::exception& exception){
+            result.decision.backendAvailable = false;
+            result.exceptionMessage = exception.what();
+        } catch (...) {
+            result.decision.backendAvailable = false;
+            result.exceptionMessage =
+                "unknown Redis rate-limit exception";
+        }
+        result.queueWaitUs =std::chrono::duration_cast<std::chrono::microseconds>(start- enqueuedAt).count();
+        result.executeUs =std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() -start).count();
+        if (!poster([completion = std::move(completion),result = std::move(result)]
+        () mutable {
+            completion(std::move(result));
+            })) {
+            LOG_WARN("failed to post Redis completion to baseLoop");
+        }
+    });
+}
+std::optional<Response> Imservice::evaluateRateLimitResult(const Request& request,const AsyncRateLimitResult& result){
+    if (!result.decision.backendAvailable ||!result.exceptionMessage.empty()) {
+        if (redisFailOpen_) {
+            LOG_WARN( "Redis rate limit degraded, fail-open");
+            return std::nullopt;
+        }
+
+        return makeErr(request,ErrorCode::INTERNAL, "rate limit service unavailable",{{"retryable", true}});
+    }
+
+    if (!result.decision.allowed) {
+        return makeRateLimitError(request,result.decision);
+    }
+    return std::nullopt;
+}
+Session* Imservice::resolvePendingSender(const std::weak_ptr<TcpConnection>& connection,ConnKey key,const std::string& accountId){
+    auto conn=connection.lock();
+    if(!conn||conn->isClosed()){
+        return nullptr;
+    }
+    auto session=sessionManager_.find(key);
+    if(!session||session->accountId_!=accountId){
+        return nullptr;
+    }
+    return session;
+}
+
 //异步消息
 void Imservice::setMessageAsyncExecutor(SubmitMessageTaskFn submitFn){
     submitMessageTask_=std::move(submitFn);
@@ -1584,7 +1649,7 @@ void Imservice::setDbReadExecutor(SubmitDbTaskFn submitFn){
     }
 }
 void Imservice::setRedisAsyncExecutor(SubmitRedisTaskFn submitFn,bool failOpen){
-    submitRedisTask_=std::move(sub)
+    submitRedisTask_=std::move(submitFn);
 }
 void Imservice::setBaseLoopPoster(PostToBaseLoopFn postFn){
     postToBaseLoop_=std::move(postFn);
