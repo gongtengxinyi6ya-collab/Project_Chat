@@ -107,6 +107,7 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     //
     #ifdef PROJECT_CHAT_ENABLE_REDIS
     if (config_.redis().enabled()) {
+        redisHealthProbe_=std::make_shared<infra::health::RedisHealthProbe>();
         redisClient_= std::make_shared<infra::redis::RedisClient>(config_.redis());
         if (redisClient_->connect()) {
             std::string prefix = config_.redis().keyPrefix();
@@ -395,7 +396,7 @@ void TcpServer::finishStopInBaseLoop(){
 
     finalStopQueued_ = true;
     if(redisExecutor_){//
-        return redisExecutor_->stop(infra::thread::ThreadPoolStopMode::Discard);
+        redisExecutor_->stop(infra::thread::ThreadPoolStopMode::Discard);
     }
     if (messageExecutor_) {
         messageExecutor_->stop(infra::thread::ThreadPoolStopMode::Drain);

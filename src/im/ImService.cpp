@@ -2254,7 +2254,7 @@ DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key
         return DispatchResult::immediate(makeErr( req,ErrorCode::INTERNAL,"redis rate-limit pipeline unavailable"));
     }
     //提交异步redis限流检查
-    auto submitResult = submitRateLimitCheck(RateLimitAction::SendMessage,session.accountId_,
+    auto submitResult = submitRateLimitCheck(RateLimitAction::History,session.accountId_,
         [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
             completeGroupHistoryRateLimit(std::move(context),std::move(result));
         });
@@ -2423,7 +2423,7 @@ DispatchResult Imservice::handleDmHistoryAsync(const Request& req,ConnKey key,Se
         return DispatchResult::immediate(makeErr( req,ErrorCode::INTERNAL,"redis rate-limit pipeline unavailable"));
     }
     //提交异步redis限流检查
-    auto submitResult = submitRateLimitCheck(RateLimitAction::SendMessage,session.accountId_,
+    auto submitResult = submitRateLimitCheck(RateLimitAction::History,session.accountId_,
         [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
             completeDmHistoryRateLimit(std::move(context),std::move(result));
         });
@@ -2805,7 +2805,7 @@ DispatchResult Imservice::handleSyncAsync(const Request& req,ConnKey key,Session
         return DispatchResult::immediate(makeErr( req,ErrorCode::INTERNAL,"redis rate-limit pipeline unavailable"));
     }
     //提交异步redis限流检查
-    auto submitResult = submitRateLimitCheck(RateLimitAction::SendMessage,session.accountId_,
+    auto submitResult = submitRateLimitCheck(RateLimitAction::Sync,session.accountId_,
         [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
             completeSyncRateLimit(std::move(context),std::move(result));
         });

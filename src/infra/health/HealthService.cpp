@@ -123,8 +123,6 @@ bool HealthService::hasNewSqlAcquireTimeouts(const storage::SqlConnectionPoolSta
     return false;
 }
 void HealthService::checkRedis(HealthSnapshot& snapshot){
-    
-    snapshot.redisEnabled=true;
     if(config_.redisPingEnabled()){
         snapshot.redisPingChecked=true;
     }
@@ -260,12 +258,15 @@ void HealthService::fillRedisExecutorStats( HealthSnapshot& snapshot) {
 void HealthService::fillRedisProbeState(HealthSnapshot& snapshot){
     if(!redisProbeProvider_){
         snapshot.redisProbeHasResult=false;
+        snapshot.redisHealthy=false;
+        return;
     }
     const auto &stats=redisProbeProvider_();
     snapshot.redisProbeHasResult=stats.hasResult;
     snapshot.redisProbeInFlight=stats.inFlight;
     snapshot.redisProbeLatencyUs=stats.lastLatencyUs;
     snapshot.redisProbeFailedChecks=stats.failedChecks;
+    snapshot.redisHealthy=stats.healthy;
 
 }
 void HealthService::decideStatus(HealthSnapshot& snapshot){
