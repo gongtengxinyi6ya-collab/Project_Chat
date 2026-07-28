@@ -29,12 +29,12 @@ void RedisAsyncConfig::applyEnvOverrides(){
     }
     auto envFailOpen=ConfigParseHelper::getEnv("REDIS_ASYNC_FAIL_OPEN");
     if(envFailOpen.has_value()){
-        failOpen=ConfigParseHelper::parseEnvBool(envFailOpen.value(), "REDIS_ASYNC_FAILED_OPEN");
+        failOpen=ConfigParseHelper::parseEnvBool(envFailOpen.value(), "REDIS_ASYNC_FAIL_OPEN");
     }
 }
 
 void RedisAsyncConfig::validateOrThrow()const{
     ConfigParseHelper::checkRange("worker_threads",workerThreads,1,32);
-    ConfigParseHelper::checkRange("queuq_capacity_per_shard",queueCapacityPerShard,1,100000);
+    ConfigParseHelper::checkRange("queue_capacity_per_shard",queueCapacityPerShard,1,100000);
     ConfigParseHelper::checkRange("queue_warn_percent",queueWarnPercent,1,100);
 }

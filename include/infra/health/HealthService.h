@@ -73,7 +73,6 @@ private:
 
     void checkSql(HealthSnapshot& snapshot);//读取SQL pool状态
     void checkMessageSql(HealthSnapshot& snapshot);
-    void checkRedis(HealthSnapshot& snapshot);//检查Redis客户端状态
     void fillRuntimeStats(HealthSnapshot& snapshot);//填充运行时信息
     void fillLoggerStats(HealthSnapshot& snapshot);
     void fillMaintenanceStats(HealthSnapshot& snapshot);

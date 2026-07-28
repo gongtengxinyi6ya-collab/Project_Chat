@@ -54,7 +54,6 @@ HealthSnapshot HealthService::snapshot(){
     fillRuntimeStats(snapshot);
     checkSql(snapshot);
     checkMessageSql(snapshot);
-    checkRedis(snapshot);
 
     fillLoggerStats(snapshot);
     fillMaintenanceStats(snapshot);
@@ -121,11 +120,6 @@ bool HealthService::hasNewSqlAcquireTimeouts(const storage::SqlConnectionPoolSta
         return true;
     }
     return false;
-}
-void HealthService::checkRedis(HealthSnapshot& snapshot){
-    if(config_.redisPingEnabled()){
-        snapshot.redisPingChecked=true;
-    }
 }
 
 int64_t HealthService::currentEpochMs() const{
@@ -257,17 +251,28 @@ void HealthService::fillRedisExecutorStats( HealthSnapshot& snapshot) {
 }
 void HealthService::fillRedisProbeState(HealthSnapshot& snapshot){
     if(!redisProbeProvider_){
+        snapshot.redisEnabled=false;
         snapshot.redisProbeHasResult=false;
-        snapshot.redisHealthy=false;
+        snapshot.redisHealthy=true;
         return;
     }
-    const auto &stats=redisProbeProvider_();
+    const auto stats=redisProbeProvider_();
+    snapshot.redisEnabled=true;
     snapshot.redisProbeHasResult=stats.hasResult;
     snapshot.redisProbeInFlight=stats.inFlight;
     snapshot.redisProbeLatencyUs=stats.lastLatencyUs;
     snapshot.redisProbeFailedChecks=stats.failedChecks;
-    snapshot.redisHealthy=stats.healthy;
+    snapshot.redisPingChecked=stats.hasResult;
+    snapshot.redisHealthy=stats.hasResult&&stats.healthy;
+    snapshot.redisProbeLastCheckAtMs = stats.lastCheckAtMs;
 
+    if (config_.redisPingEnabled()&&stats.hasResult) {
+        const auto maxAgeMs =static_cast<std::int64_t>(config_.logIntervalMs()) * 2;
+        snapshot.redisProbeStale =currentEpochMs() - stats.lastCheckAtMs > maxAgeMs;
+        if (snapshot.redisProbeStale) {
+            snapshot.redisHealthy = false;
+        }
+    }
 }
 void HealthService::decideStatus(HealthSnapshot& snapshot){
     snapshot.status = HealthStatus::Healthy;
@@ -348,6 +353,10 @@ void HealthService::decideStatus(HealthSnapshot& snapshot){
         if (snapshot.redisExecutorRejectedIncreased) {
             addReason(snapshot,"redis executor rejected task");
         }
+    }
+    if (snapshot.redisProbeStale) {
+        snapshot.status = HealthStatus::Degraded;
+        addReason(snapshot, "redis probe stale");
     }
 }
 

@@ -88,7 +88,31 @@ namespace infra::health{
     << ", dbReadFailed="
     << snapshot.dbReadExecutorStats.failedTasks
     << ", dbReadRejectedFull="
-    << snapshot.dbReadExecutorStats.rejectedFull;
+    << snapshot.dbReadExecutorStats.rejectedFull
+    << ", redisExecutorEnabled="
+    << snapshot.redisExecutorEnabled
+    << ", redisExecutorHealthy="
+    << snapshot.redisExecutorHealthy
+    << ", redisExecutorSaturated="
+    << snapshot.redisExecutorSaturated
+    << ", redisWorkers="
+    << snapshot.redisExecutorStats.workerCount
+    << ", redisActive="
+    << snapshot.redisExecutorStats.activeTasks
+    << ", redisQueueSize="
+    << snapshot.redisExecutorStats.queuedTasks
+    << ", redisQueueCapacity="
+    << snapshot.redisExecutorStats.queueCapacity
+    << ", redisRejectedFull="
+    << snapshot.redisExecutorStats.rejectedFull
+    << ", redisProbeHasResult="
+    << snapshot.redisProbeHasResult
+    << ", redisProbeInFlight="
+    << snapshot.redisProbeInFlight
+    << ", redisProbeLatencyUs="
+    << snapshot.redisProbeLatencyUs
+    << ", redisProbeFailedChecks="
+    << snapshot.redisProbeFailedChecks;
     return oss.str();
 }
 }

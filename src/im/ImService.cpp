@@ -1987,7 +1987,7 @@ auto err=guardAuthenticated(req,session);//校验登录
         });
     
     //处理提交结果
-    return submitResultMapToDispatchResult(req,submitResult);
+    return submitResultMapToDispatchResult(req,submitResult,"redis");
     
 }
 
@@ -2260,7 +2260,7 @@ DispatchResult Imservice::handleGroupHistoryAsync(const Request& req,ConnKey key
         });
     
     //处理提交结果
-    return submitResultMapToDispatchResult(req,submitResult);
+    return submitResultMapToDispatchResult(req,submitResult,"redis");
     
 }
 void Imservice::completeGroupHistory(PendingGroupHistoryContext context,AsyncDbResult<std::vector<storage::MessageRecord>> result){
@@ -2429,7 +2429,7 @@ DispatchResult Imservice::handleDmHistoryAsync(const Request& req,ConnKey key,Se
         });
     
     //处理提交结果
-    return submitResultMapToDispatchResult(req,submitResult);
+    return submitResultMapToDispatchResult(req,submitResult,"redis");
     
 }
 void Imservice::completeDmHistory(PendingDmHistoryContext context,AsyncDbResult<std::vector<storage::DirectMessageRecord>> result){
@@ -2809,7 +2809,7 @@ DispatchResult Imservice::handleSyncAsync(const Request& req,ConnKey key,Session
         [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
             completeSyncRateLimit(std::move(context),std::move(result));
         });
-    return submitResultMapToDispatchResult(req, submitResult);
+    return submitResultMapToDispatchResult(req, submitResult,"redis");
 
 }
 void Imservice::completeSync(PendingSyncContext context,AsyncDbResult<SyncResult> result){

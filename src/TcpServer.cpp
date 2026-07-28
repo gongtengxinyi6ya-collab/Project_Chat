@@ -107,9 +107,30 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
     //
     #ifdef PROJECT_CHAT_ENABLE_REDIS
     if (config_.redis().enabled()) {
+        //创建redis健康探测并注入provider
         redisHealthProbe_=std::make_shared<infra::health::RedisHealthProbe>();
+        healthService_->setRedisProbeProvider([probe = redisHealthProbe_] {
+                if (!probe) {
+                    return infra::health::RedisHealthProbeSnapshot{};
+                }
+                return probe->snapshot();
+            });
+            //创建redis客户端
         redisClient_= std::make_shared<infra::redis::RedisClient>(config_.redis());
-        if (redisClient_->connect()) {
+        //执行首次连接并统计耗时
+        redisHealthProbe_->tryBegin();
+        const auto startedAt = std::chrono::steady_clock::now();
+        const bool connected = redisClient_->connect();
+        const auto latencyUs =std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - startedAt).count();
+        const auto checkedAtMs =std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
+        redisHealthProbe_->complete(connected, checkedAtMs, latencyUs);
+        //连接失败处理
+        if (!connected && !config_.redisAsync().failOpen) {
+            throw std::runtime_error("Redis unavailable while redis fail-open is disabled");
+        }
+        //连接成功创建执行器与限流器
+        if (connected) {
             std::string prefix = config_.redis().keyPrefix();
             if (!prefix.empty() && prefix.back() != ':') {
                 prefix.push_back(':');
@@ -136,12 +157,6 @@ TcpServer::TcpServer(EventLoop* loop,int port,const AppConfig& config)
                 return redisExecutor_->aggregateStats();
                 }
                 ,config_.redisAsync().queueWarnPercent);
-            healthService_->setRedisProbeProvider([probe = redisHealthProbe_] {
-                if (!probe) {
-                    return infra::health::RedisHealthProbeSnapshot{};
-                }
-                return probe->snapshot();
-            });
             LOG_INFO("Redis rate limiter enabled");
         } 
         else {

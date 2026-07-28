@@ -73,6 +73,8 @@ struct HealthSnapshot {
     bool redisProbeInFlight{false};
     std::int64_t redisProbeLatencyUs{0};
     std::uint64_t redisProbeFailedChecks{0};
+    std::int64_t redisProbeLastCheckAtMs{0};
+    bool redisProbeStale{false};
 };
 
 }
