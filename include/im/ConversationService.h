@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 #include "storage/RepoResult.h"
+#include "storage/RepoValueResult.h"
 #include "im/ConversationTypes.h"
 /*会话服务，读写会话列表，并补充目标用户展示资料*/
 

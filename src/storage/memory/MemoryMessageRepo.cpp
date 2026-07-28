@@ -68,7 +68,7 @@ storage::SaveMessageResult storage::MemoryMessageRepo::saveDirectMessage(uint64_
     }
     return {RepoStatus::Ok,record.messageId,""};
 }
-RepoValueResult<std::vector<storage::DirectMessageRecord>> storage::MemoryMessageRepo::listDirectMessages(const std::string& conversationKey,uint64_t beforeMsgId,size_t limit){
+RepoValueResult<std::vector<storage::DirectMessageRecord>> storage::MemoryMessageRepo::listDirectMessages([[maybe_unused]]const std::string& conversationKey,[[maybe_unused]]uint64_t beforeMsgId,[[maybe_unused]]size_t limit){
     return {};
 }
 RepoValueResult<std::vector<storage::DirectMessageRecord>> storage::MemoryMessageRepo::listDirectMessagesAfter([[maybe_unused]]const std::string& conversationKey,[[maybe_unused]]uint64_t lastMsgId,[[maybe_unused]]size_t limit){

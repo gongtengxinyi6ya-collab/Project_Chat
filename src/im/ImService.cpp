@@ -1961,8 +1961,6 @@ auto err=guardAuthenticated(req,session);//校验登录
         return {.mode=DispatchMode::Immediate,.response=makeErr(req,ErrorCode::BAD_REQUEST,"Message content is too long")};
     }
     //生成会话key
-    uint64_t serverTsMs=nowMs();
-    uint64_t msgId=nextMessageId();
     auto conversationKey=common::buildDirectConversationKey(session.accountId_,receiverAccountId);
 
     //构造异步完成上下文
@@ -2016,7 +2014,7 @@ infra::thread::TaskSubmitResult Imservice::submitDirectMessagePersistence(Pendin
     auto persistenceService=directMessagePersistence_;
     auto poster=postToBaseLoop_;
     auto enqueueAt=std::chrono::steady_clock::now();
-    auto submitResult=submitMessageTask_("dm:"+context.conversationKey,
+    return submitMessageTask_("dm:"+context.conversationKey,
         [enqueueAt,this,persistenceService=std::move(persistenceService),postToBaseLoop=std::move(poster),context=std::move(context),command=std::move(command)]()mutable{
         //baseLoop提交任务交给消息线程处理
         auto start=std::chrono::steady_clock::now();//记录开始任务时间
@@ -2146,7 +2144,7 @@ infra::thread::TaskSubmitResult Imservice::submitGroupHistoryQuery(PendingGroupH
     auto messageRepo=repos_.messageRepo;
     auto postToBaseLoop=postToBaseLoop_;
     auto enqueueAt=std::chrono::steady_clock::now();
-    auto submitResult=submitDbReadTask_([enqueueAt,this,messageRepo=std::move(messageRepo),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context)]()mutable{
+    return submitDbReadTask_([enqueueAt,this,messageRepo=std::move(messageRepo),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context)]()mutable{
         //baseLoop提交任务交给消息线程处理
         auto start=std::chrono::steady_clock::now();//记录开始任务时间
         AsyncDbResult<std::vector<storage::MessageRecord>> readResult;
@@ -2311,7 +2309,7 @@ infra::thread::TaskSubmitResult Imservice::submitDmHistoryQuery(PendingDmHistory
     auto messageRepo=repos_.messageRepo;
     auto postToBaseLoop=postToBaseLoop_;
     auto enqueueAt=std::chrono::steady_clock::now();
-    auto submitResult=submitDbReadTask_([enqueueAt,this,friendService=std::move(friendService),messageRepo=std::move(messageRepo),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context)]()mutable{
+    return submitDbReadTask_([enqueueAt,this,friendService=std::move(friendService),messageRepo=std::move(messageRepo),postToBaseLoop=std::move(postToBaseLoop),context=std::move(context)]()mutable{
         //baseLoop提交任务交给消息线程处理
         auto start=std::chrono::steady_clock::now();//记录开始任务时间
         AsyncDbResult<std::vector<storage::DirectMessageRecord>> readResult;
@@ -2671,7 +2669,7 @@ infra::thread::TaskSubmitResult Imservice::submitSyncQuery(PendingSyncContext co
     auto postToBaseLoop = postToBaseLoop_;
     const auto enqueuedAt = std::chrono::steady_clock::now();
 
-    auto submitResult = submitDbReadTask_(
+    return submitDbReadTask_(
         [this,service= std::move(service),userRepo=std::move(userRepo),friendRepo=std::move(friendRepo),postToBaseLoop = std::move(postToBaseLoop),
         context = std::move(context),enqueuedAt]() mutable {
             const auto startedAt =std::chrono::steady_clock::now();
