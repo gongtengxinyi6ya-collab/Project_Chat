@@ -118,5 +118,11 @@
   "queue_capacity_per_shard": 512,
   "queue_warn_percent": 80,
   "fail_open": true
+},
+"auth_async": {
+  "enabled": true,
+  "worker_threads": 2,
+  "queue_capacity_per_shard": 256,
+  "queue_warn_percent": 80
 }
 }

@@ -12,6 +12,14 @@ enum class ConnState{
     Authed,//已认证
     Closing//正在关闭
 };
+
+enum class AuthOperation : std::uint8_t {//认证操作
+    None,
+    Register,
+    PasswordLogin,
+    TokenLogin,
+    Logout
+};
 struct Session{
     ConnState state_;
     std::string username_;
@@ -20,6 +28,8 @@ struct Session{
     uint64_t userId_{0};//数据库稳定主键
     std::string peerIp_{};
     uint16_t peerPort_{0};
+    AuthOperation pendingAuthOperation_{AuthOperation::None};//防止同一连接提交两个操作
+    std::uint64_t authOperationId_{0};//识别异步完成结果是否属于当前操作
     
     Session():state_(ConnState::Connected),username_(""){}
 };

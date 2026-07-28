@@ -17,6 +17,7 @@
 #include "MessageAsyncConfig.h"
 #include "DbAsyncConfig.h"
 #include "RedisAsyncConfig.h"
+#include "AuthAsyncConfig.h"
 /*
 总配置聚合：统一承载服务端/网络/日志/IM配置，提供加载，校验，查询
 */
@@ -41,6 +42,7 @@ public:
     const MessageAsyncConfig& messageAsync()const{return messageAsync_;};
     const DbAsyncConfig& dbAsync() const {return dbAsync_;}
     const RedisAsyncConfig& redisAsync() const {return redisAsync_;}
+    const AuthAsyncConfig& authAsync() const{return authAsync_;};
 private:
     ServerConfig server_;
     NetConfig net_;
@@ -55,4 +57,5 @@ private:
     MessageAsyncConfig messageAsync_;
     DbAsyncConfig dbAsync_;
     RedisAsyncConfig redisAsync_;
+    AuthAsyncConfig authAsync_;
 };

@@ -25,6 +25,7 @@ AppConfig AppConfig::loadFromFile(const std::string& path){
         config.messageAsync_=MessageAsyncConfig::fromJson(j.value("message_async",nlohmann::json::object()));
         config.dbAsync_=DbAsyncConfig::fromJson(j.value("db_async",nlohmann::json::object()));
         config.redisAsync_=RedisAsyncConfig::fromJson(j.value("redis_async",nlohmann::json::object()));
+        config.redisAsync_=RedisAsyncConfig::fromJson(j.value("auth_async",nlohmann::json::object()));
         return config;
     }catch(const nlohmann::json::exception& e){
         throw std::runtime_error("Failed to parse config file: "+std::string(e.what()));
@@ -44,6 +45,7 @@ void AppConfig::applyEnvOverrides(){
     messageAsync_.applyEnvOverrides();
     dbAsync_.applyEnvOverrides();
     redisAsync_.applyEnvOverrides();
+    authAsync_.applyEnvOverrides();
 }
 void AppConfig::validateOrThrow() const{
     server_.validateOrThrow();
@@ -66,6 +68,7 @@ void AppConfig::validateOrThrow() const{
     if (redisConfig_.enabled() &&redisConfig_.poolSize() <redisAsync_.workerThreads) {
         throw std::runtime_error("redis pool_size must be >= redis_async worker_threads");
     }
+    authAsync_.validateOrThrow();
 }
 std::string AppConfig::dumpSummary() const{
     std::stringstream ss;
@@ -81,6 +84,7 @@ std::string AppConfig::dumpSummary() const{
       <<"Maintenance(enable="<<maintenance_.enabled<<",intervalMs="<<maintenance_.intervalMs<<",expiredSessionRetentionMs="<<maintenance_.expiredSessionRetentionMs<<",revokedSessionRetentionMs="<<maintenance_.revokedSessionRetentionMs<<",handledRequestRetentionMs="<<maintenance_.handledRequestRetentionMs<<",offlineIndexRetentionMs="<<maintenance_.offlineIndexRetentionMs<<",batchSize="<<maintenance_.batchSize<<");"
       << "MessageAsync(enabled="<< messageAsync_.enabled<< ",workerThreads="<< messageAsync_.workerThreads<< ",queueCapacity="<< messageAsync_.queueCapacity<< ",queueWarnPercent="<< messageAsync_.queueWarnPercent<< "); "
       << "DbAsync(enabled="<< dbAsync_.enabled<< ",workerThreads="<< dbAsync_.workerThreads<< ",queueCapacity="<< dbAsync_.queueCapacity<< ",queueWarnPercent="<< dbAsync_.queueWarnPercent<< "); "
-      << "RedisAsync(enabled="<< redisAsync_.enabled<< ",workerThreads="<< redisAsync_.workerThreads<< ",queueCapacityPerShard="<< redisAsync_.queueCapacityPerShard<< ",queueWarnPercent="<< redisAsync_.queueWarnPercent<<",failOpen="<<redisAsync_.failOpen<< "); ";
+      << "RedisAsync(enabled="<< redisAsync_.enabled<< ",workerThreads="<< redisAsync_.workerThreads<< ",queueCapacityPerShard="<< redisAsync_.queueCapacityPerShard<< ",queueWarnPercent="<< redisAsync_.queueWarnPercent<<",failOpen="<<redisAsync_.failOpen<< "); "
+      << "AuthAsync(enabled="<< authAsync_.enabled<< ",workerThreads="<< authAsync_.workerThreads<< ",queueCapacityPerShard="<< authAsync_.queueCapacityPerShard<< ",queueWarnPercent="<< authAsync_.queueWarnPercent<< "); ";
     return ss.str();
 }

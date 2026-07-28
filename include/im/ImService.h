@@ -34,6 +34,8 @@
 #include "im/ConversationTypes.h"
 #include "net/SendTypes.h"
 #include "im/RedisLimitTypes.h"
+
+#include "im/PendingContextTypes.h"
 class TcpConnection;
 
 /*唯一业务入口
@@ -79,6 +81,7 @@ public:
     using SubmitDbTaskFn =std::function<infra::thread::TaskSubmitResult(MessageTask)>;//投递数据库查询任务
     using SubmitRedisTaskFn =std::function<infra::thread::TaskSubmitResult(const std::string& orderingKey,MessageTask task)>;
     using RateLimitCompletion =std::function<void(AsyncRateLimitResult)>;
+    using SubmitAuthTaskFn =std::function<infra::thread::TaskSubmitResult(const std::string& orderingKey,std::function<void()> task)>;
 
     explicit Imservice(uint32_t supportedVer=1,const ImConfig& config=ImConfig(),const IdConfig& idconfig=IdConfig());
     ~Imservice();
@@ -90,6 +93,8 @@ public:
     void setBatchSender(BatchSendFn fn);
     void setDbReadExecutor(SubmitDbTaskFn submitFn);
     void setRedisAsyncExecutor(SubmitRedisTaskFn submitFn,bool failOpen);
+    void setAuthAsyncExecutor(SubmitAuthTaskFn submitFn);
+
     void onMessage(const std::shared_ptr<TcpConnection>& conn,const std::string& payload);//唯一业务入口
     void onDisconnect(const std::shared_ptr<TcpConnection> & conn);//清理session和映射
 
@@ -217,16 +222,7 @@ private:
     std::atomic<bool> acceptingAsyncMessages_{true};//控制当前服务是否还接受新的异步群消息任务
     DispatchResult handleGroupMessageAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);//群消息异步入口
     DispatchResult submitResultMapToDispatchResult(const Request& req,infra::thread::TaskSubmitResult result,std::string_view pipeline="async");//提交结果转换
-    struct PendingGroupMessageContext {//异步上下文
-        std::weak_ptr<TcpConnection> senderConnection;//发送者连接
-        ConnKey senderKey{0};//连接标识
-        Request request;
-
-        std::string senderAccountId;
-        std::string senderUsername;
-        std::string groupId;
-        std::string content;
-    };
+    
     infra::thread::TaskSubmitResult submitGroupMessagePersistence(PendingGroupMessageContext context);//由baseLoop调用，在限流通过后生成command并提交任务到MYSQL工作线程
     void completeGroupMessageRateLimit(PendingGroupMessageContext context,AsyncRateLimitResult result);//redis工作线程工作线程回投，校验状态和处理结果
     void completeGroupMessage(PendingGroupMessageContext context,GroupMessageWriteCommand command,GroupMessageWriteResult result);//持久化完成并回到baseLoop,根据持久化结果完成群消息业务
@@ -238,18 +234,7 @@ private:
     
     //异步私聊消息
     std::shared_ptr<DirectMessagePersistenceService> directMessagePersistence_;//私聊持久化服务
-    struct PendingDirectMessageContext {//异步私聊上下文
-    std::weak_ptr<TcpConnection> senderConnection;
-    ConnKey senderKey{0};
-    Request request;
-
-    std::string senderAccountId;
-    std::string senderUsername;
-    std::string receiverAccountId;
-
-    std::string conversationKey;
-    std::string content;
-};
+    
     DispatchResult handleDmAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);//私聊消息异步处理
     void completeDirectMessage(PendingDirectMessageContext context,DirectMessageWriteCommand command, DirectMessageWriteResult result);//
     infra::thread::TaskSubmitResult submitDirectMessagePersistence(PendingDirectMessageContext context);//提交任务到数据库线程池
@@ -258,13 +243,6 @@ private:
 
     //异步查询接口
     SubmitDbTaskFn submitDbReadTask_;//数据库读线程池任务提交
-struct PendingDbRequestContext {//通用异步数据库查询上下文
-    std::weak_ptr<TcpConnection> connection;
-    ConnKey key{0};
-    Request request;
-
-    std::string accountId;
-};
     Session* resolvePendingSession(const PendingDbRequestContext& context);//baseLoop调用，检查session
 
 struct PendingGroupHistoryContext {//群聊历史查询上下文
@@ -278,95 +256,41 @@ struct PendingGroupHistoryContext {//群聊历史查询上下文
     void completeGroupHistory(PendingGroupHistoryContext context,AsyncDbResult<std::vector<storage::MessageRecord>> result);
 
 //私聊历史消息异步处理
-struct PendingDmHistoryContext {//私聊历史上下文
-    PendingDbRequestContext base;
-
-    std::string peerAccountId;
-    std::string conversationKey;
-    HistoryQuery query;
-};
     infra::thread::TaskSubmitResult submitDmHistoryQuery(PendingDmHistoryContext context);
     void completeDmHistoryRateLimit(PendingDmHistoryContext context,AsyncRateLimitResult result);
     DispatchResult handleDmHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeDmHistory(PendingDmHistoryContext context,AsyncDbResult<std::vector<storage::DirectMessageRecord>> result);
 
-struct PendingOfflineListContext {
-    PendingDbRequestContext base;
-    std::size_t limit{20};
-};
 
     DispatchResult handleOfflineListAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeOfflineList(PendingOfflineListContext context,AsyncDbResult<std::vector<storage::OfflineMessageIndex>> result);
 
 //异步会话接口
 //会话列表查询
-struct PendingConversationListContext {//会话列表上下文
-    PendingDbRequestContext base;
-    std::size_t limit{20};
-};
     DispatchResult handleConversationListAsync(const Request& request, ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeConversationList(PendingConversationListContext context,AsyncDbResult<std::vector<ConversationView>> result);
 
 //增量同步
-struct PendingSyncContext {//增量同步上下文
-    PendingDbRequestContext base;
-    std::vector<SyncCursor> cursors;
-    std::size_t offlineLimit{100};
-};
     infra::thread::TaskSubmitResult submitSyncQuery(PendingSyncContext context);
     void completeSyncRateLimit(PendingSyncContext context,AsyncRateLimitResult result);
     DispatchResult handleSyncAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeSync(PendingSyncContext context,AsyncDbResult<SyncResult> result);
 
     //ACK和已读消息异步
-struct AsyncAckResult {
-    storage::RepoResult result{
-        .status = storage::RepoStatus::Ok
-    };
-
-    storage::MessageAckResult messageAck{};
-    std::size_t offlineAcked{0};
-
-    std::int64_t queueWaitUs{0};
-    std::int64_t executeUs{0};
-    std::string exceptionMessage{};
-
-    bool ok() const noexcept {
-        return result.ok();
-    }
-};
-
-struct PendingAckContext {
-    PendingDbRequestContext base;
-
-    std::vector<std::uint64_t> messageIds;
-    std::vector<std::uint64_t> offlineMessageIds;
-
-    MsgType responseType{
-        MsgType::MESSAGE_ACK_RESP
-    };
-
-    std::int64_t ackAtMs{0};
-};
 DispatchResult handleMessageAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
 
 void completeMessageAck(PendingAckContext context,AsyncAckResult result);
 DispatchResult handleOfflineAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
 
-struct PendingConversationReadContext {
-    PendingDbRequestContext base;
-
-    storage::ConversationType conversationType{
-        storage::ConversationType::Unknown
-    };
-
-    std::string targetId;
-    std::uint64_t readMsgId{0};
-    std::int64_t readAtMs{0};
-};
 
 DispatchResult handleConversationReadAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
 void completeConversationRead(PendingConversationReadContext context,AsyncDbResult<storage::ConversationReadResult> result);
+
+//注册登录异步认证
+bool tryBeginAuthOperation(Session& session,AuthOperation operation,std::uint64_t& operationId);
+Session* resolvePendingAuthSession(const std::weak_ptr<TcpConnection>& connection,ConnKey key,AuthOperation operation,std::uint64_t operationId);
+void finishAuthOperation(Session& session,AuthOperation operation,std::uint64_t operationId);
 };
+
 
 }
