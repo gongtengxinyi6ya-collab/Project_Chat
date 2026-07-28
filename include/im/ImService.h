@@ -287,9 +287,15 @@ DispatchResult handleConversationReadAsync(const Request& request,ConnKey key,Se
 void completeConversationRead(PendingConversationReadContext context,AsyncDbResult<storage::ConversationReadResult> result);
 
 //注册登录异步认证
-bool tryBeginAuthOperation(Session& session,AuthOperation operation,std::uint64_t& operationId);
-Session* resolvePendingAuthSession(const std::weak_ptr<TcpConnection>& connection,ConnKey key,AuthOperation operation,std::uint64_t operationId);
-void finishAuthOperation(Session& session,AuthOperation operation,std::uint64_t operationId);
+bool tryBeginAuthOperation(Session& session,AuthOperation operation,std::uint64_t& operationId);//
+Session* resolvePendingAuthSession(const std::weak_ptr<TcpConnection>& connection,ConnKey key,AuthOperation operation,std::uint64_t operationId);//回投到baseLoop后校验session连接与操作是否匹配
+void finishAuthOperation(Session& session,AuthOperation operation,std::uint64_t operationId);//认证操作处理完毕后，检查操作和id猴恢复状态
+//异步注册
+DispatchResult handleRegisterAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+void completeRegisterRateLimit(PendingRegisterContext context,AsyncRateLimitResult result);
+infra::thread::TaskSubmitResult submitRegisterTask(PendingRegisterContext context);
+void completeRegister(PendingRegisterContext context,AsyncAuthResult result);
+
 };
 
 

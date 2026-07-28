@@ -14,11 +14,11 @@ enum class ConnState{
 };
 
 enum class AuthOperation : std::uint8_t {//认证操作
-    None,
-    Register,
-    PasswordLogin,
-    TokenLogin,
-    Logout
+    None,//无认证操作
+    Register,//异步注册
+    PasswordLogin,//账号密码登录
+    TokenLogin,//token登录
+    Logout//退出登录
 };
 struct Session{
     ConnState state_;

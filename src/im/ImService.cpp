@@ -3189,4 +3189,35 @@ void Imservice::completeConversationRead(PendingConversationReadContext context,
 
     sendResponseWithLog(context.base.key,context.base.request,response,*session,"CONVERSATION_READ_RESP_OUT");
 }
+
+bool Imservice::tryBeginAuthOperation(Session& session,AuthOperation operation,std::uint64_t& operationId){
+    if(session.pendingAuthOperation_!=AuthOperation::None){
+         //已有任务直接返回
+        return false;
+    }
+    if(operation==AuthOperation::None){
+        return false;
+    }
+    session.authOperationId_++;
+    session.pendingAuthOperation_=operation;
+    operationId=session.authOperationId_;
+    return true;
+}
+Session* Imservice::resolvePendingAuthSession(const std::weak_ptr<TcpConnection>& connection,ConnKey key,AuthOperation operation,std::uint64_t operationId){
+    auto conn=connection.lock();
+    if(!conn||conn->isClosed()){
+        return nullptr;
+    }
+    auto session=sessionManager_.find(key);
+    if(!session||session->pendingAuthOperation_!=operation||session->authOperationId_!=operationId){
+        return nullptr;
+    }
+    return session;
+}
+void Imservice::finishAuthOperation(Session& session,AuthOperation operation,std::uint64_t operationId){
+    if(session.pendingAuthOperation_!=operation||session.authOperationId_!=operationId){
+        return;
+    }
+    session.pendingAuthOperation_=AuthOperation::None;
+}
 }
