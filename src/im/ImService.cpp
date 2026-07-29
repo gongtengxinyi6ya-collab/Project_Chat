@@ -1675,6 +1675,12 @@ void Imservice::setRedisAsyncExecutor(SubmitRedisTaskFn submitFn,bool failOpen){
     }
     redisFailOpen_=failOpen;
 }
+void Imservice::setAuthAsyncExecutor(SubmitAuthTaskFn submitFn){
+    submitAuthTask_=std::move(submitFn);
+    if(!submitAuthTask_){
+        throw std::invalid_argument("auth async executor is invalid");
+    }
+}
 void Imservice::setBaseLoopPoster(PostToBaseLoopFn postFn){
     postToBaseLoop_=std::move(postFn);
     if(!postToBaseLoop_){
@@ -2557,7 +2563,6 @@ DispatchResult Imservice::handleConversationListAsync(const Request& req, ConnKe
     if (auto error = guardAuthenticated(req, session)) {
         return DispatchResult::immediate(std::move(*error));
     }
-
     if (!submitDbReadTask_ ||!postToBaseLoop_ ||!conversationService_) {
         return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"conversation list pipeline unavailable"));
     }
@@ -3220,4 +3225,66 @@ void Imservice::finishAuthOperation(Session& session,AuthOperation operation,std
     }
     session.pendingAuthOperation_=AuthOperation::None;
 }
+
+DispatchResult Imservice::handleRegisterAsync(const Request& req,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection){
+    if (!submitAuthTask_||!postToBaseLoop_ ||!authService_) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"register pipeline unavailable"));
+    }
+    if (!connection || connection->isClosed()) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"connection is closed"));
+    }
+    if (!acceptingAsyncMessages_.load(std::memory_order_acquire)) {
+        return DispatchResult::immediate(makeErr(req, ErrorCode::INTERNAL,"service is stopping"));
+    }
+    //字段校验
+    std::string username;
+    auto getUsername=getStringField(req,"username",username);
+    if(getUsername){
+        return DispatchResult::immediate(std::move(getUsername.value()));
+    }
+    std::string password;
+    auto getPassword=getStringField(req,"password",password);
+    if(getPassword){
+        return DispatchResult::immediate(std::move(getPassword.value()));
+    }
+    //标记register pending
+    std::uint64_t opersationd=0;
+    if(!tryBeginAuthOperation(session,AuthOperation::Register,opersationd)){
+        return DispatchResult::immediate(makeErr(req,ErrorCode::Conflict,"auth operation already in process"));
+    }
+    //构造异步完成上下文
+    std::weak_ptr<TcpConnection> weakConn=connection;
+    PendingRegisterContext context{.connection=weakConn,
+        .key=key,.responseRequest=req,
+        .peerIp=session.peerIp_,.username=session.username_,.password=password
+    };
+    if (!rateLimiter_) {//限流未启动直接进行mysql持久化
+        auto submitResult =submitRegisterTask(std::move(context));
+        return submitResultMapToDispatchResult(req,submitResult,"message");
+    }
+    if (!submitRedisTask_) {//限流启动但执行器缺失返回错误
+        return DispatchResult::immediate(makeErr( req,ErrorCode::INTERNAL,"redis rate-limit pipeline unavailable"));
+    }
+    //提交异步redis限流检查
+    auto submitResult = submitRateLimitCheck(RateLimitAction::SendMessage,session.accountId_,
+        [this,context = std::move(context)](AsyncRateLimitResult result) mutable {
+            completeRegisterRateLimit(std::move(context),std::move(result));
+        });
+    
+    //处理提交结果
+    return submitResultMapToDispatchResult(req,submitResult,"redis");
+    
+    
+    
+}
+void Imservice::completeRegisterRateLimit(PendingRegisterContext context,AsyncRateLimitResult result){
+
+}
+infra::thread::TaskSubmitResult Imservice::submitRegisterTask(PendingRegisterContext context){
+
+}
+void Imservice::completeRegister(PendingRegisterContext context,AsyncAuthResult result){
+
+}
+
 }

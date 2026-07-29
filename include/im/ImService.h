@@ -245,11 +245,6 @@ private:
     SubmitDbTaskFn submitDbReadTask_;//数据库读线程池任务提交
     Session* resolvePendingSession(const PendingDbRequestContext& context);//baseLoop调用，检查session
 
-struct PendingGroupHistoryContext {//群聊历史查询上下文
-    PendingDbRequestContext base;
-    std::string groupId;
-    HistoryQuery query;
-};
     infra::thread::TaskSubmitResult submitGroupHistoryQuery(PendingGroupHistoryContext context);//提交异步群聊历史任务
     void completeGroupHistoryRateLimit(PendingGroupHistoryContext context,AsyncRateLimitResult result);
     DispatchResult handleGroupHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);//群聊历史查询异步处理
@@ -260,8 +255,7 @@ struct PendingGroupHistoryContext {//群聊历史查询上下文
     void completeDmHistoryRateLimit(PendingDmHistoryContext context,AsyncRateLimitResult result);
     DispatchResult handleDmHistoryAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeDmHistory(PendingDmHistoryContext context,AsyncDbResult<std::vector<storage::DirectMessageRecord>> result);
-
-
+//离线列表获取
     DispatchResult handleOfflineListAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
     void completeOfflineList(PendingOfflineListContext context,AsyncDbResult<std::vector<storage::OfflineMessageIndex>> result);
 
@@ -277,24 +271,25 @@ struct PendingGroupHistoryContext {//群聊历史查询上下文
     void completeSync(PendingSyncContext context,AsyncDbResult<SyncResult> result);
 
     //ACK和已读消息异步
-DispatchResult handleMessageAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    DispatchResult handleMessageAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
 
-void completeMessageAck(PendingAckContext context,AsyncAckResult result);
-DispatchResult handleOfflineAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    void completeMessageAck(PendingAckContext context,AsyncAckResult result);
+    DispatchResult handleOfflineAckAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
 
 
-DispatchResult handleConversationReadAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
-void completeConversationRead(PendingConversationReadContext context,AsyncDbResult<storage::ConversationReadResult> result);
+    DispatchResult handleConversationReadAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    void completeConversationRead(PendingConversationReadContext context,AsyncDbResult<storage::ConversationReadResult> result);
 
-//注册登录异步认证
-bool tryBeginAuthOperation(Session& session,AuthOperation operation,std::uint64_t& operationId);//
-Session* resolvePendingAuthSession(const std::weak_ptr<TcpConnection>& connection,ConnKey key,AuthOperation operation,std::uint64_t operationId);//回投到baseLoop后校验session连接与操作是否匹配
-void finishAuthOperation(Session& session,AuthOperation operation,std::uint64_t operationId);//认证操作处理完毕后，检查操作和id猴恢复状态
-//异步注册
-DispatchResult handleRegisterAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
-void completeRegisterRateLimit(PendingRegisterContext context,AsyncRateLimitResult result);
-infra::thread::TaskSubmitResult submitRegisterTask(PendingRegisterContext context);
-void completeRegister(PendingRegisterContext context,AsyncAuthResult result);
+    //注册登录异步认证
+    SubmitAuthTaskFn submitAuthTask_;
+    bool tryBeginAuthOperation(Session& session,AuthOperation operation,std::uint64_t& operationId);//
+    Session* resolvePendingAuthSession(const std::weak_ptr<TcpConnection>& connection,ConnKey key,AuthOperation operation,std::uint64_t operationId);//回投到baseLoop后校验session连接与操作是否匹配
+    void finishAuthOperation(Session& session,AuthOperation operation,std::uint64_t operationId);//认证操作处理完毕后，检查操作和id猴恢复状态
+    //异步注册
+    DispatchResult handleRegisterAsync(const Request& request,ConnKey key,Session& session,const std::shared_ptr<TcpConnection>& connection);
+    void completeRegisterRateLimit(PendingRegisterContext context,AsyncRateLimitResult result);
+    infra::thread::TaskSubmitResult submitRegisterTask(PendingRegisterContext context);
+    void completeRegister(PendingRegisterContext context,AsyncAuthResult result);
 
 };
 

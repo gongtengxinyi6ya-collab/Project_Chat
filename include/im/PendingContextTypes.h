@@ -42,7 +42,11 @@ struct PendingDbRequestContext {//通用异步数据库查询上下文
 
     std::string accountId;
 };
-
+struct PendingGroupHistoryContext {//群聊历史查询上下文
+    PendingDbRequestContext base;
+    std::string groupId;
+    HistoryQuery query;
+};
 struct PendingDmHistoryContext {//私聊历史上下文
     PendingDbRequestContext base;
 
